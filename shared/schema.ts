@@ -124,6 +124,7 @@ export const events = pgTable("events", {
   category: text("category").notNull(), // "Town Hall", "Rally", "Summit", etc.
   date: timestamp("date").notNull(),
   location: text("location").notNull(),
+  stateId: varchar("state_id").references(() => states.id), // Optional - for state-level events
   maxAttendees: integer("max_attendees"),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -306,6 +307,24 @@ export const postEngagement = pgTable("post_engagement", {
   memberId: varchar("member_id").notNull().references(() => members.id),
   type: text("type").notNull(), // like, comment, share
   content: text("content"), // For comments
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// News Comments
+export const newsComments = pgTable("news_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  newsPostId: varchar("news_post_id").notNull().references(() => newsPosts.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  likes: integer("likes").default(0),
+  parentId: varchar("parent_id").references(() => newsComments.id, { onDelete: "cascade" }), // For nested replies
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const newsCommentLikes = pgTable("news_comment_likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => newsComments.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -520,6 +539,8 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   chatbotConversations: many(chatbotConversations),
   donations: many(donations),
   recurringDonations: many(recurringDonations),
+  newsComments: many(newsComments),
+  newsCommentLikes: many(newsCommentLikes),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -528,6 +549,7 @@ export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
     references: [users.id],
   }),
   engagement: many(postEngagement),
+  comments: many(newsComments),
 }));
 
 export const electionsRelations = relations(elections, ({ many }) => ({
@@ -709,6 +731,34 @@ export const postEngagementRelations = relations(postEngagement, ({ one }) => ({
   }),
 }));
 
+export const newsCommentsRelations = relations(newsComments, ({ one, many }) => ({
+  newsPost: one(newsPosts, {
+    fields: [newsComments.newsPostId],
+    references: [newsPosts.id],
+  }),
+  member: one(members, {
+    fields: [newsComments.memberId],
+    references: [members.id],
+  }),
+  parent: one(newsComments, {
+    fields: [newsComments.parentId],
+    references: [newsComments.id],
+  }),
+  replies: many(newsComments),
+  likes: many(newsCommentLikes),
+}));
+
+export const newsCommentLikesRelations = relations(newsCommentLikes, ({ one }) => ({
+  comment: one(newsComments, {
+    fields: [newsCommentLikes.commentId],
+    references: [newsComments.id],
+  }),
+  member: one(members, {
+    fields: [newsCommentLikes.memberId],
+    references: [members.id],
+  }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   member: one(members, {
     fields: [notifications.memberId],
@@ -874,6 +924,8 @@ export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, cre
 export const insertDonationCampaignSchema = createInsertSchema(donationCampaigns).omit({ id: true, createdAt: true, updatedAt: true, currentAmount: true });
 export const insertDonationSchema = createInsertSchema(donations).omit({ id: true, createdAt: true });
 export const insertRecurringDonationSchema = createInsertSchema(recurringDonations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertNewsCommentSchema = createInsertSchema(newsComments).omit({ id: true, createdAt: true, likes: true });
+export const insertNewsCommentLikeSchema = createInsertSchema(newsCommentLikes).omit({ id: true, createdAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -936,3 +988,7 @@ export type InsertDonation = z.infer<typeof insertDonationSchema>;
 export type Donation = typeof donations.$inferSelect;
 export type InsertRecurringDonation = z.infer<typeof insertRecurringDonationSchema>;
 export type RecurringDonation = typeof recurringDonations.$inferSelect;
+export type InsertNewsComment = z.infer<typeof insertNewsCommentSchema>;
+export type NewsComment = typeof newsComments.$inferSelect;
+export type InsertNewsCommentLike = z.infer<typeof insertNewsCommentLikeSchema>;
+export type NewsCommentLike = typeof newsCommentLikes.$inferSelect;

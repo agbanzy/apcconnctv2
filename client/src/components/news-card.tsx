@@ -1,10 +1,13 @@
+import { useLocation } from "wouter";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Share2, ThumbsUp, MessageCircle } from "lucide-react";
+import { ThumbsUp, MessageCircle } from "lucide-react";
+import { SocialShare } from "@/components/social-share";
 import { formatDistanceToNow } from "date-fns";
 
 interface NewsCardProps {
+  id: string;
   title: string;
   excerpt: string;
   category: string;
@@ -12,9 +15,11 @@ interface NewsCardProps {
   imageUrl?: string;
   likes: number;
   comments: number;
+  onLike?: () => void;
 }
 
 export function NewsCard({
+  id,
   title,
   excerpt,
   category,
@@ -22,9 +27,29 @@ export function NewsCard({
   imageUrl,
   likes,
   comments,
+  onLike,
 }: NewsCardProps) {
+  const [, navigate] = useLocation();
+
+  const handleCardClick = () => {
+    navigate(`/news/${id}`);
+  };
+
+  const handleLike = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onLike?.();
+  };
+
+  const handleShareClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <Card className="hover-elevate transition-all" data-testid="card-news">
+    <Card 
+      className="hover-elevate transition-all cursor-pointer" 
+      data-testid="card-news"
+      onClick={handleCardClick}
+    >
       {imageUrl && (
         <div className="aspect-video overflow-hidden rounded-t-lg">
           <img
@@ -49,19 +74,27 @@ export function NewsCard({
       </CardContent>
       <CardFooter className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <button className="flex items-center gap-1 hover-elevate p-1 rounded" data-testid="button-like">
+          <button 
+            className="flex items-center gap-1 hover-elevate p-1 rounded" 
+            data-testid="button-like"
+            onClick={handleLike}
+          >
             <ThumbsUp className="h-4 w-4" />
             <span data-testid="text-likes-count">{likes}</span>
           </button>
-          <button className="flex items-center gap-1 hover-elevate p-1 rounded" data-testid="button-comment">
+          <div className="flex items-center gap-1" data-testid="button-comment">
             <MessageCircle className="h-4 w-4" />
             <span data-testid="text-comments-count">{comments}</span>
-          </button>
+          </div>
         </div>
-        <Button variant="ghost" size="sm" data-testid="button-share">
-          <Share2 className="h-4 w-4 mr-1" />
-          Share
-        </Button>
+        <div onClick={handleShareClick}>
+          <SocialShare
+            title={title}
+            description={excerpt}
+            url={`/news/${id}`}
+            variant="dropdown"
+          />
+        </div>
       </CardFooter>
     </Card>
   );

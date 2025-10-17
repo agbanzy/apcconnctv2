@@ -1651,7 +1651,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/news/:id/comment", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.get("/api/news/:id/comments", async (req: Request, res: Response) => {
+    try {
+      const comments = await db.query.newsComments.findMany({
+        where: eq(schema.newsComments.newsPostId, req.params.id),
+        with: {
+          member: {
+            with: { user: true }
+          },
+          replies: {
+            with: {
+              member: {
+                with: { user: true }
+              }
+            }
+          }
+        },
+        orderBy: desc(schema.newsComments.createdAt)
+      });
+
+      const topLevelComments = comments.filter(c => !c.parentId);
+      res.json({ success: true, data: topLevelComments });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/news/:id/comments", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { content } = req.body;
       const member = await db.query.members.findFirst({
@@ -1662,10 +1688,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
-      const [comment] = await db.insert(schema.postEngagement).values({
-        postId: req.params.id,
+      const [comment] = await db.insert(schema.newsComments).values({
+        newsPostId: req.params.id,
         memberId: member.id,
-        type: "comment",
         content
       }).returning();
 
@@ -1673,9 +1698,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ comments: sql`${schema.newsPosts.comments} + 1` })
         .where(eq(schema.newsPosts.id, req.params.id));
 
-      res.json({ success: true, data: comment });
+      const commentWithMember = await db.query.newsComments.findFirst({
+        where: eq(schema.newsComments.id, comment.id),
+        with: {
+          member: {
+            with: { user: true }
+          }
+        }
+      });
+
+      res.json({ success: true, data: commentWithMember });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to add comment" });
+    }
+  });
+
+  app.post("/api/news/comments/:id/like", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const existing = await db.query.newsCommentLikes.findFirst({
+        where: and(
+          eq(schema.newsCommentLikes.commentId, req.params.id),
+          eq(schema.newsCommentLikes.memberId, member.id)
+        )
+      });
+
+      if (existing) {
+        await db.delete(schema.newsCommentLikes).where(eq(schema.newsCommentLikes.id, existing.id));
+        await db.update(schema.newsComments)
+          .set({ likes: sql`${schema.newsComments.likes} - 1` })
+          .where(eq(schema.newsComments.id, req.params.id));
+        return res.json({ success: true, data: { liked: false } });
+      }
+
+      await db.insert(schema.newsCommentLikes).values({
+        commentId: req.params.id,
+        memberId: member.id
+      });
+
+      await db.update(schema.newsComments)
+        .set({ likes: sql`${schema.newsComments.likes} + 1` })
+        .where(eq(schema.newsComments.id, req.params.id));
+
+      res.json({ success: true, data: { liked: true } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to like comment" });
+    }
+  });
+
+  app.post("/api/news/comments/:id/reply", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { content } = req.body;
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const parentComment = await db.query.newsComments.findFirst({
+        where: eq(schema.newsComments.id, req.params.id)
+      });
+
+      if (!parentComment) {
+        return res.status(404).json({ success: false, error: "Parent comment not found" });
+      }
+
+      const [reply] = await db.insert(schema.newsComments).values({
+        newsPostId: parentComment.newsPostId,
+        memberId: member.id,
+        content,
+        parentId: req.params.id
+      }).returning();
+
+      await db.update(schema.newsPosts)
+        .set({ comments: sql`${schema.newsPosts.comments} + 1` })
+        .where(eq(schema.newsPosts.id, parentComment.newsPostId));
+
+      const replyWithMember = await db.query.newsComments.findFirst({
+        where: eq(schema.newsComments.id, reply.id),
+        with: {
+          member: {
+            with: { user: true }
+          }
+        }
+      });
+
+      res.json({ success: true, data: replyWithMember });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to add reply" });
+    }
+  });
+
+  app.delete("/api/news/comments/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const comment = await db.query.newsComments.findFirst({
+        where: eq(schema.newsComments.id, req.params.id)
+      });
+
+      if (!comment) {
+        return res.status(404).json({ success: false, error: "Comment not found" });
+      }
+
+      if (comment.memberId !== member.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      await db.delete(schema.newsComments).where(eq(schema.newsComments.id, req.params.id));
+
+      await db.update(schema.newsPosts)
+        .set({ comments: sql`${schema.newsPosts.comments} - 1` })
+        .where(eq(schema.newsPosts.id, comment.newsPostId));
+
+      res.json({ success: true, data: { message: "Comment deleted" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete comment" });
     }
   });
 

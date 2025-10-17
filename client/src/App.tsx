@@ -28,12 +28,16 @@ import Leaderboard from "@/pages/leaderboard";
 import MicroTasks from "@/pages/micro-tasks";
 import SituationRoom from "@/pages/situation-room";
 import News from "@/pages/news";
+import NewsDetail from "@/pages/news-detail";
 import Analytics from "@/pages/analytics";
 import Volunteer from "@/pages/volunteer";
 import Donations from "@/pages/donations";
 import Ideas from "@/pages/ideas";
 import KnowledgeBase from "@/pages/knowledge-base";
 import ArticlePage from "@/pages/knowledge-base/article";
+import About from "@/pages/about";
+import EventsGallery from "@/pages/events-gallery";
+import LeadershipBoard from "@/pages/leadership-board";
 import NotFound from "@/pages/not-found";
 import { ChatbotWidget } from "@/components/chatbot-widget";
 
@@ -176,12 +180,16 @@ function AppContent() {
               <Route path="/leaderboard" component={() => <ProtectedRoute component={Leaderboard} />} />
               <Route path="/micro-tasks" component={() => <ProtectedRoute component={MicroTasks} />} />
               <Route path="/situation-room" component={() => <ProtectedRoute component={SituationRoom} />} />
+              <Route path="/news/:id" component={() => <ProtectedRoute component={NewsDetail} />} />
               <Route path="/news" component={() => <ProtectedRoute component={News} />} />
               <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
               <Route path="/volunteer" component={() => <ProtectedRoute component={Volunteer} />} />
               <Route path="/ideas" component={() => <ProtectedRoute component={Ideas} />} />
               <Route path="/knowledge-base/article/:slug" component={() => <ProtectedRoute component={ArticlePage} />} />
               <Route path="/knowledge-base" component={() => <ProtectedRoute component={KnowledgeBase} />} />
+              <Route path="/about" component={() => <ProtectedRoute component={About} />} />
+              <Route path="/events-gallery" component={() => <ProtectedRoute component={EventsGallery} />} />
+              <Route path="/leadership-board" component={() => <ProtectedRoute component={LeadershipBoard} />} />
               <Route component={NotFound} />
             </Switch>
           </main>

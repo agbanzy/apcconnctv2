@@ -19,6 +19,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { format } from "date-fns";
 import { Lightbulb, ThumbsUp, ThumbsDown, MessageSquare, Search, Filter, Plus } from "lucide-react";
+import { SocialShare } from "@/components/social-share";
 
 interface Idea {
   id: string;
@@ -443,7 +444,7 @@ export default function Ideas() {
                             <p className="text-sm text-muted-foreground mb-4">
                               {ideaDetailsData.data.idea.description}
                             </p>
-                            <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
+                            <div className="flex items-center justify-between gap-4 p-4 bg-muted rounded-lg flex-wrap">
                               <div className="flex items-center gap-2">
                                 <Button
                                   variant={ideaDetailsData.data.userVote?.voteType === "upvote" ? "default" : "ghost"}
@@ -471,6 +472,12 @@ export default function Ideas() {
                                   <ThumbsDown className="h-4 w-4" />
                                 </Button>
                               </div>
+                              <SocialShare
+                                title={selectedIdea.title}
+                                description={ideaDetailsData.data.idea.description}
+                                url={`/ideas/${selectedIdea.id}`}
+                                variant="buttons"
+                              />
                             </div>
                           </div>
 

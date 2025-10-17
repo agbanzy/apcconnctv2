@@ -2,30 +2,38 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { SocialShare } from "@/components/social-share";
 import { ThumbsUp, MessageSquare } from "lucide-react";
 
 interface IssueCampaignCardProps {
+  id?: string;
   title: string;
   description: string;
   author: string;
   category: string;
-  votes: number;
+  currentVotes?: number;
+  votes?: number;
   targetVotes: number;
-  comments: number;
-  status: "active" | "approved" | "completed";
+  comments?: number;
+  status?: "active" | "approved" | "completed";
+  onVote?: () => void;
 }
 
 export function IssueCampaignCard({
+  id,
   title,
   description,
   author,
   category,
+  currentVotes,
   votes,
   targetVotes,
-  comments,
-  status,
+  comments = 0,
+  status = "active",
+  onVote,
 }: IssueCampaignCardProps) {
-  const progress = (votes / targetVotes) * 100;
+  const voteCount = currentVotes || votes || 0;
+  const progress = (voteCount / targetVotes) * 100;
   
   const statusColors = {
     active: "bg-chart-2 text-white",
@@ -53,26 +61,36 @@ export function IssueCampaignCard({
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Support Progress</span>
             <span className="font-mono font-semibold" data-testid="text-vote-progress">
-              {votes} / {targetVotes}
+              {voteCount} / {targetVotes}
             </span>
           </div>
           <Progress value={progress} className="h-2" data-testid="progress-votes" />
         </div>
       </CardContent>
-      <CardFooter className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1" data-testid="text-votes-count">
+      <CardFooter className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="text-votes-count">
             <ThumbsUp className="h-4 w-4" />
-            <span>{votes}</span>
+            <span>{voteCount}</span>
           </div>
-          <div className="flex items-center gap-1" data-testid="text-comments-count">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="text-comments-count">
             <MessageSquare className="h-4 w-4" />
             <span>{comments}</span>
           </div>
         </div>
-        <Button size="sm" data-testid="button-support">
-          Support This
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={onVote} data-testid="button-support">
+            Support This
+          </Button>
+          {id && (
+            <SocialShare
+              title={title}
+              description={`${description} - Help us reach ${targetVotes} supporters!`}
+              url={`/campaigns/${id}`}
+              variant="dropdown"
+            />
+          )}
+        </div>
       </CardFooter>
     </Card>
   );

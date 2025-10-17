@@ -19,6 +19,9 @@ import {
   LogOut,
   Lightbulb,
   Heart,
+  Info,
+  Image,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -112,6 +115,21 @@ const menuItems = [
     title: "News",
     url: "/news",
     icon: Newspaper,
+  },
+  {
+    title: "About",
+    url: "/about",
+    icon: Info,
+  },
+  {
+    title: "Events Gallery",
+    url: "/events-gallery",
+    icon: Image,
+  },
+  {
+    title: "Leadership Board",
+    url: "/leadership-board",
+    icon: Shield,
   },
 ];
 

@@ -113,6 +113,7 @@ export default function Campaigns() {
           {filteredCampaigns.map((campaign) => (
             <IssueCampaignCard
               key={campaign.id}
+              id={campaign.id}
               title={campaign.title}
               description={campaign.description}
               category={campaign.category}
