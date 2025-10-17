@@ -85,10 +85,8 @@ export default function Login() {
           </form>
           <div className="mt-4 text-center text-sm">
             <span className="text-muted-foreground">Don't have an account? </span>
-            <Link href="/register">
-              <a className="text-primary hover:underline" data-testid="link-register">
-                Register here
-              </a>
+            <Link href="/register" className="text-primary hover:underline" data-testid="link-register">
+              Register here
             </Link>
           </div>
         </CardContent>

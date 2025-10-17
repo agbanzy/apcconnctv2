@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -312,6 +312,260 @@ export const notifications = pgTable("notifications", {
   actionUrl: text("action_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Relations
+export const statesRelations = relations(states, ({ many }) => ({
+  lgas: many(lgas),
+}));
+
+export const lgasRelations = relations(lgas, ({ one, many }) => ({
+  state: one(states, {
+    fields: [lgas.stateId],
+    references: [states.id],
+  }),
+  wards: many(wards),
+}));
+
+export const wardsRelations = relations(wards, ({ one, many }) => ({
+  lga: one(lgas, {
+    fields: [wards.lgaId],
+    references: [lgas.id],
+  }),
+  members: many(members),
+  pollingUnits: many(pollingUnits),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  member: one(members, {
+    fields: [users.id],
+    references: [members.userId],
+  }),
+  newsPosts: many(newsPosts),
+}));
+
+export const membersRelations = relations(members, ({ one, many }) => ({
+  user: one(users, {
+    fields: [members.userId],
+    references: [users.id],
+  }),
+  ward: one(wards, {
+    fields: [members.wardId],
+    references: [wards.id],
+  }),
+  eventRsvps: many(eventRsvps),
+  taskApplications: many(taskApplications),
+  quizAttempts: many(quizAttempts),
+  campaignVotes: many(campaignVotes),
+  campaignComments: many(campaignComments),
+  issueCampaigns: many(issueCampaigns),
+  userBadges: many(userBadges),
+  userPoints: many(userPoints),
+  taskCompletions: many(taskCompletions),
+  incidents: many(incidents),
+  postEngagement: many(postEngagement),
+  notifications: many(notifications),
+}));
+
+export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
+  author: one(users, {
+    fields: [newsPosts.authorId],
+    references: [users.id],
+  }),
+  engagement: many(postEngagement),
+}));
+
+export const electionsRelations = relations(elections, ({ many }) => ({
+  candidates: many(candidates),
+  votes: many(votes),
+}));
+
+export const candidatesRelations = relations(candidates, ({ one, many }) => ({
+  election: one(elections, {
+    fields: [candidates.electionId],
+    references: [elections.id],
+  }),
+  votes: many(votes),
+}));
+
+export const votesRelations = relations(votes, ({ one }) => ({
+  election: one(elections, {
+    fields: [votes.electionId],
+    references: [elections.id],
+  }),
+  candidate: one(candidates, {
+    fields: [votes.candidateId],
+    references: [candidates.id],
+  }),
+  voter: one(members, {
+    fields: [votes.voterId],
+    references: [members.id],
+  }),
+}));
+
+export const eventsRelations = relations(events, ({ many }) => ({
+  rsvps: many(eventRsvps),
+}));
+
+export const eventRsvpsRelations = relations(eventRsvps, ({ one }) => ({
+  event: one(events, {
+    fields: [eventRsvps.eventId],
+    references: [events.id],
+  }),
+  member: one(members, {
+    fields: [eventRsvps.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const volunteerTasksRelations = relations(volunteerTasks, ({ many }) => ({
+  applications: many(taskApplications),
+}));
+
+export const taskApplicationsRelations = relations(taskApplications, ({ one }) => ({
+  task: one(volunteerTasks, {
+    fields: [taskApplications.taskId],
+    references: [volunteerTasks.id],
+  }),
+  member: one(members, {
+    fields: [taskApplications.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const quizzesRelations = relations(quizzes, ({ many }) => ({
+  attempts: many(quizAttempts),
+}));
+
+export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
+  quiz: one(quizzes, {
+    fields: [quizAttempts.quizId],
+    references: [quizzes.id],
+  }),
+  member: one(members, {
+    fields: [quizAttempts.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const issueCampaignsRelations = relations(issueCampaigns, ({ one, many }) => ({
+  author: one(members, {
+    fields: [issueCampaigns.authorId],
+    references: [members.id],
+  }),
+  votes: many(campaignVotes),
+  comments: many(campaignComments),
+}));
+
+export const campaignVotesRelations = relations(campaignVotes, ({ one }) => ({
+  campaign: one(issueCampaigns, {
+    fields: [campaignVotes.campaignId],
+    references: [issueCampaigns.id],
+  }),
+  member: one(members, {
+    fields: [campaignVotes.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const campaignCommentsRelations = relations(campaignComments, ({ one }) => ({
+  campaign: one(issueCampaigns, {
+    fields: [campaignComments.campaignId],
+    references: [issueCampaigns.id],
+  }),
+  member: one(members, {
+    fields: [campaignComments.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const badgesRelations = relations(badges, ({ many }) => ({
+  userBadges: many(userBadges),
+}));
+
+export const userBadgesRelations = relations(userBadges, ({ one }) => ({
+  member: one(members, {
+    fields: [userBadges.memberId],
+    references: [members.id],
+  }),
+  badge: one(badges, {
+    fields: [userBadges.badgeId],
+    references: [badges.id],
+  }),
+}));
+
+export const userPointsRelations = relations(userPoints, ({ one }) => ({
+  member: one(members, {
+    fields: [userPoints.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const microTasksRelations = relations(microTasks, ({ many }) => ({
+  completions: many(taskCompletions),
+}));
+
+export const taskCompletionsRelations = relations(taskCompletions, ({ one }) => ({
+  task: one(microTasks, {
+    fields: [taskCompletions.taskId],
+    references: [microTasks.id],
+  }),
+  member: one(members, {
+    fields: [taskCompletions.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const pollingUnitsRelations = relations(pollingUnits, ({ one, many }) => ({
+  ward: one(wards, {
+    fields: [pollingUnits.wardId],
+    references: [wards.id],
+  }),
+  incidents: many(incidents),
+}));
+
+export const incidentsRelations = relations(incidents, ({ one, many }) => ({
+  pollingUnit: one(pollingUnits, {
+    fields: [incidents.pollingUnitId],
+    references: [pollingUnits.id],
+  }),
+  reporter: one(members, {
+    fields: [incidents.reporterId],
+    references: [members.id],
+  }),
+  media: many(incidentMedia),
+}));
+
+export const incidentMediaRelations = relations(incidentMedia, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [incidentMedia.incidentId],
+    references: [incidents.id],
+  }),
+}));
+
+export const postEngagementRelations = relations(postEngagement, ({ one }) => ({
+  post: one(newsPosts, {
+    fields: [postEngagement.postId],
+    references: [newsPosts.id],
+  }),
+  member: one(members, {
+    fields: [postEngagement.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  member: one(members, {
+    fields: [notifications.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const membershipDuesRelations = relations(membershipDues, ({ one }) => ({
+  member: one(members, {
+    fields: [membershipDues.memberId],
+    references: [members.id],
+  }),
+}));
 
 // Insert & Select Schemas
 export const insertStateSchema = createInsertSchema(states).omit({ id: true, createdAt: true });
