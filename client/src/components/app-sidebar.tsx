@@ -83,20 +83,22 @@ const adminItems = [
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/">
-          <a className="flex items-center gap-3 hover-elevate rounded-md p-2" data-testid="link-home">
-            <img src={apcLogo} alt="APC Logo" className="h-10 w-10 object-contain" />
-            <div>
-              <h2 className="font-display text-lg font-bold text-primary">APC Connect</h2>
-              <p className="text-xs text-muted-foreground">Modernizing Politics</p>
-            </div>
-          </a>
-        </Link>
+        <div 
+          onClick={() => setLocation("/")}
+          className="flex items-center gap-3 hover-elevate rounded-md p-2 cursor-pointer" 
+          data-testid="link-home"
+        >
+          <img src={apcLogo} alt="APC Logo" className="h-10 w-10 object-contain" />
+          <div>
+            <h2 className="font-display text-lg font-bold text-primary">APC Connect</h2>
+            <p className="text-xs text-muted-foreground">Modernizing Politics</p>
+          </div>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -106,11 +108,9 @@ export function AppSidebar() {
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
-                    <Link href={item.url}>
-                      <a data-testid={`link-${item.title.toLowerCase()}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </a>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -126,11 +126,9 @@ export function AppSidebar() {
               {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
-                    <Link href={item.url}>
-                      <a data-testid={`link-${item.title.toLowerCase()}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </a>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
