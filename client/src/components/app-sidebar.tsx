@@ -17,6 +17,8 @@ import {
   Activity,
   Newspaper,
   LogOut,
+  Lightbulb,
+  Heart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +54,11 @@ const menuItems = [
     icon: DollarSign,
   },
   {
+    title: "Donations",
+    url: "/donations",
+    icon: Heart,
+  },
+  {
     title: "Events",
     url: "/events",
     icon: Calendar,
@@ -60,6 +67,16 @@ const menuItems = [
     title: "Elections",
     url: "/elections",
     icon: Vote,
+  },
+  {
+    title: "Ideas",
+    url: "/ideas",
+    icon: Lightbulb,
+  },
+  {
+    title: "Knowledge Base",
+    url: "/knowledge-base",
+    icon: BookOpen,
   },
   {
     title: "Political Literacy",

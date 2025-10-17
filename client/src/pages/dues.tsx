@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { CreditCard, DollarSign, Clock, CheckCircle } from "lucide-react";
 import type { MembershipDues } from "@shared/schema";
+import { useEffect } from "react";
 
 export default function Dues() {
   const { member } = useAuth();
@@ -19,19 +20,14 @@ export default function Dues() {
     enabled: !!member,
   });
 
-  const { data: historyData } = useQuery<{ success: boolean; data: MembershipDues[] }>({
-    queryKey: ["/api/dues/history"],
-    enabled: !!member,
-  });
-
   const checkoutMutation = useMutation({
-    mutationFn: async ({ amount, duesId }: { amount: string; duesId: string }) => {
-      const res = await apiRequest("POST", "/api/dues/stripe-checkout", { amount, duesId });
+    mutationFn: async ({ amount }: { amount: number }) => {
+      const res = await apiRequest("POST", "/api/dues/checkout", { amount });
       return res.json();
     },
     onSuccess: (data) => {
-      if (data.data?.url) {
-        window.location.href = data.data.url;
+      if (data.data?.authorization_url) {
+        window.location.href = data.data.authorization_url;
       }
     },
     onError: () => {
@@ -43,11 +39,39 @@ export default function Dues() {
     },
   });
 
-  const handlePayment = (dues: MembershipDues) => {
-    checkoutMutation.mutate({
-      amount: dues.amount.toString(),
-      duesId: dues.id,
-    });
+  const verifyMutation = useMutation({
+    mutationFn: async (reference: string) => {
+      const res = await apiRequest("POST", "/api/dues/verify", { reference });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dues"] });
+      toast({
+        title: "Payment successful",
+        description: "Your dues payment has been confirmed!",
+      });
+      window.history.replaceState({}, '', '/dues');
+    },
+    onError: () => {
+      toast({
+        title: "Verification failed",
+        description: "Failed to verify payment. Please contact support.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const reference = urlParams.get('reference');
+    
+    if (reference) {
+      verifyMutation.mutate(reference);
+    }
+  }, []);
+
+  const handlePayment = (amount: number) => {
+    checkoutMutation.mutate({ amount });
   };
 
   if (isLoading) {
@@ -60,8 +84,8 @@ export default function Dues() {
   }
 
   const dues = duesData?.data || [];
-  const history = historyData?.data || [];
-  const pendingDues = dues.filter((d) => d.status === "pending");
+  const pendingDues = dues.filter((d) => d.paymentStatus === "pending");
+  const paidDues = dues.filter((d) => d.paymentStatus === "completed");
   const totalPending = pendingDues.reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0);
 
   return (
@@ -83,7 +107,7 @@ export default function Dues() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold mb-4" data-testid="text-total-pending">
-              ₦{totalPending.toLocaleString()}
+              ₦{(totalPending / 100).toLocaleString()}
             </p>
             <div className="space-y-3">
               {pendingDues.map((due) => (
@@ -93,13 +117,13 @@ export default function Dues() {
                   data-testid={`due-item-${due.id}`}
                 >
                   <div>
-                    <p className="font-semibold">₦{parseFloat(due.amount.toString()).toLocaleString()}</p>
+                    <p className="font-semibold">₦{(parseFloat(due.amount.toString()) / 100).toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">
                       Due: {format(new Date(due.dueDate), "MMM dd, yyyy")}
                     </p>
                   </div>
                   <Button
-                    onClick={() => handlePayment(due)}
+                    onClick={() => handlePayment(parseFloat(due.amount.toString()) / 100)}
                     disabled={checkoutMutation.isPending}
                     data-testid={`button-pay-${due.id}`}
                   >
@@ -118,18 +142,18 @@ export default function Dues() {
           <CardTitle>Payment History</CardTitle>
         </CardHeader>
         <CardContent>
-          {history.length === 0 ? (
+          {paidDues.length === 0 ? (
             <p className="text-center py-8 text-muted-foreground">No payment history yet</p>
           ) : (
             <div className="space-y-3">
-              {history.map((payment) => (
+              {paidDues.map((payment) => (
                 <div
                   key={payment.id}
                   className="flex items-center justify-between p-4 border rounded-lg"
                   data-testid={`history-item-${payment.id}`}
                 >
                   <div className="flex-1">
-                    <p className="font-semibold">₦{parseFloat(payment.amount.toString()).toLocaleString()}</p>
+                    <p className="font-semibold">₦{(parseFloat(payment.amount.toString()) / 100).toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">
                       {payment.paidAt
                         ? `Paid on ${format(new Date(payment.paidAt), "MMM dd, yyyy")}`
@@ -142,12 +166,12 @@ export default function Dues() {
                     )}
                   </div>
                   <Badge
-                    variant={payment.status === "paid" ? "default" : payment.status === "pending" ? "secondary" : "destructive"}
+                    variant={payment.paymentStatus === "completed" ? "default" : payment.paymentStatus === "pending" ? "secondary" : "destructive"}
                     data-testid={`badge-status-${payment.id}`}
                   >
-                    {payment.status === "paid" && <CheckCircle className="h-3 w-3 mr-1" />}
-                    {payment.status === "pending" && <Clock className="h-3 w-3 mr-1" />}
-                    {payment.status?.toUpperCase()}
+                    {payment.paymentStatus === "completed" && <CheckCircle className="h-3 w-3 mr-1" />}
+                    {payment.paymentStatus === "pending" && <Clock className="h-3 w-3 mr-1" />}
+                    {payment.paymentStatus?.toUpperCase()}
                   </Badge>
                 </div>
               ))}

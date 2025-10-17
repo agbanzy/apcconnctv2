@@ -330,6 +330,18 @@ async function seedDatabase() {
   try {
     console.log("\n📍 Step 1: Clearing existing data...");
     
+    await db.delete(schema.chatbotMessages);
+    await db.delete(schema.chatbotConversations);
+    await db.delete(schema.articleFeedback);
+    await db.delete(schema.faqs);
+    await db.delete(schema.knowledgeArticles);
+    await db.delete(schema.knowledgeCategories);
+    await db.delete(schema.ideaComments);
+    await db.delete(schema.ideaVotes);
+    await db.delete(schema.ideas);
+    await db.delete(schema.recurringDonations);
+    await db.delete(schema.donations);
+    await db.delete(schema.donationCampaigns);
     await db.delete(schema.postEngagement);
     await db.delete(schema.newsPosts);
     await db.delete(schema.campaignComments);

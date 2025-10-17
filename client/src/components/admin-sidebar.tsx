@@ -8,6 +8,10 @@ import {
   AlertTriangle,
   Settings,
   Shield,
+  Lightbulb,
+  BookOpen,
+  Heart,
+  MessageCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,6 +63,26 @@ const adminMenuItems = [
     title: "Incidents",
     url: "/admin/incidents",
     icon: AlertTriangle,
+  },
+  {
+    title: "Ideas",
+    url: "/admin/ideas",
+    icon: Lightbulb,
+  },
+  {
+    title: "Knowledge Base",
+    url: "/admin/knowledge",
+    icon: BookOpen,
+  },
+  {
+    title: "Donations",
+    url: "/admin/donations",
+    icon: Heart,
+  },
+  {
+    title: "Chatbot Analytics",
+    url: "/admin/chatbot-analytics",
+    icon: MessageCircle,
   },
   {
     title: "Settings",

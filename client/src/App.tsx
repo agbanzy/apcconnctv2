@@ -30,7 +30,12 @@ import SituationRoom from "@/pages/situation-room";
 import News from "@/pages/news";
 import Analytics from "@/pages/analytics";
 import Volunteer from "@/pages/volunteer";
+import Donations from "@/pages/donations";
+import Ideas from "@/pages/ideas";
+import KnowledgeBase from "@/pages/knowledge-base";
+import ArticlePage from "@/pages/knowledge-base/article";
 import NotFound from "@/pages/not-found";
+import { ChatbotWidget } from "@/components/chatbot-widget";
 
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminMembers from "@/pages/admin/members";
@@ -40,6 +45,10 @@ import AdminContent from "@/pages/admin/content";
 import AdminCampaigns from "@/pages/admin/campaigns";
 import AdminIncidents from "@/pages/admin/incidents";
 import AdminSettings from "@/pages/admin/settings";
+import AdminIdeas from "@/pages/admin/ideas";
+import AdminKnowledge from "@/pages/admin/knowledge";
+import AdminDonations from "@/pages/admin/donations";
+import AdminChatbotAnalytics from "@/pages/admin/chatbot-analytics";
 import { AdminSidebar } from "@/components/admin-sidebar";
 
 function AppContent() {
@@ -119,6 +128,10 @@ function AppContent() {
                 <Route path="/admin/content" component={() => <AdminRoute component={AdminContent} />} />
                 <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
                 <Route path="/admin/incidents" component={() => <AdminRoute component={AdminIncidents} />} />
+                <Route path="/admin/ideas" component={() => <AdminRoute component={AdminIdeas} />} />
+                <Route path="/admin/knowledge" component={() => <AdminRoute component={AdminKnowledge} />} />
+                <Route path="/admin/donations" component={() => <AdminRoute component={AdminDonations} />} />
+                <Route path="/admin/chatbot-analytics" component={() => <AdminRoute component={AdminChatbotAnalytics} />} />
                 <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
                 <Route path="/admin" component={() => <Redirect to="/admin/dashboard" />} />
                 <Route component={NotFound} />
@@ -155,6 +168,7 @@ function AppContent() {
               <Route path="/dashboard" component={() => <ProtectedRoute component={Home} />} />
               <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
               <Route path="/dues" component={() => <ProtectedRoute component={Dues} />} />
+              <Route path="/donations" component={() => <ProtectedRoute component={Donations} />} />
               <Route path="/events" component={() => <ProtectedRoute component={Events} />} />
               <Route path="/elections" component={() => <ProtectedRoute component={Elections} />} />
               <Route path="/political-literacy" component={() => <ProtectedRoute component={PoliticalLiteracy} />} />
@@ -165,11 +179,15 @@ function AppContent() {
               <Route path="/news" component={() => <ProtectedRoute component={News} />} />
               <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
               <Route path="/volunteer" component={() => <ProtectedRoute component={Volunteer} />} />
+              <Route path="/ideas" component={() => <ProtectedRoute component={Ideas} />} />
+              <Route path="/knowledge-base/article/:slug" component={() => <ProtectedRoute component={ArticlePage} />} />
+              <Route path="/knowledge-base" component={() => <ProtectedRoute component={KnowledgeBase} />} />
               <Route component={NotFound} />
             </Switch>
           </main>
         </div>
       </div>
+      <ChatbotWidget />
     </SidebarProvider>
   );
 }

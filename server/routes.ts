@@ -2225,6 +2225,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/knowledge/categories", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const categoryData = schema.insertKnowledgeCategorySchema.parse(req.body);
+      const [category] = await db.insert(schema.knowledgeCategories).values(categoryData).returning();
+      res.json({ success: true, data: category });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create category" });
+    }
+  });
+
+  app.patch("/api/knowledge/categories/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [category] = await db.update(schema.knowledgeCategories)
+        .set(req.body)
+        .where(eq(schema.knowledgeCategories.id, req.params.id))
+        .returning();
+
+      if (!category) {
+        return res.status(404).json({ success: false, error: "Category not found" });
+      }
+
+      res.json({ success: true, data: category });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/knowledge/categories/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const articles = await db.query.knowledgeArticles.findMany({
+        where: eq(schema.knowledgeArticles.categoryId, req.params.id)
+      });
+
+      if (articles.length > 0) {
+        return res.status(400).json({ success: false, error: "Cannot delete category with articles" });
+      }
+
+      await db.delete(schema.knowledgeCategories).where(eq(schema.knowledgeCategories.id, req.params.id));
+      res.json({ success: true, data: { message: "Category deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete category" });
+    }
+  });
+
   app.get("/api/knowledge/articles", async (req: Request, res: Response) => {
     try {
       const { category, published, limit = "20", offset = "0" } = req.query;
@@ -3222,6 +3266,106 @@ Be friendly, informative, and politically neutral when discussing governance. En
     ];
     
     res.json({ success: true, data: suggestions });
+  });
+
+  app.get("/api/admin/chatbot/conversations", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { startDate, endDate, userType, limit = "50", offset = "0" } = req.query;
+
+      let whereConditions: any[] = [];
+      
+      if (startDate) {
+        whereConditions.push(gte(schema.chatbotConversations.createdAt, new Date(startDate as string)));
+      }
+      if (endDate) {
+        whereConditions.push(lte(schema.chatbotConversations.createdAt, new Date(endDate as string)));
+      }
+      if (userType === "member") {
+        whereConditions.push(sql`${schema.chatbotConversations.memberId} IS NOT NULL`);
+      } else if (userType === "anonymous") {
+        whereConditions.push(sql`${schema.chatbotConversations.memberId} IS NULL`);
+      }
+
+      const conversations = await db.query.chatbotConversations.findMany({
+        where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+        with: {
+          member: {
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                }
+              }
+            }
+          },
+          messages: {
+            orderBy: asc(schema.chatbotMessages.createdAt)
+          }
+        },
+        orderBy: desc(schema.chatbotConversations.createdAt),
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+
+      const conversationsWithCount = conversations.map(conv => ({
+        ...conv,
+        messagesCount: conv.messages.length,
+        lastMessageAt: conv.messages.length > 0 ? conv.messages[conv.messages.length - 1].createdAt : conv.createdAt
+      }));
+
+      res.json({ success: true, data: conversationsWithCount });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get("/api/admin/chatbot/stats", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const totalConversations = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.chatbotConversations);
+
+      const totalMessages = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.chatbotMessages);
+
+      const memberConversations = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.chatbotConversations)
+        .where(sql`${schema.chatbotConversations.memberId} IS NOT NULL`);
+
+      const anonymousConversations = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.chatbotConversations)
+        .where(sql`${schema.chatbotConversations.memberId} IS NULL`);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const conversationsToday = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.chatbotConversations)
+        .where(gte(schema.chatbotConversations.createdAt, today));
+
+      const avgMessages = totalConversations[0].count > 0 
+        ? Math.round(totalMessages[0].count / totalConversations[0].count)
+        : 0;
+
+      res.json({
+        success: true,
+        data: {
+          totalConversations: totalConversations[0].count,
+          totalMessages: totalMessages[0].count,
+          memberConversations: memberConversations[0].count,
+          anonymousConversations: anonymousConversations[0].count,
+          conversationsToday: conversationsToday[0].count,
+          avgMessagesPerConversation: avgMessages,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch chatbot stats" });
+    }
   });
 
   io.on("connection", (socket) => {
