@@ -26,6 +26,10 @@ export function QuizCard({ question, options, correctAnswer, category, points }:
     console.log(`Quiz submitted: ${correct ? 'Correct' : 'Incorrect'}`);
   };
 
+  if (!options || !Array.isArray(options) || options.length === 0) {
+    return null;
+  }
+
   return (
     <Card data-testid="card-quiz">
       <CardHeader className="gap-2 space-y-0">

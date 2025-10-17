@@ -501,7 +501,7 @@ async function seedDatabase() {
         memberId: generateMemberId(2024, i + 5),
         nin: Math.random() > 0.2 ? generateNIN() : null,
         wardId: ward.id,
-        status: getRandomElement(statuses),
+        status: getRandomElement(statuses) as "active" | "pending" | "expired",
         joinDate: getRandomDate(new Date("2024-01-01"), new Date("2025-01-01")),
         interests: getRandomElement([
           ["education", "healthcare"],
@@ -565,7 +565,7 @@ async function seedDatabase() {
         memberId: member.id,
         type,
         content: type === "comment" ? `This is a great initiative! Looking forward to seeing the impact in our communities.` : null,
-        createdAt: getRandomDate(new Date(post.publishedAt), new Date())
+        createdAt: post.publishedAt ? getRandomDate(new Date(post.publishedAt), new Date()) : new Date()
       });
     }
 
@@ -725,7 +725,7 @@ async function seedDatabase() {
         });
 
         await db.update(schema.candidates)
-          .set({ votes: candidate.votes + 1 })
+          .set({ votes: (candidate.votes ?? 0) + 1 })
           .where(eq(schema.candidates.id, candidate.id));
       }
 
@@ -775,7 +775,7 @@ async function seedDatabase() {
       await db.insert(schema.campaignVotes).values({
         campaignId: campaign.id,
         memberId: member.id,
-        votedAt: getRandomDate(new Date(campaign.createdAt), new Date())
+        votedAt: campaign.createdAt ? getRandomDate(new Date(campaign.createdAt), new Date()) : new Date()
       });
     }
 
@@ -787,7 +787,7 @@ async function seedDatabase() {
         campaignId: campaign.id,
         memberId: member.id,
         content: "This is a critical issue that needs immediate attention. I fully support this campaign!",
-        createdAt: getRandomDate(new Date(campaign.createdAt), new Date())
+        createdAt: campaign.createdAt ? getRandomDate(new Date(campaign.createdAt), new Date()) : new Date()
       });
     }
 
@@ -1025,7 +1025,7 @@ async function seedDatabase() {
         amount: getRandomElement(amounts),
         paymentMethod: status === "paid" ? "stripe" : "offline",
         stripePaymentId: status === "paid" ? `pi_${Math.random().toString(36).substring(2, 15)}` : null,
-        status,
+        paymentStatus: status === "paid" ? "completed" : "pending",
         dueDate,
         paidAt: status === "paid" ? getRandomDate(dueDate, new Date()) : null
       });
