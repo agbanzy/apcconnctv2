@@ -119,7 +119,7 @@ export function AdminSidebar() {
           </div>
           <div>
             <h2 className="font-display text-lg font-bold">Admin Panel</h2>
-            <p className="text-xs text-muted-foreground">APC Connect</p>
+            <p className="text-xs text-muted-foreground">apcng.org</p>
           </div>
         </div>
       </SidebarHeader>
@@ -142,12 +142,23 @@ export function AdminSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 space-y-3">
         <Link href="/dashboard">
           <div className="text-sm text-muted-foreground hover-elevate p-2 rounded-md cursor-pointer" data-testid="link-back-to-app">
             ← Back to App
           </div>
         </Link>
+        <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+          <p className="font-semibold">© 2025 APC Nigeria</p>
+          <a 
+            href="https://apcng.org" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            apcng.org
+          </a>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

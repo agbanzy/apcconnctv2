@@ -96,3 +96,21 @@ Preferred communication style: Simple, everyday language.
 **Bundle Optimization**: Shared schema between client and server eliminates type duplication. ESBuild for server-side bundling with external packages.
 
 **Caching Strategy**: Service worker implements network-first for dynamic content, cache-first for static assets with versioned cache names for clean updates.
+## Recent Updates (October 17, 2025)
+
+### Navigation & Branding Enhancement
+- **Domain Integration**: Updated all branding references to display official domain (apcng.org) across AppSidebar and AdminSidebar
+- **Navigation Reorganization**: Restructured main sidebar into 6 logical categories for improved user experience:
+  - **Main**: Core features (Dashboard, Profile, News)
+  - **Engagement**: Gamification features (Tasks & Jobs, Rewards & Badges, Leaderboard, Invite & Earn)
+  - **Political Action**: Democratic participation (Elections & Voting, Campaigns, Volunteer Tasks)
+  - **Community**: Social features (Events, Ideas Hub, Donations, Dues Payment)
+  - **Learn**: Educational content (Political Literacy, Knowledge Base, About APC)
+  - **Monitoring**: Real-time tracking (Situation Room, Events Gallery, Leadership)
+- **Footer Updates**: Added clickable apcng.org links in both user and admin sidebars with updated copyright
+
+### Referral System Foundation
+- **Database Schema**: Added referral tracking fields to members table (referral_code, referred_by)
+- **Referrals Table**: Created new table to track referrals with status and points earned
+- **Navigation Entry**: Added "Invite & Earn" menu item under Engagement section
+- **Integration Ready**: Schema prepared for points-based referral rewards through existing gamification system

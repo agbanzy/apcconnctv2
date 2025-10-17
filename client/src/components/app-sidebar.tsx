@@ -8,8 +8,6 @@ import {
   MessageSquare,
   TrendingUp,
   Settings,
-  Bell,
-  BadgeCheck,
   User,
   DollarSign,
   Trophy,
@@ -23,6 +21,8 @@ import {
   Image,
   Shield,
   Award,
+  GraduationCap,
+  UserPlus,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,9 +41,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import apcLogo from "@assets/logo_1760719840683.png";
 
-const menuItems = [
+const coreMenuItems = [
   {
-    title: "Home",
+    title: "Dashboard",
     url: "/dashboard",
     icon: Home,
   },
@@ -53,49 +53,22 @@ const menuItems = [
     icon: User,
   },
   {
-    title: "Dues",
-    url: "/dues",
-    icon: DollarSign,
+    title: "News",
+    url: "/news",
+    icon: Newspaper,
+  },
+];
+
+const engagementItems = [
+  {
+    title: "Tasks & Jobs",
+    url: "/tasks",
+    icon: CheckSquare,
   },
   {
-    title: "Donations",
-    url: "/donations",
-    icon: Heart,
-  },
-  {
-    title: "Events",
-    url: "/events",
-    icon: Calendar,
-  },
-  {
-    title: "Elections",
-    url: "/elections",
-    icon: Vote,
-  },
-  {
-    title: "Ideas",
-    url: "/ideas",
-    icon: Lightbulb,
-  },
-  {
-    title: "Knowledge Base",
-    url: "/knowledge-base",
-    icon: BookOpen,
-  },
-  {
-    title: "Political Literacy",
-    url: "/political-literacy",
-    icon: BookOpen,
-  },
-  {
-    title: "Volunteer",
-    url: "/volunteer",
-    icon: Briefcase,
-  },
-  {
-    title: "Campaigns",
-    url: "/campaigns",
-    icon: MessageSquare,
+    title: "Rewards & Badges",
+    url: "/rewards",
+    icon: Award,
   },
   {
     title: "Leaderboard",
@@ -103,29 +76,76 @@ const menuItems = [
     icon: Trophy,
   },
   {
-    title: "Rewards",
-    url: "/rewards",
-    icon: Award,
+    title: "Invite & Earn",
+    url: "/referrals",
+    icon: UserPlus,
+  },
+];
+
+const politicalItems = [
+  {
+    title: "Elections & Voting",
+    url: "/elections",
+    icon: Vote,
   },
   {
-    title: "Tasks",
-    url: "/tasks",
-    icon: CheckSquare,
+    title: "Campaigns",
+    url: "/campaigns",
+    icon: MessageSquare,
   },
+  {
+    title: "Volunteer Tasks",
+    url: "/volunteer",
+    icon: Briefcase,
+  },
+];
+
+const communityItems = [
+  {
+    title: "Events",
+    url: "/events",
+    icon: Calendar,
+  },
+  {
+    title: "Ideas Hub",
+    url: "/ideas",
+    icon: Lightbulb,
+  },
+  {
+    title: "Donations",
+    url: "/donations",
+    icon: Heart,
+  },
+  {
+    title: "Dues Payment",
+    url: "/dues",
+    icon: DollarSign,
+  },
+];
+
+const knowledgeItems = [
+  {
+    title: "Political Literacy",
+    url: "/political-literacy",
+    icon: GraduationCap,
+  },
+  {
+    title: "Knowledge Base",
+    url: "/knowledge-base",
+    icon: BookOpen,
+  },
+  {
+    title: "About APC",
+    url: "/about",
+    icon: Info,
+  },
+];
+
+const monitoringItems = [
   {
     title: "Situation Room",
     url: "/situation-room",
     icon: Activity,
-  },
-  {
-    title: "News",
-    url: "/news",
-    icon: Newspaper,
-  },
-  {
-    title: "About",
-    url: "/about",
-    icon: Info,
   },
   {
     title: "Events Gallery",
@@ -133,7 +153,7 @@ const menuItems = [
     icon: Image,
   },
   {
-    title: "Leadership Board",
+    title: "Leadership",
     url: "/leadership-board",
     icon: Shield,
   },
@@ -162,16 +182,106 @@ export function AppSidebar() {
           <img src={apcLogo} alt="APC Logo" className="h-10 w-10 object-contain" />
           <div>
             <h2 className="font-display text-lg font-bold text-primary">APC Connect</h2>
-            <p className="text-xs text-muted-foreground">Modernizing Politics</p>
+            <p className="text-xs text-muted-foreground">apcng.org</p>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {coreMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Engagement</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {engagementItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Political Action</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {politicalItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Community</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {communityItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Learn</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {knowledgeItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {monitoringItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
                     <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -226,9 +336,16 @@ export function AppSidebar() {
             Logout
           </Button>
         )}
-        <div className="text-xs text-muted-foreground">
-          <p>© 2025 APC Connect</p>
-          <p>All rights reserved</p>
+        <div className="text-xs text-muted-foreground text-center">
+          <p className="font-semibold">© 2025 APC Nigeria</p>
+          <a 
+            href="https://apcng.org" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            apcng.org
+          </a>
         </div>
       </SidebarFooter>
     </Sidebar>
