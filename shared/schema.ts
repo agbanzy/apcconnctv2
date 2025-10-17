@@ -23,6 +23,7 @@ export const lgas = pgTable("lgas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   stateId: varchar("state_id").notNull().references(() => states.id),
   name: text("name").notNull(),
+  code: text("code").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -30,6 +31,7 @@ export const wards = pgTable("wards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   lgaId: varchar("lga_id").notNull().references(() => lgas.id),
   name: text("name").notNull(),
+  code: text("code").notNull().unique(),
   wardNumber: integer("ward_number"),
   createdAt: timestamp("created_at").defaultNow(),
 });
