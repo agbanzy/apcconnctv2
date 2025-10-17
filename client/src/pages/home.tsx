@@ -1,66 +1,57 @@
+import { useQuery } from "@tanstack/react-query";
 import { StatsCard } from "@/components/stats-card";
 import { NewsCard } from "@/components/news-card";
 import { EventCard } from "@/components/event-card";
 import { MicroTaskCard } from "@/components/micro-task-card";
 import { Users, Vote, Calendar, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "wouter";
 import heroImage from "@assets/generated_images/APC_youth_rally_hero_f3829ce8.png";
+import type { NewsPost, Event, MicroTask } from "@shared/schema";
 
 export default function Home() {
-  //todo: remove mock functionality - Replace with real API data
-  const mockNews = [
-    {
-      id: "1",
-      title: "APC Youth Wing Launches Digital Membership Drive",
-      excerpt: "The All Progressives Congress youth wing announces a comprehensive digital campaign targeting young Nigerians across all 36 states.",
-      category: "Membership",
-      timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      imageUrl: heroImage,
-      likes: 324,
-      comments: 45,
-    },
-    {
-      id: "2",
-      title: "Electronic Primaries Set for June 2024",
-      excerpt: "Party leadership confirms blockchain-secured electronic primaries will be held across all states with real-time transparency.",
-      category: "Elections",
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
-      likes: 567,
-      comments: 89,
-    },
-  ];
+  const { data: overviewData, isLoading: isLoadingOverview } = useQuery<{
+    success: boolean;
+    data: {
+      totalMembers: number;
+      activeMembers: number;
+      totalEvents: number;
+      totalVotes: number;
+    };
+  }>({
+    queryKey: ["/api/analytics/overview"],
+    retry: false,
+  });
 
-  const mockEvents = [
-    {
-      id: "1",
-      title: "National Youth Summit 2024",
-      description: "Join thousands of young party members for policy discussions, networking, and skills training.",
-      date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-      location: "International Conference Center, Abuja",
-      attendees: 2340,
-      maxAttendees: 5000,
-      category: "Summit",
-    },
-  ];
+  const { data: newsData, isLoading: isLoadingNews } = useQuery<{
+    success: boolean;
+    data: (NewsPost & { author: any })[];
+  }>({
+    queryKey: ["/api/news"],
+  });
 
-  const mockTasks = [
-    {
-      id: "1",
-      title: "Share APC Connect on Social Media",
-      description: "Share the app on your platforms and earn points.",
-      points: 25,
-      timeEstimate: "5 minutes",
-      category: "Social Sharing",
-    },
-    {
-      id: "2",
-      title: "Complete Your Profile",
-      description: "Add your skills and interests to get matched with relevant opportunities.",
-      points: 50,
-      timeEstimate: "10 minutes",
-      category: "Profile",
-    },
-  ];
+  const { data: eventsData, isLoading: isLoadingEvents } = useQuery<{
+    success: boolean;
+    data: Event[];
+  }>({
+    queryKey: ["/api/events"],
+  });
+
+  const { data: tasksData, isLoading: isLoadingTasks } = useQuery<{
+    success: boolean;
+    data: MicroTask[];
+  }>({
+    queryKey: ["/api/micro-tasks"],
+    retry: false,
+  });
+
+  const overview = overviewData?.data;
+  const news = newsData?.data?.slice(0, 5) || [];
+  const allEvents = eventsData?.data || [];
+  const now = new Date();
+  const upcomingEvents = allEvents.filter(e => new Date(e.date) > now).slice(0, 3);
+  const tasks = tasksData?.data?.slice(0, 2) || [];
 
   return (
     <div className="space-y-8">
@@ -94,77 +85,140 @@ export default function Home() {
       {/* Stats Dashboard */}
       <div>
         <h2 className="font-display text-2xl font-bold mb-4">Platform Overview</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatsCard
-            title="Total Members"
-            value="12,458"
-            change={15.2}
-            icon={Users}
-          />
-          <StatsCard
-            title="Active Volunteers"
-            value="3,234"
-            change={23.5}
-            icon={Users}
-          />
-          <StatsCard
-            title="Upcoming Events"
-            value="47"
-            change={8.3}
-            icon={Calendar}
-          />
-          <StatsCard
-            title="Votes Cast (Primaries)"
-            value="8,901"
-            change={42.1}
-            icon={Vote}
-          />
-        </div>
+        {isLoadingOverview ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <StatsCard
+              title="Total Members"
+              value={overview?.totalMembers?.toString() || "0"}
+              change={0}
+              icon={Users}
+            />
+            <StatsCard
+              title="Active Members"
+              value={overview?.activeMembers?.toString() || "0"}
+              change={0}
+              icon={Users}
+            />
+            <StatsCard
+              title="Upcoming Events"
+              value={overview?.totalEvents?.toString() || "0"}
+              change={0}
+              icon={Calendar}
+            />
+            <StatsCard
+              title="Votes Cast (Primaries)"
+              value={overview?.totalVotes?.toString() || "0"}
+              change={0}
+              icon={Vote}
+            />
+          </div>
+        )}
       </div>
 
       {/* Quick Tasks */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display text-2xl font-bold">Quick Tasks</h2>
-          <Button variant="ghost" size="sm" data-testid="button-view-all-tasks">
-            View All
-          </Button>
+          <Link href="/micro-tasks">
+            <Button variant="ghost" size="sm" data-testid="button-view-all-tasks">
+              View All
+            </Button>
+          </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {mockTasks.map((task) => (
-            <MicroTaskCard key={task.id} {...task} />
-          ))}
-        </div>
+        {isLoadingTasks ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </div>
+        ) : tasks.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {tasks.map((task) => (
+              <MicroTaskCard key={task.id} {...task} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center py-8 text-muted-foreground">No tasks available</p>
+        )}
       </div>
 
       {/* News Feed */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display text-2xl font-bold">Latest News</h2>
-          <Button variant="ghost" size="sm" data-testid="button-view-all-news">
-            View All
-          </Button>
+          <Link href="/news">
+            <Button variant="ghost" size="sm" data-testid="button-view-all-news">
+              View All
+            </Button>
+          </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          {mockNews.map((news) => (
-            <NewsCard key={news.id} {...news} />
-          ))}
-        </div>
+        {isLoadingNews ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
+          </div>
+        ) : news.length > 0 ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            {news.map((post) => (
+              <NewsCard
+                key={post.id}
+                id={post.id}
+                title={post.title}
+                excerpt={post.excerpt}
+                category={post.category}
+                timestamp={new Date(post.publishedAt || "")}
+                imageUrl={post.imageUrl || undefined}
+                likes={post.likes || 0}
+                comments={post.comments || 0}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center py-8 text-muted-foreground">No news available</p>
+        )}
       </div>
 
       {/* Upcoming Events */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display text-2xl font-bold">Upcoming Events</h2>
-          <Button variant="ghost" size="sm" data-testid="button-view-all-events">
-            View All
-          </Button>
+          <Link href="/events">
+            <Button variant="ghost" size="sm" data-testid="button-view-all-events">
+              View All
+            </Button>
+          </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {mockEvents.map((event) => (
-            <EventCard key={event.id} {...event} />
-          ))}
-        </div>
+        {isLoadingEvents ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
+          </div>
+        ) : upcomingEvents.length > 0 ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {upcomingEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                id={event.id}
+                title={event.title}
+                description={event.description}
+                date={new Date(event.date)}
+                location={event.location}
+                category={event.category}
+                maxAttendees={event.maxAttendees}
+                attendees={0}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center py-8 text-muted-foreground">No upcoming events</p>
+        )}
       </div>
     </div>
   );

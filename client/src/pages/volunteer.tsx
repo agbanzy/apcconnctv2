@@ -1,65 +1,71 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { VolunteerTaskCard } from "@/components/volunteer-task-card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Search } from "lucide-react";
+import type { VolunteerTask } from "@shared/schema";
+import { format } from "date-fns";
 
 export default function Volunteer() {
-  //todo: remove mock functionality
-  const availableTasks = [
-    {
-      id: "1",
-      title: "Design Campaign Flyers for Lagos Rally",
-      description: "Create visually appealing campaign materials for our upcoming youth rally. Must follow APC brand guidelines.",
-      location: "Remote",
-      skills: ["Graphic Design", "Adobe Photoshop"],
-      points: 250,
-      deadline: "March 25, 2024",
-      difficulty: "Medium" as const,
-    },
-    {
-      id: "2",
-      title: "Door-to-Door Canvassing - Ikeja",
-      description: "Join our team for voter registration drive in Ikeja. Training provided on-site.",
-      location: "Ikeja, Lagos",
-      skills: ["Communication", "Public Speaking"],
-      points: 500,
-      deadline: "March 30, 2024",
-      difficulty: "Easy" as const,
-    },
-    {
-      id: "3",
-      title: "Social Media Content Creator",
-      description: "Create engaging social media content to promote APC initiatives and policies to young Nigerians.",
-      location: "Remote",
-      skills: ["Content Writing", "Social Media", "Video Editing"],
-      points: 350,
-      deadline: "April 5, 2024",
-      difficulty: "Medium" as const,
-    },
-    {
-      id: "4",
-      title: "Event Coordinator - Youth Summit",
-      description: "Help coordinate logistics for the National Youth Summit in Abuja. Experience in event management preferred.",
-      location: "Abuja",
-      skills: ["Event Management", "Logistics", "Leadership"],
-      points: 800,
-      deadline: "April 10, 2024",
-      difficulty: "Hard" as const,
-    },
-  ];
+  const { member } = useAuth();
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const myTasks = [
-    {
-      id: "5",
-      title: "Website Translation to Hausa",
-      description: "Translate key website pages from English to Hausa for better accessibility.",
-      location: "Remote",
-      skills: ["Translation", "Hausa Language"],
-      points: 400,
-      difficulty: "Medium" as const,
+  const { data: tasksData, isLoading } = useQuery<{
+    success: boolean;
+    data: VolunteerTask[];
+  }>({
+    queryKey: ["/api/tasks"],
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await apiRequest("POST", `/api/tasks/${taskId}/apply`, {});
+      return res.json();
     },
-  ];
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      toast({
+        title: "Application submitted",
+        description: "Your application has been submitted successfully!",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Application failed",
+        description: error?.message || "You may have already applied for this task.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const availableTasks = tasksData?.data?.filter(t => t.status === "open") || [];
+  const myTasks = tasksData?.data?.filter(t => t.status === "in-progress") || [];
+  
+  const filteredAvailableTasks = availableTasks.filter(
+    task =>
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.location.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-48" />
+          <Skeleton className="h-48" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,23 +87,52 @@ export default function Volunteer() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search tasks by skill, location, or keyword..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
               data-testid="input-search-tasks"
             />
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {availableTasks.map((task) => (
-              <VolunteerTaskCard key={task.id} {...task} />
-            ))}
-          </div>
+          {filteredAvailableTasks.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">
+              {searchTerm ? "No tasks found matching your search." : "No available tasks at the moment."}
+            </p>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2">
+              {filteredAvailableTasks.map((task) => (
+                <VolunteerTaskCard
+                  key={task.id}
+                  id={task.id}
+                  title={task.title}
+                  description={task.description}
+                  location={task.location}
+                  skills={task.skills || []}
+                  points={task.points}
+                  deadline={task.deadline ? format(new Date(task.deadline), "MMM dd, yyyy") : undefined}
+                  difficulty={task.difficulty}
+                  onApply={() => applyMutation.mutate(task.id)}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="my-tasks" className="mt-6">
           {myTasks.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2">
               {myTasks.map((task) => (
-                <VolunteerTaskCard key={task.id} {...task} />
+                <VolunteerTaskCard
+                  key={task.id}
+                  id={task.id}
+                  title={task.title}
+                  description={task.description}
+                  location={task.location}
+                  skills={task.skills || []}
+                  points={task.points}
+                  deadline={task.deadline ? format(new Date(task.deadline), "MMM dd, yyyy") : undefined}
+                  difficulty={task.difficulty}
+                />
               ))}
             </div>
           ) : (

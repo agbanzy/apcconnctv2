@@ -1,54 +1,110 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { CandidateCard } from "@/components/candidate-card";
 import { VoteResultsChart } from "@/components/vote-results-chart";
-import { SituationRoomDashboard } from "@/components/situation-room-dashboard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Vote } from "lucide-react";
+import type { Election, Candidate } from "@shared/schema";
 
 export default function Elections() {
+  const { member } = useAuth();
+  const { toast } = useToast();
   const [selectedCandidate, setSelectedCandidate] = useState("");
+  const [selectedElectionId, setSelectedElectionId] = useState<string | null>(null);
 
-  //todo: remove mock functionality
-  const candidates = [
-    {
-      id: "candidate-1",
-      name: "Dr. Amina Bello",
-      position: "State Chairman",
-      manifesto: "Focus on youth inclusion, digital transformation of party operations, and grassroots mobilization across all 36 states.",
-      experience: "15 years in party leadership, former youth coordinator",
+  const { data: electionsData, isLoading } = useQuery<{
+    success: boolean;
+    data: Election[];
+  }>({
+    queryKey: ["/api/elections"],
+  });
+
+  const { data: electionDetailsData } = useQuery<{
+    success: boolean;
+    data: Election & { candidates: Candidate[] };
+  }>({
+    queryKey: ["/api/elections", selectedElectionId],
+    enabled: !!selectedElectionId,
+  });
+
+  const { data: resultsData } = useQuery<{
+    success: boolean;
+    data: {
+      election: Election;
+      candidates: Candidate[];
+      totalVotes: number;
+    };
+  }>({
+    queryKey: ["/api/elections", selectedElectionId, "results"],
+    enabled: !!selectedElectionId,
+  });
+
+  const voteMutation = useMutation({
+    mutationFn: async ({ electionId, candidateId }: { electionId: string; candidateId: string }) => {
+      const res = await apiRequest("POST", `/api/elections/${electionId}/vote`, { candidateId });
+      return res.json();
     },
-    {
-      id: "candidate-2",
-      name: "Hon. Chukwudi Okafor",
-      position: "State Chairman",
-      manifesto: "Strengthening party structures at ward level, improving member welfare, and transparent financial management.",
-      experience: "10 years as LGA chairman, extensive grassroots experience",
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elections"] });
+      toast({
+        title: "Vote recorded",
+        description: "Your vote has been successfully cast and secured with blockchain technology!",
+      });
+      setSelectedCandidate("");
     },
-  ];
-
-  const results = {
-    position: "State Chairman - Lagos",
-    status: "completed" as const,
-    totalVotes: 15420,
-    results: [
-      { candidateName: "Dr. Amina Bello", votes: 8234, percentage: 53.4, isWinner: true },
-      { candidateName: "Hon. Chukwudi Okafor", votes: 4890, percentage: 31.7 },
-      { candidateName: "Mrs. Fatima Ahmed", votes: 2296, percentage: 14.9 },
-    ],
-  };
-
-  const pollingUnits = [
-    { id: "PU-001", name: "Polling Unit 001 - Central School", status: "completed" as const, votes: 342, timestamp: "10:45 AM" },
-    { id: "PU-002", name: "Polling Unit 002 - Community Hall", status: "active" as const, votes: 0, timestamp: "11:30 AM" },
-    { id: "PU-003", name: "Polling Unit 003 - Market Square", status: "incident" as const, votes: 0, timestamp: "11:15 AM" },
-    { id: "PU-004", name: "Polling Unit 004 - Primary School", status: "delayed" as const, votes: 0, timestamp: "09:30 AM" },
-  ];
+    onError: (error: any) => {
+      toast({
+        title: "Vote failed",
+        description: error?.message || "You may have already voted in this election.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleVote = () => {
-    console.log("Vote cast for:", selectedCandidate);
+    if (selectedElectionId && selectedCandidate) {
+      voteMutation.mutate({
+        electionId: selectedElectionId,
+        candidateId: selectedCandidate,
+      });
+    }
   };
+
+  const elections = electionsData?.data || [];
+  const firstElection = elections[0];
+  const currentElection = selectedElectionId 
+    ? elections.find(e => e.id === selectedElectionId) || firstElection
+    : firstElection;
+  
+  if (!selectedElectionId && firstElection) {
+    setSelectedElectionId(firstElection.id);
+  }
+
+  const candidates = electionDetailsData?.data?.candidates || [];
+  const results = resultsData?.data;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (elections.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">No elections available at the moment.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -60,50 +116,71 @@ export default function Elections() {
       </div>
 
       <Tabs defaultValue="vote" className="w-full">
-        <TabsList className="grid w-full grid-cols-3" data-testid="tabs-elections">
+        <TabsList className="grid w-full grid-cols-2" data-testid="tabs-elections">
           <TabsTrigger value="vote" data-testid="tab-vote">Cast Vote</TabsTrigger>
           <TabsTrigger value="results" data-testid="tab-results">Results</TabsTrigger>
-          <TabsTrigger value="situation-room" data-testid="tab-situation-room">Situation Room</TabsTrigger>
         </TabsList>
 
         <TabsContent value="vote" className="space-y-6 mt-6">
-          <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-            <h3 className="font-semibold mb-2">State Chairman Election - Lagos</h3>
-            <p className="text-sm text-muted-foreground">
-              Select your preferred candidate. Your vote is anonymous and secured with blockchain technology.
-            </p>
-          </div>
-
-          <RadioGroup value={selectedCandidate} onValueChange={setSelectedCandidate}>
-            <div className="space-y-4">
-              {candidates.map((candidate) => (
-                <CandidateCard
-                  key={candidate.id}
-                  {...candidate}
-                  selected={selectedCandidate === candidate.id}
-                />
-              ))}
+          {currentElection && (
+            <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+              <h3 className="font-semibold mb-2">{currentElection.title}</h3>
+              <p className="text-sm text-muted-foreground">
+                {currentElection.description || "Select your preferred candidate. Your vote is anonymous and secured with blockchain technology."}
+              </p>
             </div>
-          </RadioGroup>
+          )}
 
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={!selectedCandidate}
-            onClick={handleVote}
-            data-testid="button-submit-vote"
-          >
-            <Vote className="h-5 w-5 mr-2" />
-            Cast Your Vote
-          </Button>
+          {candidates.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No candidates available</p>
+          ) : (
+            <>
+              <RadioGroup value={selectedCandidate} onValueChange={setSelectedCandidate}>
+                <div className="space-y-4">
+                  {candidates.map((candidate) => (
+                    <CandidateCard
+                      key={candidate.id}
+                      id={candidate.id}
+                      name={candidate.name}
+                      position={currentElection?.position || ""}
+                      manifesto={candidate.manifesto}
+                      experience={candidate.experience}
+                      selected={selectedCandidate === candidate.id}
+                    />
+                  ))}
+                </div>
+              </RadioGroup>
+
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={!selectedCandidate || voteMutation.isPending}
+                onClick={handleVote}
+                data-testid="button-submit-vote"
+              >
+                <Vote className="h-5 w-5 mr-2" />
+                {voteMutation.isPending ? "Casting Vote..." : "Cast Your Vote"}
+              </Button>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="results" className="mt-6">
-          <VoteResultsChart {...results} />
-        </TabsContent>
-
-        <TabsContent value="situation-room" className="mt-6">
-          <SituationRoomDashboard pollingUnits={pollingUnits} totalUnits={250} />
+          {results ? (
+            <VoteResultsChart
+              position={results.election.position}
+              status={results.election.status as "ongoing" | "completed"}
+              totalVotes={results.totalVotes}
+              results={results.candidates.map(c => ({
+                candidateName: c.name,
+                votes: c.votes || 0,
+                percentage: results.totalVotes > 0 ? ((c.votes || 0) / results.totalVotes) * 100 : 0,
+                isWinner: c.votes === Math.max(...results.candidates.map(cand => cand.votes || 0)),
+              }))}
+            />
+          ) : (
+            <p className="text-center py-8 text-muted-foreground">Results not available yet</p>
+          )}
         </TabsContent>
       </Tabs>
     </div>
