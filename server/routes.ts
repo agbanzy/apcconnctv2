@@ -7,9 +7,11 @@ import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import { Server as SocketIOServer } from "socket.io";
 import Stripe from "stripe";
+import Paystack from "paystack-api";
 import multer from "multer";
 import QRCode from "qrcode";
 import OpenAI from "openai";
+import crypto from "crypto";
 import { db } from "./db";
 import { pool } from "./db";
 import * as schema from "@shared/schema";
@@ -18,6 +20,7 @@ import { z } from "zod";
 
 const PgSession = ConnectPgSimple(session);
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-11-20.acacia" });
+const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -405,11 +408,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/dues/stripe-checkout", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/dues/checkout", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { amount, duesId } = req.body;
+      const { amount } = req.body;
+      const member_id = req.user!.id;
+
       const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id),
+        where: eq(schema.members.userId, member_id),
         with: { user: true }
       });
 
@@ -417,33 +422,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "ngn",
-              product_data: {
-                name: "APC Membership Dues",
-                description: `Membership dues for ${member.user.firstName} ${member.user.lastName}`
-              },
-              unit_amount: Math.round(parseFloat(amount) * 100)
-            },
-            quantity: 1
-          }
-        ],
-        mode: "payment",
-        success_url: `${req.headers.origin}/membership?payment=success`,
-        cancel_url: `${req.headers.origin}/membership?payment=cancelled`,
+      const [payment] = await db.insert(schema.membershipDues).values({
+        id: crypto.randomUUID(),
+        memberId: member.id,
+        amount: String(amount * 100),
+        paymentStatus: "pending",
+        paymentMethod: "paystack",
+        dueDate: new Date(),
+      }).returning();
+
+      const paystackResponse = await paystack.transaction.initialize({
+        email: member.user.email,
+        amount: amount * 100,
+        reference: payment.id,
+        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/verify`,
         metadata: {
-          duesId,
-          memberId: member.id
+          payment_id: payment.id,
+          member_id: member.id,
+          type: "membership_dues",
         }
       });
 
-      res.json({ success: true, data: { sessionId: session.id, url: session.url } });
+      res.json({
+        success: true,
+        data: {
+          authorization_url: paystackResponse.data.authorization_url,
+          access_code: paystackResponse.data.access_code,
+          reference: paystackResponse.data.reference,
+        }
+      });
     } catch (error) {
+      console.error("Dues checkout error:", error);
       res.status(500).json({ success: false, error: "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/dues/verify", async (req: Request, res: Response) => {
+    try {
+      const { reference } = req.body;
+
+      const verification = await paystack.transaction.verify(reference);
+
+      if (verification.data.status === "success") {
+        await db.update(schema.membershipDues)
+          .set({
+            paymentStatus: "completed",
+            paystackReference: reference,
+            paidAt: new Date(),
+          })
+          .where(eq(schema.membershipDues.id, reference));
+
+        const payment = await db.query.membershipDues.findFirst({
+          where: eq(schema.membershipDues.id, reference)
+        });
+
+        if (payment) {
+          await db.update(schema.members)
+            .set({ status: "active" })
+            .where(eq(schema.members.id, payment.memberId));
+        }
+
+        res.json({ success: true, data: { payment } });
+      } else {
+        await db.update(schema.membershipDues)
+          .set({ paymentStatus: "failed" })
+          .where(eq(schema.membershipDues.id, reference));
+
+        res.status(400).json({ success: false, error: "Payment verification failed" });
+      }
+    } catch (error: any) {
+      console.error("Dues verification error:", error);
+      res.status(500).json({ success: false, error: "Failed to verify payment" });
     }
   });
 
@@ -462,7 +511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         await db.update(schema.membershipDues)
           .set({
-            status: "paid",
+            paymentStatus: "completed",
             stripePaymentId: session.payment_intent,
             paidAt: new Date()
           })
@@ -479,6 +528,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ received: true });
     } catch (error) {
       res.status(400).json({ success: false, error: "Webhook error" });
+    }
+  });
+
+  app.post("/api/paystack/webhook", async (req: Request, res: Response) => {
+    try {
+      const hash = crypto
+        .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY as string)
+        .update(JSON.stringify(req.body))
+        .digest("hex");
+
+      if (hash !== req.headers["x-paystack-signature"]) {
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+
+      const event = req.body;
+
+      if (event.event === "charge.success") {
+        const reference = event.data.reference;
+        const metadata = event.data.metadata;
+
+        if (metadata.type === "membership_dues") {
+          await db.update(schema.membershipDues)
+            .set({ paymentStatus: "completed", paidAt: new Date() })
+            .where(eq(schema.membershipDues.id, reference));
+        } else if (metadata.donation_id) {
+          await db.update(schema.donations)
+            .set({ paymentStatus: "completed" })
+            .where(eq(schema.donations.id, reference));
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("Webhook error:", error);
+      res.status(500).json({ error: "Webhook handler failed" });
     }
   });
 
@@ -2507,97 +2591,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Donation Endpoints
-  app.post("/api/donations/create", async (req: AuthRequest, res: Response) => {
+  app.post("/api/donations/create", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { amount, campaignId, isAnonymous, isRecurring, frequency, message, donorName, donorEmail } = req.body;
+      const { amount, campaign_id, is_anonymous, message } = req.body;
+      const member_id = req.user!.id;
 
-      if (!amount || amount < 100) {
-        return res.status(400).json({ success: false, error: "Minimum donation amount is ₦1" });
-      }
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, member_id),
+        with: { user: true }
+      });
 
-      let memberId = null;
-      let customerEmail = donorEmail;
-
-      if (req.isAuthenticated() && req.user) {
-        const member = await db.query.members.findFirst({
-          where: eq(schema.members.userId, req.user.id),
-          with: { user: true }
-        });
-        if (member) {
-          memberId = member.id;
-          customerEmail = member.user.email;
-        }
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
       }
 
       const [donation] = await db.insert(schema.donations).values({
-        memberId,
-        donorName: isAnonymous ? null : (donorName || null),
-        donorEmail: customerEmail || null,
-        campaignId: campaignId || null,
-        amount,
+        id: crypto.randomUUID(),
+        memberId: member.id,
+        campaignId: campaign_id || null,
+        amount: amount * 100,
         currency: "NGN",
-        paymentMethod: "stripe",
+        paymentMethod: "paystack",
         paymentStatus: "pending",
-        isAnonymous: isAnonymous || false,
-        isRecurring: isRecurring || false,
-        recurringFrequency: isRecurring ? frequency : null,
+        isAnonymous: is_anonymous || false,
         message: message || null,
       }).returning();
 
-      const lineItems = [{
-        price_data: {
-          currency: "ngn",
-          product_data: {
-            name: campaignId 
-              ? "Campaign Donation" 
-              : "General APC Fund Donation",
-            description: message || "Thank you for supporting APC!",
-          },
-          unit_amount: amount,
-        },
-        quantity: 1,
-      }];
-
-      const sessionConfig: any = {
-        payment_method_types: ["card"],
-        line_items: lineItems,
-        mode: isRecurring ? "subscription" : "payment",
-        success_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/donations/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/donations/cancel`,
-        customer_email: customerEmail,
+      const paystackResponse = await paystack.transaction.initialize({
+        email: member.user.email,
+        amount: amount * 100,
+        reference: donation.id,
+        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/donations/verify`,
         metadata: {
-          donationId: donation.id,
-          campaignId: campaignId || "",
-          isRecurring: isRecurring ? "true" : "false",
-          memberId: memberId || "",
-        },
-      };
-
-      if (isRecurring && frequency) {
-        sessionConfig.mode = "subscription";
-        sessionConfig.line_items[0].price_data.recurring = {
-          interval: frequency === "yearly" ? "year" : frequency === "quarterly" ? "month" : "month",
-          interval_count: frequency === "quarterly" ? 3 : 1,
-        };
-      }
-
-      const session = await stripe.checkout.sessions.create(sessionConfig);
-
-      await db.update(schema.donations)
-        .set({ stripePaymentIntentId: session.id })
-        .where(eq(schema.donations.id, donation.id));
-
-      res.json({ 
-        success: true, 
-        data: { 
-          sessionId: session.id,
-          sessionUrl: session.url,
-          donationId: donation.id 
-        } 
+          donation_id: donation.id,
+          campaign_id: campaign_id || null,
+          member_id: member.id,
+        }
       });
-    } catch (error) {
+
+      res.json({
+        success: true,
+        data: {
+          authorization_url: paystackResponse.data.authorization_url,
+          access_code: paystackResponse.data.access_code,
+          reference: paystackResponse.data.reference,
+        }
+      });
+    } catch (error: any) {
       console.error("Donation creation error:", error);
       res.status(500).json({ success: false, error: "Failed to create donation" });
+    }
+  });
+
+  app.post("/api/donations/verify", async (req: Request, res: Response) => {
+    try {
+      const { reference } = req.body;
+
+      const verification = await paystack.transaction.verify(reference);
+
+      if (verification.data.status === "success") {
+        await db.update(schema.donations)
+          .set({
+            paymentStatus: "completed",
+            paystackReference: reference,
+          })
+          .where(eq(schema.donations.id, reference));
+
+        const donation = await db.query.donations.findFirst({
+          where: eq(schema.donations.id, reference)
+        });
+
+        if (donation && donation.campaignId) {
+          await db.update(schema.donationCampaigns)
+            .set({
+              currentAmount: sql`current_amount + ${donation.amount}`,
+            })
+            .where(eq(schema.donationCampaigns.id, donation.campaignId));
+        }
+
+        res.json({ success: true, data: { donation } });
+      } else {
+        await db.update(schema.donations)
+          .set({ paymentStatus: "failed" })
+          .where(eq(schema.donations.id, reference));
+
+        res.status(400).json({ success: false, error: "Payment verification failed" });
+      }
+    } catch (error: any) {
+      console.error("Payment verification error:", error);
+      res.status(500).json({ success: false, error: "Failed to verify payment" });
     }
   });
 

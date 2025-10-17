@@ -71,9 +71,10 @@ export const membershipDues = pgTable("membership_dues", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   memberId: varchar("member_id").notNull().references(() => members.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  paymentMethod: text("payment_method"), // "stripe", "offline"
+  paymentMethod: text("payment_method"), // "paystack", "stripe", "offline"
   stripePaymentId: text("stripe_payment_id"),
-  status: text("status").default("pending"), // pending, paid, failed
+  paystackReference: text("paystack_reference"),
+  paymentStatus: paymentStatusEnum("payment_status").default("pending"),
   dueDate: timestamp("due_date").notNull(),
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -434,9 +435,10 @@ export const donations = pgTable("donations", {
   campaignId: varchar("campaign_id").references(() => donationCampaigns.id, { onDelete: "set null" }),
   amount: integer("amount").notNull(), // in kobo/cents
   currency: text("currency").default("NGN"),
-  paymentMethod: text("payment_method").notNull(), // stripe, paystack, flutterwave, bank_transfer
+  paymentMethod: text("payment_method").notNull(), // paystack, stripe, flutterwave, bank_transfer
   paymentStatus: paymentStatusEnum("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
+  paystackReference: text("paystack_reference"),
   isAnonymous: boolean("is_anonymous").default(false),
   isRecurring: boolean("is_recurring").default(false),
   recurringFrequency: recurringFrequencyEnum("recurring_frequency"),
