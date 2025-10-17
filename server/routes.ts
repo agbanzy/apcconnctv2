@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from "socket.io";
 import Stripe from "stripe";
 import multer from "multer";
 import QRCode from "qrcode";
+import OpenAI from "openai";
 import { db } from "./db";
 import { pool } from "./db";
 import * as schema from "@shared/schema";
@@ -17,6 +18,11 @@ import { z } from "zod";
 
 const PgSession = ConnectPgSimple(session);
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-11-20.acacia" });
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2395,6 +2401,592 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Donation Campaign Endpoints
+  app.get("/api/donation-campaigns", async (req: Request, res: Response) => {
+    try {
+      const { status } = req.query;
+      
+      const campaigns = await db.query.donationCampaigns.findMany({
+        where: status ? eq(schema.donationCampaigns.status, status as any) : undefined,
+        with: {
+          creator: {
+            columns: {
+              firstName: true,
+              lastName: true,
+            }
+          }
+        },
+        orderBy: desc(schema.donationCampaigns.createdAt)
+      });
+
+      res.json({ success: true, data: campaigns });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch campaigns" });
+    }
+  });
+
+  app.get("/api/donation-campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      const campaign = await db.query.donationCampaigns.findFirst({
+        where: eq(schema.donationCampaigns.id, req.params.id),
+        with: {
+          creator: {
+            columns: {
+              firstName: true,
+              lastName: true,
+            }
+          },
+          donations: {
+            where: eq(schema.donations.paymentStatus, "completed"),
+            orderBy: desc(schema.donations.createdAt),
+            limit: 10,
+          }
+        }
+      });
+
+      if (!campaign) {
+        return res.status(404).json({ success: false, error: "Campaign not found" });
+      }
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch campaign" });
+    }
+  });
+
+  app.post("/api/donation-campaigns", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const campaignData = schema.insertDonationCampaignSchema.parse({
+        ...req.body,
+        createdBy: req.user!.id
+      });
+
+      const [campaign] = await db.insert(schema.donationCampaigns)
+        .values(campaignData)
+        .returning();
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error instanceof Error ? error.message : "Failed to create campaign" });
+    }
+  });
+
+  app.patch("/api/donation-campaigns/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const updates = req.body;
+      delete updates.id;
+      delete updates.createdAt;
+      delete updates.createdBy;
+      
+      updates.updatedAt = new Date();
+
+      const [campaign] = await db.update(schema.donationCampaigns)
+        .set(updates)
+        .where(eq(schema.donationCampaigns.id, req.params.id))
+        .returning();
+
+      if (!campaign) {
+        return res.status(404).json({ success: false, error: "Campaign not found" });
+      }
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to update campaign" });
+    }
+  });
+
+  app.delete("/api/donation-campaigns/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.donationCampaigns)
+        .where(eq(schema.donationCampaigns.id, req.params.id));
+
+      res.json({ success: true, data: { message: "Campaign deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete campaign" });
+    }
+  });
+
+  // Donation Endpoints
+  app.post("/api/donations/create", async (req: AuthRequest, res: Response) => {
+    try {
+      const { amount, campaignId, isAnonymous, isRecurring, frequency, message, donorName, donorEmail } = req.body;
+
+      if (!amount || amount < 100) {
+        return res.status(400).json({ success: false, error: "Minimum donation amount is ₦1" });
+      }
+
+      let memberId = null;
+      let customerEmail = donorEmail;
+
+      if (req.isAuthenticated() && req.user) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+          with: { user: true }
+        });
+        if (member) {
+          memberId = member.id;
+          customerEmail = member.user.email;
+        }
+      }
+
+      const [donation] = await db.insert(schema.donations).values({
+        memberId,
+        donorName: isAnonymous ? null : (donorName || null),
+        donorEmail: customerEmail || null,
+        campaignId: campaignId || null,
+        amount,
+        currency: "NGN",
+        paymentMethod: "stripe",
+        paymentStatus: "pending",
+        isAnonymous: isAnonymous || false,
+        isRecurring: isRecurring || false,
+        recurringFrequency: isRecurring ? frequency : null,
+        message: message || null,
+      }).returning();
+
+      const lineItems = [{
+        price_data: {
+          currency: "ngn",
+          product_data: {
+            name: campaignId 
+              ? "Campaign Donation" 
+              : "General APC Fund Donation",
+            description: message || "Thank you for supporting APC!",
+          },
+          unit_amount: amount,
+        },
+        quantity: 1,
+      }];
+
+      const sessionConfig: any = {
+        payment_method_types: ["card"],
+        line_items: lineItems,
+        mode: isRecurring ? "subscription" : "payment",
+        success_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/donations/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/donations/cancel`,
+        customer_email: customerEmail,
+        metadata: {
+          donationId: donation.id,
+          campaignId: campaignId || "",
+          isRecurring: isRecurring ? "true" : "false",
+          memberId: memberId || "",
+        },
+      };
+
+      if (isRecurring && frequency) {
+        sessionConfig.mode = "subscription";
+        sessionConfig.line_items[0].price_data.recurring = {
+          interval: frequency === "yearly" ? "year" : frequency === "quarterly" ? "month" : "month",
+          interval_count: frequency === "quarterly" ? 3 : 1,
+        };
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionConfig);
+
+      await db.update(schema.donations)
+        .set({ stripePaymentIntentId: session.id })
+        .where(eq(schema.donations.id, donation.id));
+
+      res.json({ 
+        success: true, 
+        data: { 
+          sessionId: session.id,
+          sessionUrl: session.url,
+          donationId: donation.id 
+        } 
+      });
+    } catch (error) {
+      console.error("Donation creation error:", error);
+      res.status(500).json({ success: false, error: "Failed to create donation" });
+    }
+  });
+
+  app.post("/api/donations/webhook", async (req: Request, res: Response) => {
+    const sig = req.headers["stripe-signature"] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as any;
+        const { donationId, campaignId, isRecurring, memberId } = session.metadata;
+
+        await db.update(schema.donations)
+          .set({ 
+            paymentStatus: "completed",
+            stripePaymentIntentId: session.payment_intent || session.subscription || session.id
+          })
+          .where(eq(schema.donations.id, donationId));
+
+        const donation = await db.query.donations.findFirst({
+          where: eq(schema.donations.id, donationId)
+        });
+
+        if (campaignId && donation) {
+          await db.update(schema.donationCampaigns)
+            .set({ 
+              currentAmount: sql`${schema.donationCampaigns.currentAmount} + ${donation.amount}` 
+            })
+            .where(eq(schema.donationCampaigns.id, campaignId));
+        }
+
+        if (isRecurring === "true" && memberId && donation) {
+          const nextPaymentDate = new Date();
+          if (donation.recurringFrequency === "monthly") {
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+          } else if (donation.recurringFrequency === "quarterly") {
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 3);
+          } else if (donation.recurringFrequency === "yearly") {
+            nextPaymentDate.setFullYear(nextPaymentDate.getFullYear() + 1);
+          }
+
+          await db.insert(schema.recurringDonations).values({
+            donationId,
+            memberId,
+            campaignId: campaignId || null,
+            amount: donation.amount,
+            frequency: donation.recurringFrequency!,
+            status: "active",
+            nextPaymentDate,
+            stripeSubscriptionId: session.subscription || null,
+          });
+        }
+      } else if (event.type === "invoice.payment_succeeded" && event.data.object.subscription) {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription;
+
+        const recurring = await db.query.recurringDonations.findFirst({
+          where: eq(schema.recurringDonations.stripeSubscriptionId, subscriptionId)
+        });
+
+        if (recurring) {
+          const [newDonation] = await db.insert(schema.donations).values({
+            memberId: recurring.memberId,
+            campaignId: recurring.campaignId,
+            amount: recurring.amount,
+            currency: "NGN",
+            paymentMethod: "stripe",
+            paymentStatus: "completed",
+            stripePaymentIntentId: invoice.payment_intent,
+            isRecurring: true,
+            recurringFrequency: recurring.frequency,
+          }).returning();
+
+          if (recurring.campaignId) {
+            await db.update(schema.donationCampaigns)
+              .set({ 
+                currentAmount: sql`${schema.donationCampaigns.currentAmount} + ${recurring.amount}` 
+              })
+              .where(eq(schema.donationCampaigns.id, recurring.campaignId));
+          }
+
+          const nextPaymentDate = new Date();
+          if (recurring.frequency === "monthly") {
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+          } else if (recurring.frequency === "quarterly") {
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 3);
+          } else if (recurring.frequency === "yearly") {
+            nextPaymentDate.setFullYear(nextPaymentDate.getFullYear() + 1);
+          }
+
+          await db.update(schema.recurringDonations)
+            .set({ 
+              nextPaymentDate,
+              updatedAt: new Date()
+            })
+            .where(eq(schema.recurringDonations.id, recurring.id));
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Webhook processing error:", error);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  app.get("/api/donations", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const donations = await db.query.donations.findMany({
+        where: eq(schema.donations.memberId, member.id),
+        with: {
+          campaign: true
+        },
+        orderBy: desc(schema.donations.createdAt)
+      });
+
+      res.json({ success: true, data: donations });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch donations" });
+    }
+  });
+
+  app.get("/api/donations/recent", async (req: Request, res: Response) => {
+    try {
+      const { limit = "10" } = req.query;
+
+      const donations = await db.query.donations.findMany({
+        where: eq(schema.donations.paymentStatus, "completed"),
+        with: {
+          member: {
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                }
+              }
+            }
+          },
+          campaign: {
+            columns: {
+              title: true,
+            }
+          }
+        },
+        orderBy: desc(schema.donations.createdAt),
+        limit: parseInt(limit as string)
+      });
+
+      const publicDonations = donations.map(donation => ({
+        id: donation.id,
+        amount: donation.amount,
+        campaignTitle: donation.campaign?.title || "General Fund",
+        donorName: donation.isAnonymous 
+          ? "Anonymous" 
+          : donation.donorName || (donation.member ? `${donation.member.user.firstName} ${donation.member.user.lastName}` : "Anonymous"),
+        message: donation.message,
+        createdAt: donation.createdAt,
+      }));
+
+      res.json({ success: true, data: publicDonations });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch recent donations" });
+    }
+  });
+
+  app.get("/api/donations/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const donation = await db.query.donations.findFirst({
+        where: eq(schema.donations.id, req.params.id),
+        with: {
+          campaign: true,
+          member: {
+            with: { user: true }
+          }
+        }
+      });
+
+      if (!donation) {
+        return res.status(404).json({ success: false, error: "Donation not found" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (donation.memberId !== member?.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      res.json({ success: true, data: donation });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch donation" });
+    }
+  });
+
+  app.post("/api/recurring-donations/:id/cancel", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const recurring = await db.query.recurringDonations.findFirst({
+        where: eq(schema.recurringDonations.id, req.params.id)
+      });
+
+      if (!recurring) {
+        return res.status(404).json({ success: false, error: "Recurring donation not found" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (recurring.memberId !== member?.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      if (recurring.stripeSubscriptionId) {
+        await stripe.subscriptions.cancel(recurring.stripeSubscriptionId);
+      }
+
+      const [updated] = await db.update(schema.recurringDonations)
+        .set({ 
+          status: "cancelled",
+          updatedAt: new Date()
+        })
+        .where(eq(schema.recurringDonations.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to cancel recurring donation" });
+    }
+  });
+
+  // Admin Donation Endpoints
+  app.get("/api/admin/donations", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, campaignId, startDate, endDate } = req.query;
+
+      let whereConditions: any[] = [];
+      
+      if (status) {
+        whereConditions.push(eq(schema.donations.paymentStatus, status as any));
+      }
+      if (campaignId) {
+        whereConditions.push(eq(schema.donations.campaignId, campaignId as string));
+      }
+      if (startDate) {
+        whereConditions.push(gte(schema.donations.createdAt, new Date(startDate as string)));
+      }
+      if (endDate) {
+        whereConditions.push(lte(schema.donations.createdAt, new Date(endDate as string)));
+      }
+
+      const donations = await db.query.donations.findMany({
+        where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+        with: {
+          member: {
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                }
+              }
+            }
+          },
+          campaign: true
+        },
+        orderBy: desc(schema.donations.createdAt)
+      });
+
+      res.json({ success: true, data: donations });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch donations" });
+    }
+  });
+
+  app.get("/api/admin/donations/stats", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { campaignId } = req.query;
+
+      const completedConditions = [eq(schema.donations.paymentStatus, "completed")];
+      if (campaignId) {
+        completedConditions.push(eq(schema.donations.campaignId, campaignId as string));
+      }
+
+      const totalRaised = await db
+        .select({ sum: sql<number>`COALESCE(SUM(${schema.donations.amount}), 0)` })
+        .from(schema.donations)
+        .where(and(...completedConditions));
+
+      const donorCount = await db
+        .select({ count: sql<number>`COUNT(DISTINCT ${schema.donations.memberId})` })
+        .from(schema.donations)
+        .where(and(...completedConditions));
+
+      const donationCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.donations)
+        .where(and(...completedConditions));
+
+      const recurringCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.recurringDonations)
+        .where(eq(schema.recurringDonations.status, "active"));
+
+      const averageDonation = totalRaised[0].sum > 0 
+        ? Math.round(totalRaised[0].sum / donationCount[0].count)
+        : 0;
+
+      res.json({
+        success: true,
+        data: {
+          totalRaised: totalRaised[0].sum,
+          donorCount: donorCount[0].count,
+          donationCount: donationCount[0].count,
+          recurringDonationsActive: recurringCount[0].count,
+          averageDonation,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch donation stats" });
+    }
+  });
+
+  app.post("/api/admin/donations/:id/refund", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const donation = await db.query.donations.findFirst({
+        where: eq(schema.donations.id, req.params.id)
+      });
+
+      if (!donation) {
+        return res.status(404).json({ success: false, error: "Donation not found" });
+      }
+
+      if (donation.paymentStatus !== "completed") {
+        return res.status(400).json({ success: false, error: "Can only refund completed donations" });
+      }
+
+      if (!donation.stripePaymentIntentId) {
+        return res.status(400).json({ success: false, error: "No payment intent found" });
+      }
+
+      try {
+        await stripe.refunds.create({
+          payment_intent: donation.stripePaymentIntentId,
+        });
+      } catch (stripeError: any) {
+        console.error("Stripe refund error:", stripeError);
+        return res.status(400).json({ success: false, error: "Stripe refund failed: " + stripeError.message });
+      }
+
+      const [updated] = await db.update(schema.donations)
+        .set({ paymentStatus: "refunded" })
+        .where(eq(schema.donations.id, req.params.id))
+        .returning();
+
+      if (donation.campaignId) {
+        await db.update(schema.donationCampaigns)
+          .set({ 
+            currentAmount: sql`GREATEST(${schema.donationCampaigns.currentAmount} - ${donation.amount}, 0)` 
+          })
+          .where(eq(schema.donationCampaigns.id, donation.campaignId));
+      }
+
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      console.error("Refund error:", error);
+      res.status(500).json({ success: false, error: "Failed to process refund" });
+    }
+  });
+
   // Chatbot Endpoints
   app.post("/api/chatbot/conversations", async (req: Request, res: Response) => {
     try {
@@ -2429,30 +3021,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/chatbot/message", async (req: Request, res: Response) => {
+  app.post("/api/chatbot/message", async (req: AuthRequest, res: Response) => {
     try {
-      const { conversationId, content } = req.body;
+      const { conversation_id, message, session_id } = req.body;
+      
+      let memberId = null;
+      let memberContext = "";
 
-      const [userMessage] = await db.insert(schema.chatbotMessages)
-        .values({ conversationId, role: "user", content })
-        .returning();
+      if (req.isAuthenticated() && req.user) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+          with: {
+            user: true,
+            ward: {
+              with: {
+                lga: {
+                  with: { state: true }
+                }
+              }
+            }
+          }
+        });
 
-      const aiResponse = "I'm an AI assistant for APC Connect. How can I help you today?";
+        if (member) {
+          memberId = member.id;
+          memberContext = `\n\nContext: You are speaking with ${member.user.firstName} ${member.user.lastName}, an APC member from ${member.ward?.name || 'Nigeria'}, ${member.ward?.lga?.name || ''}, ${member.ward?.lga?.state?.name || ''}. Personalize your responses when relevant.`;
+        }
+      }
 
-      const [assistantMessage] = await db.insert(schema.chatbotMessages)
-        .values({ conversationId, role: "assistant", content: aiResponse })
-        .returning();
+      let conversation;
+      if (conversation_id) {
+        conversation = await db.query.chatbotConversations.findFirst({
+          where: eq(schema.chatbotConversations.id, conversation_id)
+        });
+      }
+      
+      if (!conversation) {
+        [conversation] = await db.insert(schema.chatbotConversations).values({
+          memberId,
+          sessionId: session_id || crypto.randomUUID(),
+        }).returning();
+      }
+
+      await db.insert(schema.chatbotMessages).values({
+        conversationId: conversation.id,
+        role: "user",
+        content: message,
+      });
+
+      const history = await db.query.chatbotMessages.findMany({
+        where: eq(schema.chatbotMessages.conversationId, conversation.id),
+        orderBy: desc(schema.chatbotMessages.createdAt),
+        limit: 10
+      });
+
+      const messages = [
+        {
+          role: 'system' as const,
+          content: `You are an AI assistant for APC Connect, a political engagement platform for Nigeria's All Progressives Congress (APC). 
+
+Your role is to help users understand:
+- How to use the APC Connect platform
+- APC party policies and positions
+- Nigerian politics and governance
+- Democratic participation and civic engagement
+- Platform features like elections, campaigns, events, and volunteer tasks
+
+Be friendly, informative, and politically neutral when discussing governance. Encourage democratic participation and civic engagement. Keep responses concise and helpful.${memberContext}`
+        },
+        ...history.reverse().map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        }))
+      ];
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages,
+        max_tokens: 500,
+        temperature: 0.7,
+      });
+
+      const aiResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response. Please try again.';
+
+      await db.insert(schema.chatbotMessages).values({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: aiResponse,
+      });
 
       res.json({
         success: true,
         data: {
-          userMessage,
-          assistantMessage
+          conversation_id: conversation.id,
+          message: aiResponse,
         }
       });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Failed to send message" });
+
+    } catch (error: any) {
+      console.error('Chatbot error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process message'
+      });
     }
+  });
+
+  app.get("/api/chatbot/suggestions", (req: Request, res: Response) => {
+    const suggestions = [
+      "How do I register as an APC member?",
+      "What are the current elections I can vote in?",
+      "How does the volunteer task system work?",
+      "What are APC's key policies?",
+      "How can I submit a policy idea?",
+      "How do I pay my membership dues?",
+      "What badges can I earn on the platform?",
+      "How does the political literacy quiz work?",
+    ];
+    
+    res.json({ success: true, data: suggestions });
   });
 
   io.on("connection", (socket) => {

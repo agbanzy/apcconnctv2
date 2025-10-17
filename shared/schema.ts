@@ -12,6 +12,11 @@ export const campaignStatusEnum = pgEnum("campaign_status", ["active", "approved
 export const taskDifficultyEnum = pgEnum("task_difficulty", ["Easy", "Medium", "Hard"]);
 export const ideaStatusEnum = pgEnum("idea_status", ["pending", "under_review", "approved", "rejected", "implemented"]);
 export const voteTypeEnum = pgEnum("vote_type", ["upvote", "downvote"]);
+export const donationCategoryEnum = pgEnum("donation_category", ["general", "campaign", "infrastructure", "youth_programs", "community_development", "emergency_relief"]);
+export const donationCampaignStatusEnum = pgEnum("donation_campaign_status", ["active", "paused", "completed", "cancelled"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "completed", "failed", "refunded"]);
+export const recurringFrequencyEnum = pgEnum("recurring_frequency", ["monthly", "quarterly", "yearly"]);
+export const recurringStatusEnum = pgEnum("recurring_status", ["active", "paused", "cancelled"]);
 
 // Nigerian Administrative Structure
 export const states = pgTable("states", {
@@ -404,6 +409,55 @@ export const chatbotMessages = pgTable("chatbot_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Donations System
+export const donationCampaigns = pgTable("donation_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: donationCategoryEnum("category").notNull(),
+  goalAmount: integer("goal_amount"), // in kobo/cents
+  currentAmount: integer("current_amount").default(0),
+  image: text("image"),
+  status: donationCampaignStatusEnum("status").default("active"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const donations = pgTable("donations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").references(() => members.id, { onDelete: "set null" }), // nullable for anonymous
+  donorName: text("donor_name"),
+  donorEmail: text("donor_email"),
+  campaignId: varchar("campaign_id").references(() => donationCampaigns.id, { onDelete: "set null" }),
+  amount: integer("amount").notNull(), // in kobo/cents
+  currency: text("currency").default("NGN"),
+  paymentMethod: text("payment_method").notNull(), // stripe, paystack, flutterwave, bank_transfer
+  paymentStatus: paymentStatusEnum("payment_status").default("pending"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  isAnonymous: boolean("is_anonymous").default(false),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringFrequency: recurringFrequencyEnum("recurring_frequency"),
+  message: text("message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const recurringDonations = pgTable("recurring_donations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  donationId: varchar("donation_id").notNull().references(() => donations.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  campaignId: varchar("campaign_id").references(() => donationCampaigns.id, { onDelete: "set null" }),
+  amount: integer("amount").notNull(),
+  frequency: recurringFrequencyEnum("frequency").notNull(),
+  status: recurringStatusEnum("status").default("active"),
+  nextPaymentDate: timestamp("next_payment_date").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const statesRelations = relations(states, ({ many }) => ({
   lgas: many(lgas),
@@ -433,6 +487,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   newsPosts: many(newsPosts),
   knowledgeArticles: many(knowledgeArticles),
+  donationCampaigns: many(donationCampaigns),
 }));
 
 export const membersRelations = relations(members, ({ one, many }) => ({
@@ -461,6 +516,8 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   ideaComments: many(ideaComments),
   articleFeedback: many(articleFeedback),
   chatbotConversations: many(chatbotConversations),
+  donations: many(donations),
+  recurringDonations: many(recurringDonations),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -745,6 +802,42 @@ export const chatbotMessagesRelations = relations(chatbotMessages, ({ one }) => 
   }),
 }));
 
+export const donationCampaignsRelations = relations(donationCampaigns, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [donationCampaigns.createdBy],
+    references: [users.id],
+  }),
+  donations: many(donations),
+  recurringDonations: many(recurringDonations),
+}));
+
+export const donationsRelations = relations(donations, ({ one, many }) => ({
+  member: one(members, {
+    fields: [donations.memberId],
+    references: [members.id],
+  }),
+  campaign: one(donationCampaigns, {
+    fields: [donations.campaignId],
+    references: [donationCampaigns.id],
+  }),
+  recurringDonation: many(recurringDonations),
+}));
+
+export const recurringDonationsRelations = relations(recurringDonations, ({ one }) => ({
+  donation: one(donations, {
+    fields: [recurringDonations.donationId],
+    references: [donations.id],
+  }),
+  member: one(members, {
+    fields: [recurringDonations.memberId],
+    references: [members.id],
+  }),
+  campaign: one(donationCampaigns, {
+    fields: [recurringDonations.campaignId],
+    references: [donationCampaigns.id],
+  }),
+}));
+
 // Insert & Select Schemas
 export const insertStateSchema = createInsertSchema(states).omit({ id: true, createdAt: true });
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
@@ -776,6 +869,9 @@ export const insertArticleFeedbackSchema = createInsertSchema(articleFeedback).o
 export const insertChatbotConversationSchema = createInsertSchema(chatbotConversations).omit({ id: true, createdAt: true });
 export const insertChatbotMessageSchema = createInsertSchema(chatbotMessages).omit({ id: true, createdAt: true });
 export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, createdAt: true });
+export const insertDonationCampaignSchema = createInsertSchema(donationCampaigns).omit({ id: true, createdAt: true, updatedAt: true, currentAmount: true });
+export const insertDonationSchema = createInsertSchema(donations).omit({ id: true, createdAt: true });
+export const insertRecurringDonationSchema = createInsertSchema(recurringDonations).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -832,3 +928,9 @@ export type InsertChatbotConversation = z.infer<typeof insertChatbotConversation
 export type ChatbotConversation = typeof chatbotConversations.$inferSelect;
 export type InsertChatbotMessage = z.infer<typeof insertChatbotMessageSchema>;
 export type ChatbotMessage = typeof chatbotMessages.$inferSelect;
+export type InsertDonationCampaign = z.infer<typeof insertDonationCampaignSchema>;
+export type DonationCampaign = typeof donationCampaigns.$inferSelect;
+export type InsertDonation = z.infer<typeof insertDonationSchema>;
+export type Donation = typeof donations.$inferSelect;
+export type InsertRecurringDonation = z.infer<typeof insertRecurringDonationSchema>;
+export type RecurringDonation = typeof recurringDonations.$inferSelect;
