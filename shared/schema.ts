@@ -67,6 +67,8 @@ export const members = pgTable("members", {
   status: membershipStatusEnum("status").default("pending"),
   joinDate: timestamp("join_date").defaultNow(),
   interests: jsonb("interests").$type<string[]>(), // ["education", "jobs", "security"]
+  referralCode: text("referral_code").unique(), // Unique code for this member to share
+  referredBy: varchar("referred_by").references(() => members.id), // Who referred this member
 });
 
 export const membershipDues = pgTable("membership_dues", {
@@ -266,6 +268,16 @@ export const userPoints = pgTable("user_points", {
   points: integer("points").default(0),
   source: text("source").notNull(), // quiz, task, campaign, events, engagement, etc.
   amount: integer("amount").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Referrals
+export const referrals = pgTable("referrals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referrerId: varchar("referrer_id").notNull().references(() => members.id), // Who referred
+  referredId: varchar("referred_id").notNull().references(() => members.id), // Who was referred
+  pointsEarned: integer("points_earned").default(0), // Points earned by referrer
+  status: text("status").default("pending"), // pending, completed
   createdAt: timestamp("created_at").defaultNow(),
 });
 
