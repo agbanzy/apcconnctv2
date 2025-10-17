@@ -17,6 +17,8 @@ export const donationCampaignStatusEnum = pgEnum("donation_campaign_status", ["a
 export const paymentStatusEnum = pgEnum("payment_status", ["pending", "completed", "failed", "refunded"]);
 export const recurringFrequencyEnum = pgEnum("recurring_frequency", ["monthly", "quarterly", "yearly"]);
 export const recurringStatusEnum = pgEnum("recurring_status", ["active", "paused", "cancelled"]);
+export const achievementRarityEnum = pgEnum("achievement_rarity", ["bronze", "silver", "gold", "platinum"]);
+export const badgeCategoryEnum = pgEnum("badge_category", ["tasks", "events", "quizzes", "campaigns", "ideas", "engagement", "points", "special"]);
 
 // Nigerian Administrative Structure
 export const states = pgTable("states", {
@@ -143,12 +145,17 @@ export const volunteerTasks = pgTable("volunteer_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
+  category: text("category").notNull(), // campaign, event, outreach, etc.
   location: text("location").notNull(),
   skills: jsonb("skills").$type<string[]>().notNull(),
   points: integer("points").notNull(),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
   deadline: timestamp("deadline"),
   difficulty: taskDifficultyEnum("difficulty").notNull(),
   maxVolunteers: integer("max_volunteers"),
+  currentVolunteers: integer("current_volunteers").default(0),
+  creatorId: varchar("creator_id").references(() => users.id),
   status: text("status").default("open"), // open, in-progress, completed
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -216,7 +223,10 @@ export const badges = pgTable("badges", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   icon: text("icon").notNull(), // grassroots, voter, champion, etc.
+  imageUrl: text("image_url"),
+  category: badgeCategoryEnum("category").default("special"),
   criteria: jsonb("criteria").$type<{ type: string; value: number }>().notNull(),
+  points: integer("points").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -224,14 +234,37 @@ export const userBadges = pgTable("user_badges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   memberId: varchar("member_id").notNull().references(() => members.id),
   badgeId: varchar("badge_id").notNull().references(() => badges.id),
+  progress: integer("progress").default(0), // Current progress towards badge requirement
   earnedAt: timestamp("earned_at").defaultNow(),
+});
+
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull(),
+  requirement: jsonb("requirement").$type<{ type: string; value: number }>().notNull(),
+  category: text("category").notNull(),
+  points: integer("points").notNull(),
+  rarity: achievementRarityEnum("rarity").default("bronze"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  achievementId: varchar("achievement_id").notNull().references(() => achievements.id),
+  progress: integer("progress").default(0),
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const userPoints = pgTable("user_points", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   memberId: varchar("member_id").notNull().references(() => members.id),
   points: integer("points").default(0),
-  source: text("source").notNull(), // quiz, task, campaign, etc.
+  source: text("source").notNull(), // quiz, task, campaign, events, engagement, etc.
   amount: integer("amount").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -243,16 +276,21 @@ export const microTasks = pgTable("micro_tasks", {
   description: text("description").notNull(),
   category: text("category").notNull(),
   points: integer("points").notNull(),
+  options: jsonb("options").$type<string[]>(), // Multiple choice options
+  correctAnswers: jsonb("correct_answers").$type<number[]>(), // Indices of correct answers
   timeEstimate: text("time_estimate").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const taskCompletions = pgTable("task_completions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  taskId: varchar("task_id").notNull().references(() => microTasks.id),
+  taskId: varchar("task_id").notNull(), // ID of either micro or volunteer task
+  taskType: text("task_type").notNull(), // "micro" | "volunteer"
   memberId: varchar("member_id").notNull().references(() => members.id),
   proofUrl: text("proof_url"), // Screenshot or evidence
   status: text("status").default("pending"), // pending, approved, rejected
+  pointsEarned: integer("points_earned").default(0),
+  verified: boolean("verified").default(false),
   completedAt: timestamp("completed_at").defaultNow(),
 });
 
@@ -908,6 +946,7 @@ export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, cre
 export const insertQuizAttemptSchema = createInsertSchema(quizAttempts).omit({ id: true, attemptedAt: true });
 export const insertCampaignSchema = createInsertSchema(issueCampaigns).omit({ id: true, createdAt: true, currentVotes: true });
 export const insertMicroTaskSchema = createInsertSchema(microTasks).omit({ id: true, createdAt: true });
+export const insertTaskCompletionSchema = createInsertSchema(taskCompletions).omit({ id: true, completedAt: true });
 export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, createdAt: true });
 export const insertNewsPostSchema = createInsertSchema(newsPosts).omit({ id: true, publishedAt: true, likes: true, comments: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
@@ -921,6 +960,10 @@ export const insertArticleFeedbackSchema = createInsertSchema(articleFeedback).o
 export const insertChatbotConversationSchema = createInsertSchema(chatbotConversations).omit({ id: true, createdAt: true });
 export const insertChatbotMessageSchema = createInsertSchema(chatbotMessages).omit({ id: true, createdAt: true });
 export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, createdAt: true });
+export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({ id: true, earnedAt: true });
+export const insertUserPointsSchema = createInsertSchema(userPoints).omit({ id: true, createdAt: true });
+export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true, createdAt: true, completedAt: true });
 export const insertDonationCampaignSchema = createInsertSchema(donationCampaigns).omit({ id: true, createdAt: true, updatedAt: true, currentAmount: true });
 export const insertDonationSchema = createInsertSchema(donations).omit({ id: true, createdAt: true });
 export const insertRecurringDonationSchema = createInsertSchema(recurringDonations).omit({ id: true, createdAt: true, updatedAt: true });
@@ -958,6 +1001,8 @@ export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type IssueCampaign = typeof issueCampaigns.$inferSelect;
 export type InsertMicroTask = z.infer<typeof insertMicroTaskSchema>;
 export type MicroTask = typeof microTasks.$inferSelect;
+export type InsertTaskCompletion = z.infer<typeof insertTaskCompletionSchema>;
+export type TaskCompletion = typeof taskCompletions.$inferSelect;
 export type InsertIncident = z.infer<typeof insertIncidentSchema>;
 export type Incident = typeof incidents.$inferSelect;
 export type InsertNewsPost = z.infer<typeof insertNewsPostSchema>;
@@ -992,3 +1037,13 @@ export type InsertNewsComment = z.infer<typeof insertNewsCommentSchema>;
 export type NewsComment = typeof newsComments.$inferSelect;
 export type InsertNewsCommentLike = z.infer<typeof insertNewsCommentLikeSchema>;
 export type NewsCommentLike = typeof newsCommentLikes.$inferSelect;
+export type InsertBadge = z.infer<typeof insertBadgeSchema>;
+export type Badge = typeof badges.$inferSelect;
+export type InsertUserBadge = z.infer<typeof insertUserBadgeSchema>;
+export type UserBadge = typeof userBadges.$inferSelect;
+export type InsertUserPoints = z.infer<typeof insertUserPointsSchema>;
+export type UserPoints = typeof userPoints.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+export type UserAchievement = typeof userAchievements.$inferSelect;

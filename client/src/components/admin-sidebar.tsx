@@ -12,6 +12,8 @@ import {
   BookOpen,
   Heart,
   MessageCircle,
+  CheckSquare,
+  Award,
 } from "lucide-react";
 import {
   Sidebar,
@@ -83,6 +85,16 @@ const adminMenuItems = [
     title: "Chatbot Analytics",
     url: "/admin/chatbot-analytics",
     icon: MessageCircle,
+  },
+  {
+    title: "Tasks",
+    url: "/admin/tasks",
+    icon: CheckSquare,
+  },
+  {
+    title: "Badges",
+    url: "/admin/badges",
+    icon: Award,
   },
   {
     title: "Settings",

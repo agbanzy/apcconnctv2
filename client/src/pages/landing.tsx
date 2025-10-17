@@ -22,7 +22,12 @@ import {
   Shield,
   Zap,
   Users,
-  TrendingUp
+  TrendingUp,
+  Target,
+  Award,
+  Lightbulb,
+  Activity,
+  Globe
 } from "lucide-react";
 import { FaTwitter, FaInstagram, FaWhatsapp } from "react-icons/fa";
 import { Button } from "@/components/ui/button";
@@ -30,6 +35,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -37,15 +50,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NigeriaMap } from "@/components/nigeria-map";
 import heroImage from "@assets/generated_images/APC_youth_rally_hero_f3829ce8.png";
-import type { NewsPost, Event } from "@shared/schema";
+import type { NewsPost, Event, Member, IssueCampaign, Idea, State } from "@shared/schema";
 
 interface AnalyticsOverview {
   totalMembers: number;
   activeMembers: number;
   totalEvents: number;
+  upcomingEvents: number;
   totalElections: number;
   totalVotes: number;
+  activeCampaigns: number;
+  totalIdeas: number;
+  statesWithPresence: number;
+  wardsCovered: number;
+  totalEngagementPoints: number;
+}
+
+interface RecentActivity {
+  recentMembers: (Member & { user: any; ward: any })[];
+  upcomingEvents: (Event & { state: State | null })[];
+  popularCampaigns: (IssueCampaign & { author: any })[];
+  trendingIdeas: (Idea & { author: any })[];
+}
+
+interface StateStats {
+  state: State;
+  memberCount: number;
+  activeMembers: number;
+  upcomingEvents: number;
+  activeCampaigns: number;
+  lgasCovered: number;
+  wardsCovered: number;
 }
 
 const fadeIn = {
@@ -127,10 +164,29 @@ export default function Landing() {
   const scrollPrev = () => emblaApi?.scrollPrev();
   const scrollNext = () => emblaApi?.scrollNext();
 
+  const [selectedState, setSelectedState] = useState<string>("");
+
   // Fetch public analytics for landing page
-  const { data: analyticsData } = useQuery<{ success: boolean; data: AnalyticsOverview }>({
+  const { data: analyticsData, isLoading: isLoadingAnalytics } = useQuery<{ success: boolean; data: AnalyticsOverview }>({
     queryKey: ["/api/analytics/public-overview"],
     retry: false
+  });
+
+  // Fetch recent activity
+  const { data: activityData, isLoading: isLoadingActivity } = useQuery<{ success: boolean; data: RecentActivity }>({
+    queryKey: ["/api/analytics/recent-activity"],
+    retry: false
+  });
+
+  // Fetch states for dropdown
+  const { data: statesData } = useQuery<{ success: boolean; data: State[] }>({
+    queryKey: ["/api/locations/states"],
+  });
+
+  // Fetch state-specific stats when state is selected
+  const { data: stateStatsData, isLoading: isLoadingStateStats } = useQuery<{ success: boolean; data: StateStats }>({
+    queryKey: ["/api/analytics/state-stats", selectedState],
+    enabled: !!selectedState,
   });
 
   // Fetch news
@@ -150,6 +206,9 @@ export default function Landing() {
   });
 
   const analytics = analyticsData?.data;
+  const activity = activityData?.data;
+  const states = statesData?.data || [];
+  const stateStats = stateStatsData?.data;
   const news = newsData?.data?.slice(0, 3) || [];
   const allEvents = eventsData?.data || [];
   const now = new Date();
@@ -455,8 +514,147 @@ export default function Landing() {
         </motion.div>
       </section>
 
+      {/* Interactive Map Section - APC Across Nigeria */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <motion.div
+            initial="initial"
+            whileInView="animate"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+          >
+            <motion.div variants={fadeIn} className="text-center mb-12">
+              <Badge className="mb-4 text-sm px-4 py-1" data-testid="badge-map">
+                National Coverage
+              </Badge>
+              <h2 
+                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+                data-testid="text-map-title"
+              >
+                Our Presence Across Nigeria
+              </h2>
+              <p className="text-muted-foreground text-lg md:text-xl max-w-3xl mx-auto">
+                See APC Connect's impact in all 36 states and FCT. Interactive map showing membership distribution, events, and campaign activity nationwide.
+              </p>
+            </motion.div>
+
+            <motion.div variants={scaleIn} className="max-w-6xl mx-auto">
+              <NigeriaMap mode="members" showLegend={true} />
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Real-Time Stats Grid */}
+      <section className="py-20 bg-background">
+        <div className="container mx-auto px-4">
+          <motion.div
+            initial="initial"
+            whileInView="animate"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+          >
+            <motion.div variants={fadeIn} className="text-center mb-12">
+              <Badge className="mb-4 text-sm px-4 py-1" data-testid="badge-stats">
+                Live Statistics
+              </Badge>
+              <h2 
+                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+                data-testid="text-stats-title"
+              >
+                APC Connect by the Numbers
+              </h2>
+              <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto">
+                Real-time data showcasing our growing community and nationwide impact
+              </p>
+            </motion.div>
+
+            {isLoadingAnalytics ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {[...Array(8)].map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-6">
+                      <Skeleton className="h-12 w-12 rounded-lg mb-4" />
+                      <Skeleton className="h-8 w-24 mb-2" />
+                      <Skeleton className="h-4 w-32" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {[
+                  { 
+                    icon: Users, 
+                    value: analytics?.totalMembers || 0, 
+                    label: "Total Members",
+                    color: "text-primary"
+                  },
+                  { 
+                    icon: Activity, 
+                    value: analytics?.activeMembers || 0, 
+                    label: "Active Members",
+                    color: "text-accent"
+                  },
+                  { 
+                    icon: Globe, 
+                    value: analytics?.statesWithPresence || 0, 
+                    label: "States Covered",
+                    color: "text-primary"
+                  },
+                  { 
+                    icon: MapPin, 
+                    value: analytics?.wardsCovered || 0, 
+                    label: "Wards Covered",
+                    color: "text-accent"
+                  },
+                  { 
+                    icon: Calendar, 
+                    value: analytics?.upcomingEvents || 0, 
+                    label: "Upcoming Events",
+                    color: "text-primary"
+                  },
+                  { 
+                    icon: Megaphone, 
+                    value: analytics?.activeCampaigns || 0, 
+                    label: "Active Campaigns",
+                    color: "text-accent"
+                  },
+                  { 
+                    icon: Lightbulb, 
+                    value: analytics?.totalIdeas || 0, 
+                    label: "Ideas Submitted",
+                    color: "text-primary"
+                  },
+                  { 
+                    icon: Award, 
+                    value: analytics?.totalEngagementPoints || 0, 
+                    label: "Engagement Points",
+                    color: "text-accent"
+                  }
+                ].map((stat, index) => (
+                  <motion.div key={index} variants={scaleIn}>
+                    <Card className="hover-elevate transition-all duration-300" data-testid={`card-stat-${index}`}>
+                      <CardContent className="p-6">
+                        <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4`}>
+                          <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                        </div>
+                        <div className="text-3xl font-mono font-bold mb-1">
+                          <AnimatedNumber value={stat.value} suffix="+" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">{stat.label}</p>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </section>
+
       {/* Features Section - Enhanced with Stagger Animations */}
-      <section className="py-24 bg-background">
+      <section className="py-24 bg-muted/30">
         <div className="container mx-auto px-4">
           <motion.div
             initial="initial"
@@ -574,7 +772,27 @@ export default function Landing() {
               ))}
             </div>
 
-            <motion.div className="text-center" variants={fadeIn}>
+            <motion.div className="text-center bg-primary/5 rounded-xl p-8 max-w-4xl mx-auto mt-12" variants={fadeIn}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div>
+                  <div className="text-4xl font-bold text-primary mb-2">
+                    <AnimatedNumber value={analytics?.totalMembers || 12000} suffix="+" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">Members joined this way</p>
+                </div>
+                <div>
+                  <div className="text-4xl font-bold text-primary mb-2">
+                    <AnimatedNumber value={analytics?.totalEvents || 500} suffix="+" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">Events organized</p>
+                </div>
+                <div>
+                  <div className="text-4xl font-bold text-primary mb-2">
+                    <AnimatedNumber value={analytics?.statesWithPresence || 37} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">States covered</p>
+                </div>
+              </div>
               <Link href="/register">
                 <Button size="lg" className="text-lg px-10 py-7" data-testid="button-start-journey">
                   Start Your Journey Today
@@ -586,8 +804,182 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Latest Activity Section */}
+      <section className="py-20 bg-background">
+        <div className="container mx-auto px-4">
+          <motion.div
+            initial="initial"
+            whileInView="animate"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+          >
+            <motion.div variants={fadeIn} className="text-center mb-12">
+              <Badge className="mb-4 text-sm px-4 py-1" data-testid="badge-activity">
+                Live Updates
+              </Badge>
+              <h2 
+                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+                data-testid="text-activity-title"
+              >
+                Latest Platform Activity
+              </h2>
+              <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto">
+                See what's happening right now across APC Connect
+              </p>
+            </motion.div>
+
+            {isLoadingActivity ? (
+              <div className="max-w-5xl mx-auto">
+                <Skeleton className="h-12 w-full mb-4" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {[...Array(4)].map((_, i) => (
+                    <Card key={i}>
+                      <CardContent className="p-6">
+                        <Skeleton className="h-20 w-full" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <motion.div variants={scaleIn} className="max-w-5xl mx-auto">
+                <Tabs defaultValue="members" className="w-full" data-testid="tabs-activity">
+                  <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-8">
+                    <TabsTrigger value="members" data-testid="tab-members">
+                      <Users className="h-4 w-4 mr-2" />
+                      New Members
+                    </TabsTrigger>
+                    <TabsTrigger value="events" data-testid="tab-events">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Upcoming Events
+                    </TabsTrigger>
+                    <TabsTrigger value="campaigns" data-testid="tab-campaigns">
+                      <Megaphone className="h-4 w-4 mr-2" />
+                      Popular Campaigns
+                    </TabsTrigger>
+                    <TabsTrigger value="ideas" data-testid="tab-ideas">
+                      <Lightbulb className="h-4 w-4 mr-2" />
+                      Trending Ideas
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="members" className="mt-0">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {activity?.recentMembers?.slice(0, 6).map((member: any, index: number) => (
+                        <Card key={index} className="hover-elevate" data-testid={`card-member-${index}`}>
+                          <CardContent className="p-4 flex items-center gap-4">
+                            <Avatar className="h-12 w-12 border-2 border-primary/20">
+                              <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                                {member.user?.firstName?.[0]}{member.user?.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold truncate">
+                                {member.user?.firstName} {member.user?.lastName}
+                              </p>
+                              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {member.ward?.lga?.state?.name || "Nigeria"}
+                              </p>
+                            </div>
+                            <Badge variant="outline">New</Badge>
+                          </CardContent>
+                        </Card>
+                      )) || <p className="text-center text-muted-foreground py-8">No recent members</p>}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="events" className="mt-0">
+                    <div className="grid grid-cols-1 gap-4">
+                      {activity?.upcomingEvents?.slice(0, 5).map((event: any, index: number) => (
+                        <Card key={index} className="hover-elevate" data-testid={`card-event-${index}`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <Calendar className="h-6 w-6 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold mb-1">{event.title}</h3>
+                                <p className="text-sm text-muted-foreground mb-2 line-clamp-1">{event.description}</p>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(event.date).toLocaleDateString()}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {event.location}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )) || <p className="text-center text-muted-foreground py-8">No upcoming events</p>}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="campaigns" className="mt-0">
+                    <div className="grid grid-cols-1 gap-4">
+                      {activity?.popularCampaigns?.map((campaign: any, index: number) => (
+                        <Card key={index} className="hover-elevate" data-testid={`card-campaign-${index}`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                                <Megaphone className="h-6 w-6 text-accent" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold mb-1">{campaign.title}</h3>
+                                <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{campaign.description}</p>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">{campaign.category}</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {campaign.currentVotes}/{campaign.targetVotes} votes
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )) || <p className="text-center text-muted-foreground py-8">No active campaigns</p>}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="ideas" className="mt-0">
+                    <div className="grid grid-cols-1 gap-4">
+                      {activity?.trendingIdeas?.map((idea: any, index: number) => (
+                        <Card key={index} className="hover-elevate" data-testid={`card-idea-${index}`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <Lightbulb className="h-6 w-6 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold mb-1">{idea.title}</h3>
+                                <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{idea.description}</p>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">{idea.category}</Badge>
+                                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <ThumbsUp className="h-3 w-3" />
+                                    {idea.votesCount} votes
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )) || <p className="text-center text-muted-foreground py-8">No trending ideas</p>}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
+      </section>
+
       {/* Testimonials Carousel Section */}
-      <section className="py-24 bg-background">
+      <section className="py-24 bg-muted/30">
         <div className="container mx-auto px-4">
           <motion.div
             initial="initial"
@@ -913,6 +1305,122 @@ export default function Landing() {
             ) : (
               <p className="text-center text-muted-foreground py-12 text-lg">No upcoming events</p>
             )}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Join Your State CTA Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <motion.div
+            initial="initial"
+            whileInView="animate"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+          >
+            <motion.div variants={fadeIn} className="text-center mb-12">
+              <Badge className="mb-4 text-sm px-4 py-1" data-testid="badge-join-state">
+                Get Started Now
+              </Badge>
+              <h2 
+                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+                data-testid="text-join-state-title"
+              >
+                Join APC Connect in Your State
+              </h2>
+              <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto">
+                Select your state to see local statistics and connect with members in your area
+              </p>
+            </motion.div>
+
+            <motion.div variants={scaleIn} className="max-w-2xl mx-auto">
+              <Card className="p-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Select Your State</label>
+                    <Select value={selectedState} onValueChange={setSelectedState}>
+                      <SelectTrigger className="w-full" data-testid="select-state">
+                        <SelectValue placeholder="Choose your state..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {states.map((state) => (
+                          <SelectItem key={state.id} value={state.id}>
+                            {state.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {isLoadingStateStats ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ) : selectedState && stateStats ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div className="bg-primary/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-primary mb-1">
+                            {stateStats.memberCount.toLocaleString()}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Members</p>
+                        </div>
+                        <div className="bg-accent/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-accent mb-1">
+                            {stateStats.activeMembers.toLocaleString()}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Active</p>
+                        </div>
+                        <div className="bg-primary/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-primary mb-1">
+                            {stateStats.upcomingEvents}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Events</p>
+                        </div>
+                        <div className="bg-accent/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-accent mb-1">
+                            {stateStats.activeCampaigns}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Campaigns</p>
+                        </div>
+                        <div className="bg-primary/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-primary mb-1">
+                            {stateStats.lgasCovered}
+                          </div>
+                          <p className="text-sm text-muted-foreground">LGAs</p>
+                        </div>
+                        <div className="bg-accent/5 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-accent mb-1">
+                            {stateStats.wardsCovered}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Wards</p>
+                        </div>
+                      </div>
+
+                      <Link href={`/register?state=${selectedState}`}>
+                        <Button className="w-full text-lg py-6" size="lg" data-testid="button-join-selected-state">
+                          Join APC in {stateStats.state.name}
+                          <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                      </Link>
+                    </motion.div>
+                  ) : selectedState ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      Loading state statistics...
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-8">
+                      Select a state to view statistics and join your local chapter
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
           </motion.div>
         </div>
       </section>

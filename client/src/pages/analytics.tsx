@@ -1,12 +1,24 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Calendar, Vote, DollarSign, TrendingUp } from "lucide-react";
+import { NigeriaMap } from "@/components/nigeria-map";
+import { StateDetailModal } from "@/components/state-detail-modal";
 
 export default function Analytics() {
   const { user } = useAuth();
+  const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
+  const [selectedStateName, setSelectedStateName] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleStateClick = (stateId: string, stateName: string) => {
+    setSelectedStateId(stateId);
+    setSelectedStateName(stateName);
+    setIsModalOpen(true);
+  };
 
   const { data: overviewData, isLoading: isLoadingOverview } = useQuery<{
     success: boolean;
@@ -137,6 +149,14 @@ export default function Analytics() {
       </div>
 
       <div>
+        <h2 className="text-xl font-semibold mb-4">Nationwide Coverage Map</h2>
+        <NigeriaMap 
+          onStateClick={handleStateClick}
+          showLegend={true}
+        />
+      </div>
+
+      <div>
         <h2 className="text-xl font-semibold mb-4">Engagement Metrics</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -247,6 +267,13 @@ export default function Analytics() {
           </div>
         </CardContent>
       </Card>
+
+      <StateDetailModal
+        stateId={selectedStateId}
+        stateName={selectedStateName}
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+      />
     </div>
   );
 }

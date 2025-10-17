@@ -38,6 +38,7 @@ import ArticlePage from "@/pages/knowledge-base/article";
 import About from "@/pages/about";
 import EventsGallery from "@/pages/events-gallery";
 import LeadershipBoard from "@/pages/leadership-board";
+import Tasks from "@/pages/tasks";
 import NotFound from "@/pages/not-found";
 import { ChatbotWidget } from "@/components/chatbot-widget";
 
@@ -53,6 +54,9 @@ import AdminIdeas from "@/pages/admin/ideas";
 import AdminKnowledge from "@/pages/admin/knowledge";
 import AdminDonations from "@/pages/admin/donations";
 import AdminChatbotAnalytics from "@/pages/admin/chatbot-analytics";
+import AdminTasks from "@/pages/admin/tasks";
+import AdminBadges from "@/pages/admin/badges";
+import Rewards from "@/pages/rewards";
 import { AdminSidebar } from "@/components/admin-sidebar";
 
 function AppContent() {
@@ -136,6 +140,8 @@ function AppContent() {
                 <Route path="/admin/knowledge" component={() => <AdminRoute component={AdminKnowledge} />} />
                 <Route path="/admin/donations" component={() => <AdminRoute component={AdminDonations} />} />
                 <Route path="/admin/chatbot-analytics" component={() => <AdminRoute component={AdminChatbotAnalytics} />} />
+                <Route path="/admin/tasks" component={() => <AdminRoute component={AdminTasks} />} />
+                <Route path="/admin/badges" component={() => <AdminRoute component={AdminBadges} />} />
                 <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
                 <Route path="/admin" component={() => <Redirect to="/admin/dashboard" />} />
                 <Route component={NotFound} />
@@ -190,6 +196,8 @@ function AppContent() {
               <Route path="/about" component={() => <ProtectedRoute component={About} />} />
               <Route path="/events-gallery" component={() => <ProtectedRoute component={EventsGallery} />} />
               <Route path="/leadership-board" component={() => <ProtectedRoute component={LeadershipBoard} />} />
+              <Route path="/tasks" component={() => <ProtectedRoute component={Tasks} />} />
+              <Route path="/rewards" component={() => <ProtectedRoute component={Rewards} />} />
               <Route component={NotFound} />
             </Switch>
           </main>

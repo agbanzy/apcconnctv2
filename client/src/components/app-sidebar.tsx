@@ -22,6 +22,7 @@ import {
   Info,
   Image,
   Shield,
+  Award,
 } from "lucide-react";
 import {
   Sidebar,
@@ -102,8 +103,13 @@ const menuItems = [
     icon: Trophy,
   },
   {
-    title: "Micro Tasks",
-    url: "/micro-tasks",
+    title: "Rewards",
+    url: "/rewards",
+    icon: Award,
+  },
+  {
+    title: "Tasks",
+    url: "/tasks",
     icon: CheckSquare,
   },
   {

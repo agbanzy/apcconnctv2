@@ -7,6 +7,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import { Server as SocketIOServer } from "socket.io";
 import Stripe from "stripe";
+// @ts-ignore - No types available for paystack-api
 import Paystack from "paystack-api";
 import multer from "multer";
 import QRCode from "qrcode";
@@ -19,7 +20,7 @@ import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 
 const PgSession = ConnectPgSimple(session);
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-11-20.acacia" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2025-09-30.clover" });
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
 
 const openai = new OpenAI({
@@ -32,13 +33,24 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+type UserType = typeof schema.users.$inferSelect;
+
 interface AuthRequest extends Request {
-  user?: typeof schema.users.$inferSelect;
+  user?: UserType;
 }
 
 declare global {
   namespace Express {
-    interface User extends typeof schema.users.$inferSelect {}
+    interface User {
+      id: string;
+      email: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+      phone: string | null;
+      role: string | null;
+      createdAt: Date | null;
+    }
   }
 }
 
@@ -88,7 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })
   );
 
-  passport.serializeUser((user, done) => {
+  passport.serializeUser((user: Express.User, done) => {
     done(null, user.id);
   });
 
@@ -97,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await db.query.users.findFirst({
         where: eq(schema.users.id, id)
       });
-      done(null, user || null);
+      done(null, user as Express.User || null);
     } catch (error) {
       done(error);
     }
@@ -349,9 +361,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      const user = Array.isArray(member.user) ? member.user[0] : member.user;
       const qrData = {
         memberId: member.memberId,
-        name: `${member.user.firstName} ${member.user.lastName}`,
+        name: `${user?.firstName} ${user?.lastName}`,
         wardId: member.wardId
       };
 
@@ -431,8 +444,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: new Date(),
       }).returning();
 
+      const user = Array.isArray(member.user) ? member.user[0] : member.user;
       const paystackResponse = await paystack.transaction.initialize({
-        email: member.user.email,
+        email: user?.email || "",
         amount: amount * 100,
         reference: payment.id,
         callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/verify`,
@@ -914,7 +928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/quizzes", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
       const quizData = schema.insertQuizSchema.parse(req.body);
-      const [quiz] = await db.insert(schema.quizzes).values(quizData).returning();
+      const [quiz] = await db.insert(schema.quizzes).values(quizData as any).returning();
       res.json({ success: true, data: quiz });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create quiz" });
@@ -1007,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tasks", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
       const taskData = schema.insertVolunteerTaskSchema.parse(req.body);
-      const [task] = await db.insert(schema.volunteerTasks).values(taskData).returning();
+      const [task] = await db.insert(schema.volunteerTasks).values(taskData as any).returning();
       res.json({ success: true, data: task });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create task" });
@@ -1374,11 +1388,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ status: "approved" })
         .where(eq(schema.taskCompletions.id, completionId));
 
+      const task = Array.isArray(completion.task) ? completion.task[0] : completion.task;
       await db.insert(schema.userPoints).values({
         memberId: completion.memberId,
         source: "micro-task",
-        amount: completion.task.points,
-        points: completion.task.points
+        amount: task?.points || 0,
+        points: task?.points || 0
       });
 
       res.json({ success: true, data: { message: "Micro-task verified and points awarded" } });
@@ -1692,7 +1707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newsPostId: req.params.id,
         memberId: member.id,
         content
-      }).returning();
+      }).returning() as any[];
 
       await db.update(schema.newsPosts)
         .set({ comments: sql`${schema.newsPosts.comments} + 1` })
@@ -1777,7 +1792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memberId: member.id,
         content,
         parentId: req.params.id
-      }).returning();
+      }).returning() as any[];
 
       await db.update(schema.newsPosts)
         .set({ comments: sql`${schema.newsPosts.comments} + 1` })
@@ -1918,11 +1933,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const paidDues = await db.select({ total: sql<number>`SUM(CAST(${schema.membershipDues.amount} AS NUMERIC))` })
         .from(schema.membershipDues)
-        .where(eq(schema.membershipDues.status, "paid"));
+        .where(eq(schema.membershipDues.paymentStatus, "completed"));
 
       const pendingDues = await db.select({ total: sql<number>`SUM(CAST(${schema.membershipDues.amount} AS NUMERIC))` })
         .from(schema.membershipDues)
-        .where(eq(schema.membershipDues.status, "pending"));
+        .where(eq(schema.membershipDues.paymentStatus, "pending"));
 
       res.json({
         success: true,
@@ -2003,11 +2018,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalEvents = await db.select({ count: sql<number>`count(*)` })
         .from(schema.events);
 
+      const upcomingEvents = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.events)
+        .where(gte(schema.events.date, new Date()));
+
       const totalElections = await db.select({ count: sql<number>`count(*)` })
         .from(schema.elections);
 
       const totalVotes = await db.select({ count: sql<number>`count(*)` })
         .from(schema.votes);
+
+      const activeCampaigns = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.issueCampaigns)
+        .where(eq(schema.issueCampaigns.status, "active"));
+
+      const totalIdeas = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.ideas);
+
+      const statesWithPresence = await db
+        .select({ count: sql<number>`count(distinct ${schema.lgas.stateId})` })
+        .from(schema.members)
+        .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .where(sql`${schema.lgas.stateId} IS NOT NULL`);
+
+      const wardsCovered = await db
+        .select({ count: sql<number>`count(distinct ${schema.members.wardId})` })
+        .from(schema.members);
+
+      const totalEngagementPoints = await db
+        .select({ total: sql<number>`COALESCE(SUM(${schema.points.amount}), 0)` })
+        .from(schema.points);
 
       res.json({
         success: true,
@@ -2015,12 +2056,241 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalMembers: totalMembers[0]?.count || 0,
           activeMembers: activeMembers[0]?.count || 0,
           totalEvents: totalEvents[0]?.count || 0,
+          upcomingEvents: upcomingEvents[0]?.count || 0,
           totalElections: totalElections[0]?.count || 0,
-          totalVotes: totalVotes[0]?.count || 0
+          totalVotes: totalVotes[0]?.count || 0,
+          activeCampaigns: activeCampaigns[0]?.count || 0,
+          totalIdeas: totalIdeas[0]?.count || 0,
+          statesWithPresence: statesWithPresence[0]?.count || 0,
+          wardsCovered: wardsCovered[0]?.count || 0,
+          totalEngagementPoints: totalEngagementPoints[0]?.total || 0
         }
       });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get("/api/analytics/map-data", async (req: Request, res: Response) => {
+    try {
+      const states = await db.query.states.findMany({
+        orderBy: asc(schema.states.name)
+      });
+
+      const statesData = await Promise.all(states.map(async (state) => {
+        const membersByState = await db
+          .select({ count: sql<number>`count(distinct ${schema.members.id})` })
+          .from(schema.members)
+          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+          .where(eq(schema.lgas.stateId, state.id));
+
+        const activeMembersByState = await db
+          .select({ count: sql<number>`count(distinct ${schema.members.id})` })
+          .from(schema.members)
+          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+          .where(and(
+            eq(schema.lgas.stateId, state.id),
+            eq(schema.members.status, "active")
+          ));
+
+        // Note: Events table doesn't have stateId column, so we can't filter by state
+        const upcomingEventsByState = [{ count: 0 }];
+
+        const activeCampaignsByState = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.issueCampaigns)
+          .leftJoin(schema.members, eq(schema.issueCampaigns.authorId, schema.members.id))
+          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+          .where(and(
+            eq(schema.lgas.stateId, state.id),
+            eq(schema.issueCampaigns.status, "active")
+          ));
+
+        const lgasCovered = await db
+          .select({ count: sql<number>`count(distinct ${schema.lgas.id})` })
+          .from(schema.lgas)
+          .leftJoin(schema.wards, eq(schema.lgas.id, schema.wards.lgaId))
+          .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
+          .where(and(
+            eq(schema.lgas.stateId, state.id),
+            sql`${schema.members.id} IS NOT NULL`
+          ));
+
+        const wardsCovered = await db
+          .select({ count: sql<number>`count(distinct ${schema.wards.id})` })
+          .from(schema.wards)
+          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+          .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
+          .where(and(
+            eq(schema.lgas.stateId, state.id),
+            sql`${schema.members.id} IS NOT NULL`
+          ));
+
+        return {
+          stateId: state.id,
+          name: state.name,
+          code: state.code,
+          memberCount: membersByState[0]?.count || 0,
+          activeMembers: activeMembersByState[0]?.count || 0,
+          upcomingEvents: upcomingEventsByState[0]?.count || 0,
+          activeCampaigns: activeCampaignsByState[0]?.count || 0,
+          lgasCovered: lgasCovered[0]?.count || 0,
+          wardsCovered: wardsCovered[0]?.count || 0
+        };
+      }));
+
+      res.json({ success: true, data: { states: statesData } });
+    } catch (error) {
+      console.error("Map data error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch map data" });
+    }
+  });
+
+  app.get("/api/analytics/recent-activity", async (req: Request, res: Response) => {
+    try {
+      const recentMembers = await db.query.members.findMany({
+        orderBy: desc(schema.members.joinDate),
+        limit: 10,
+        with: {
+          user: true,
+          ward: {
+            with: {
+              lga: {
+                with: { state: true }
+              }
+            }
+          }
+        }
+      });
+
+      const upcomingEvents = await db.query.events.findMany({
+        where: gte(schema.events.date, new Date()),
+        orderBy: asc(schema.events.date),
+        limit: 5
+      });
+
+      const popularCampaigns = await db.query.issueCampaigns.findMany({
+        where: eq(schema.issueCampaigns.status, "active"),
+        orderBy: desc(schema.issueCampaigns.currentVotes),
+        limit: 3,
+        with: {
+          author: {
+            with: { user: true }
+          }
+        }
+      });
+
+      const trendingIdeas = await db.query.ideas.findMany({
+        orderBy: desc(schema.ideas.votesCount),
+        limit: 3,
+        with: {
+          author: {
+            with: { user: true }
+          }
+        }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          recentMembers,
+          upcomingEvents,
+          popularCampaigns,
+          trendingIdeas
+        }
+      });
+    } catch (error) {
+      console.error("Recent activity error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch recent activity" });
+    }
+  });
+
+  app.get("/api/analytics/state-stats/:stateId", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.params;
+
+      const state = await db.query.states.findFirst({
+        where: eq(schema.states.id, stateId)
+      });
+
+      if (!state) {
+        return res.status(404).json({ success: false, error: "State not found" });
+      }
+
+      const memberCount = await db
+        .select({ count: sql<number>`count(distinct ${schema.members.id})` })
+        .from(schema.members)
+        .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .where(eq(schema.lgas.stateId, stateId));
+
+      const activeMembers = await db
+        .select({ count: sql<number>`count(distinct ${schema.members.id})` })
+        .from(schema.members)
+        .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .where(and(
+          eq(schema.lgas.stateId, stateId),
+          eq(schema.members.status, "active")
+        ));
+
+      const upcomingEvents = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.events)
+        .where(and(
+          eq(schema.events.stateId, stateId),
+          gte(schema.events.date, new Date())
+        ));
+
+      const activeCampaigns = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.issueCampaigns)
+        .leftJoin(schema.members, eq(schema.issueCampaigns.authorId, schema.members.id))
+        .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .where(and(
+          eq(schema.lgas.stateId, stateId),
+          eq(schema.issueCampaigns.status, "active")
+        ));
+
+      const lgasCovered = await db
+        .select({ count: sql<number>`count(distinct ${schema.lgas.id})` })
+        .from(schema.lgas)
+        .leftJoin(schema.wards, eq(schema.lgas.id, schema.wards.lgaId))
+        .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
+        .where(and(
+          eq(schema.lgas.stateId, stateId),
+          sql`${schema.members.id} IS NOT NULL`
+        ));
+
+      const wardsCovered = await db
+        .select({ count: sql<number>`count(distinct ${schema.wards.id})` })
+        .from(schema.wards)
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
+        .where(and(
+          eq(schema.lgas.stateId, stateId),
+          sql`${schema.members.id} IS NOT NULL`
+        ));
+
+      res.json({
+        success: true,
+        data: {
+          state,
+          memberCount: memberCount[0]?.count || 0,
+          activeMembers: activeMembers[0]?.count || 0,
+          upcomingEvents: upcomingEvents[0]?.count || 0,
+          activeCampaigns: activeCampaigns[0]?.count || 0,
+          lgasCovered: lgasCovered[0]?.count || 0,
+          wardsCovered: wardsCovered[0]?.count || 0
+        }
+      });
+    } catch (error) {
+      console.error("State stats error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch state statistics" });
     }
   });
 
@@ -2071,6 +2341,424 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: badge });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create badge" });
+    }
+  });
+
+  app.get("/api/badges/my-badges", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const earnedBadges = await db.query.userBadges.findMany({
+        where: eq(schema.userBadges.memberId, member.id),
+        with: { badge: true }
+      });
+
+      res.json({ success: true, data: earnedBadges });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch earned badges" });
+    }
+  });
+
+  app.post("/api/badges/check", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const allBadges = await db.query.badges.findMany();
+      const earnedBadgeIds = (await db.query.userBadges.findMany({
+        where: eq(schema.userBadges.memberId, member.id)
+      })).map(ub => ub.badgeId);
+
+      const newlyEarnedBadges = [];
+
+      for (const badge of allBadges) {
+        if (earnedBadgeIds.includes(badge.id)) continue;
+
+        const criteria = badge.criteria as { type: string; value: number };
+        let earned = false;
+
+        switch (criteria.type) {
+          case "tasks_completed": {
+            const taskCount = await db.$count(schema.taskCompletions, 
+              and(
+                eq(schema.taskCompletions.memberId, member.id),
+                eq(schema.taskCompletions.status, "approved")
+              )
+            );
+            earned = taskCount >= criteria.value;
+            break;
+          }
+          case "quizzes_completed": {
+            const quizCount = await db.$count(schema.quizAttempts, 
+              eq(schema.quizAttempts.memberId, member.id)
+            );
+            earned = quizCount >= criteria.value;
+            break;
+          }
+          case "events_attended": {
+            const eventCount = await db.$count(schema.eventRsvps, 
+              and(
+                eq(schema.eventRsvps.memberId, member.id),
+                eq(schema.eventRsvps.status, "confirmed")
+              )
+            );
+            earned = eventCount >= criteria.value;
+            break;
+          }
+          case "campaigns_supported": {
+            const campaignCount = await db.$count(schema.campaignVotes, 
+              eq(schema.campaignVotes.memberId, member.id)
+            );
+            earned = campaignCount >= criteria.value;
+            break;
+          }
+          case "ideas_submitted": {
+            const ideaCount = await db.$count(schema.ideas, 
+              eq(schema.ideas.memberId, member.id)
+            );
+            earned = ideaCount >= criteria.value;
+            break;
+          }
+          case "total_points": {
+            const points = await db
+              .select({ total: sql<number>`SUM(${schema.userPoints.amount})` })
+              .from(schema.userPoints)
+              .where(eq(schema.userPoints.memberId, member.id));
+            earned = (points[0]?.total || 0) >= criteria.value;
+            break;
+          }
+        }
+
+        if (earned) {
+          const [userBadge] = await db.insert(schema.userBadges).values({
+            memberId: member.id,
+            badgeId: badge.id,
+            progress: criteria.value
+          }).returning();
+
+          if (badge.points > 0) {
+            await db.insert(schema.userPoints).values({
+              memberId: member.id,
+              source: "badge",
+              amount: badge.points
+            });
+          }
+
+          newlyEarnedBadges.push({ ...userBadge, badge });
+        }
+      }
+
+      res.json({ success: true, data: newlyEarnedBadges });
+    } catch (error) {
+      console.error("Badge check error:", error);
+      res.status(500).json({ success: false, error: "Failed to check badges" });
+    }
+  });
+
+  app.delete("/api/badges/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.badges).where(eq(schema.badges.id, req.params.id));
+      res.json({ success: true, data: { message: "Badge deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete badge" });
+    }
+  });
+
+  // Points Endpoints
+  app.get("/api/points/my-points", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const pointsBreakdown = await db
+        .select({
+          source: schema.userPoints.source,
+          total: sql<number>`SUM(${schema.userPoints.amount})`,
+          count: sql<number>`COUNT(*)`
+        })
+        .from(schema.userPoints)
+        .where(eq(schema.userPoints.memberId, member.id))
+        .groupBy(schema.userPoints.source);
+
+      const totalPoints = pointsBreakdown.reduce((sum, item) => sum + Number(item.total), 0);
+
+      res.json({ 
+        success: true, 
+        data: { 
+          totalPoints, 
+          breakdown: pointsBreakdown 
+        } 
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch points" });
+    }
+  });
+
+  app.post("/api/points/award", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { memberId, source, amount } = req.body;
+
+      const [points] = await db.insert(schema.userPoints).values({
+        memberId,
+        source,
+        amount
+      }).returning();
+
+      res.json({ success: true, data: points });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to award points" });
+    }
+  });
+
+  app.get("/api/points/category-leaderboard/:category", async (req: Request, res: Response) => {
+    try {
+      const category = req.params.category;
+
+      const leaderboard = await db
+        .select({
+          memberId: schema.userPoints.memberId,
+          totalPoints: sql<number>`SUM(${schema.userPoints.amount})`,
+          member: schema.members,
+          user: schema.users
+        })
+        .from(schema.userPoints)
+        .where(eq(schema.userPoints.source, category))
+        .leftJoin(schema.members, eq(schema.userPoints.memberId, schema.members.id))
+        .leftJoin(schema.users, eq(schema.members.userId, schema.users.id))
+        .groupBy(schema.userPoints.memberId, schema.members.id, schema.users.id)
+        .orderBy(desc(sql`SUM(${schema.userPoints.amount})`))
+        .limit(50);
+
+      res.json({ success: true, data: leaderboard });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch category leaderboard" });
+    }
+  });
+
+  // Achievement Endpoints
+  app.get("/api/achievements", async (req: Request, res: Response) => {
+    try {
+      const achievements = await db.query.achievements.findMany({
+        orderBy: [asc(schema.achievements.rarity), desc(schema.achievements.points)]
+      });
+      res.json({ success: true, data: achievements });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch achievements" });
+    }
+  });
+
+  app.get("/api/achievements/my-achievements", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const userAchievements = await db.query.userAchievements.findMany({
+        where: eq(schema.userAchievements.memberId, member.id),
+        with: { achievement: true }
+      });
+
+      res.json({ success: true, data: userAchievements });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch achievements" });
+    }
+  });
+
+  app.post("/api/achievements/check", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const allAchievements = await db.query.achievements.findMany();
+      const userAchievements = await db.query.userAchievements.findMany({
+        where: eq(schema.userAchievements.memberId, member.id)
+      });
+
+      const newlyCompleted = [];
+
+      for (const achievement of allAchievements) {
+        const existing = userAchievements.find(ua => ua.achievementId === achievement.id);
+        const requirement = achievement.requirement as { type: string; value: number };
+        let progress = 0;
+
+        switch (requirement.type) {
+          case "tasks_completed": {
+            progress = await db.$count(schema.taskCompletions, 
+              and(
+                eq(schema.taskCompletions.memberId, member.id),
+                eq(schema.taskCompletions.status, "approved")
+              )
+            );
+            break;
+          }
+          case "total_points": {
+            const points = await db
+              .select({ total: sql<number>`SUM(${schema.userPoints.amount})` })
+              .from(schema.userPoints)
+              .where(eq(schema.userPoints.memberId, member.id));
+            progress = points[0]?.total || 0;
+            break;
+          }
+        }
+
+        const completed = progress >= requirement.value;
+
+        if (!existing) {
+          const [userAchievement] = await db.insert(schema.userAchievements).values({
+            memberId: member.id,
+            achievementId: achievement.id,
+            progress,
+            completed,
+            completedAt: completed ? new Date() : null
+          }).returning();
+
+          if (completed) {
+            await db.insert(schema.userPoints).values({
+              memberId: member.id,
+              source: "achievement",
+              amount: achievement.points
+            });
+            newlyCompleted.push({ ...userAchievement, achievement });
+          }
+        } else if (!existing.completed && completed) {
+          await db.update(schema.userAchievements)
+            .set({ completed: true, completedAt: new Date(), progress })
+            .where(eq(schema.userAchievements.id, existing.id));
+
+          await db.insert(schema.userPoints).values({
+            memberId: member.id,
+            source: "achievement",
+            amount: achievement.points
+          });
+
+          newlyCompleted.push({ ...existing, achievement, completed: true });
+        } else {
+          await db.update(schema.userAchievements)
+            .set({ progress })
+            .where(eq(schema.userAchievements.id, existing.id));
+        }
+      }
+
+      res.json({ success: true, data: newlyCompleted });
+    } catch (error) {
+      console.error("Achievement check error:", error);
+      res.status(500).json({ success: false, error: "Failed to check achievements" });
+    }
+  });
+
+  // Enhanced Leaderboard Endpoints
+  app.get("/api/leaderboard/global", async (req: Request, res: Response) => {
+    try {
+      const leaderboard = await db
+        .select({
+          memberId: schema.userPoints.memberId,
+          totalPoints: sql<number>`SUM(${schema.userPoints.amount})`,
+          member: schema.members,
+          user: schema.users,
+          badgeCount: sql<number>`(SELECT COUNT(*) FROM ${schema.userBadges} WHERE member_id = ${schema.userPoints.memberId})`
+        })
+        .from(schema.userPoints)
+        .leftJoin(schema.members, eq(schema.userPoints.memberId, schema.members.id))
+        .leftJoin(schema.users, eq(schema.members.userId, schema.users.id))
+        .groupBy(schema.userPoints.memberId, schema.members.id, schema.users.id)
+        .orderBy(desc(sql`SUM(${schema.userPoints.amount})`))
+        .limit(50);
+
+      res.json({ success: true, data: leaderboard });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch global leaderboard" });
+    }
+  });
+
+  app.get("/api/leaderboard/state/:stateId", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.params;
+
+      const leaderboard = await db
+        .select({
+          memberId: schema.userPoints.memberId,
+          totalPoints: sql<number>`SUM(${schema.userPoints.amount})`,
+          member: schema.members,
+          user: schema.users
+        })
+        .from(schema.userPoints)
+        .leftJoin(schema.members, eq(schema.userPoints.memberId, schema.members.id))
+        .leftJoin(schema.users, eq(schema.members.userId, schema.users.id))
+        .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
+        .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+        .where(eq(schema.lgas.stateId, stateId))
+        .groupBy(schema.userPoints.memberId, schema.members.id, schema.users.id)
+        .orderBy(desc(sql`SUM(${schema.userPoints.amount})`))
+        .limit(50);
+
+      res.json({ success: true, data: leaderboard });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch state leaderboard" });
+    }
+  });
+
+  app.get("/api/leaderboard/timeframe/:period", async (req: Request, res: Response) => {
+    try {
+      const { period } = req.params;
+      let dateFilter;
+
+      switch (period) {
+        case "week":
+          dateFilter = sql`${schema.userPoints.createdAt} >= NOW() - INTERVAL '7 days'`;
+          break;
+        case "month":
+          dateFilter = sql`${schema.userPoints.createdAt} >= NOW() - INTERVAL '30 days'`;
+          break;
+        case "year":
+          dateFilter = sql`${schema.userPoints.createdAt} >= NOW() - INTERVAL '365 days'`;
+          break;
+        default:
+          dateFilter = sql`1=1`;
+      }
+
+      const leaderboard = await db
+        .select({
+          memberId: schema.userPoints.memberId,
+          totalPoints: sql<number>`SUM(${schema.userPoints.amount})`,
+          member: schema.members,
+          user: schema.users
+        })
+        .from(schema.userPoints)
+        .where(dateFilter)
+        .leftJoin(schema.members, eq(schema.userPoints.memberId, schema.members.id))
+        .leftJoin(schema.users, eq(schema.members.userId, schema.users.id))
+        .groupBy(schema.userPoints.memberId, schema.members.id, schema.users.id)
+        .orderBy(desc(sql`SUM(${schema.userPoints.amount})`))
+        .limit(50);
+
+      res.json({ success: true, data: leaderboard });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch timeframe leaderboard" });
     }
   });
 
@@ -2167,7 +2855,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         where: eq(schema.members.userId, req.user!.id)
       });
 
-      if (idea.member.userId !== req.user!.id && req.user!.role !== "admin") {
+      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
+      if (ideaMember?.userId !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
 
@@ -2193,7 +2882,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Idea not found" });
       }
 
-      if (idea.member.userId !== req.user!.id && req.user!.role !== "admin") {
+      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
+      if (ideaMember?.userId !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
 
@@ -2814,8 +3504,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: message || null,
       }).returning();
 
+      const user = Array.isArray(member.user) ? member.user[0] : member.user;
       const paystackResponse = await paystack.transaction.initialize({
-        email: member.user.email,
+        email: user?.email || "",
         amount: amount * 100,
         reference: donation.id,
         callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/donations/verify`,
@@ -2935,10 +3626,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             frequency: donation.recurringFrequency!,
             status: "active",
             nextPaymentDate,
-            stripeSubscriptionId: session.subscription || null,
+            stripeSubscriptionId: (session as any).subscription || null,
           });
         }
-      } else if (event.type === "invoice.payment_succeeded" && event.data.object.subscription) {
+      } else if (event.type === "invoice.payment_succeeded" && (event.data.object as any).subscription) {
         const invoice = event.data.object as any;
         const subscriptionId = invoice.subscription;
 
@@ -3043,16 +3734,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit: parseInt(limit as string)
       });
 
-      const publicDonations = donations.map(donation => ({
-        id: donation.id,
-        amount: donation.amount,
-        campaignTitle: donation.campaign?.title || "General Fund",
-        donorName: donation.isAnonymous 
-          ? "Anonymous" 
-          : donation.donorName || (donation.member ? `${donation.member.user.firstName} ${donation.member.user.lastName}` : "Anonymous"),
-        message: donation.message,
-        createdAt: donation.createdAt,
-      }));
+      const publicDonations = donations.map(donation => {
+        const campaign = Array.isArray(donation.campaign) ? donation.campaign[0] : donation.campaign;
+        const member = Array.isArray(donation.member) ? donation.member[0] : donation.member;
+        const user = member && !Array.isArray(member.user) ? member.user : (Array.isArray(member?.user) ? member.user[0] : null);
+        
+        return {
+          id: donation.id,
+          amount: donation.amount,
+          campaignTitle: campaign?.title || "General Fund",
+          donorName: donation.isAnonymous 
+            ? "Anonymous" 
+            : donation.donorName || (user ? `${user.firstName} ${user.lastName}` : "Anonymous"),
+          message: donation.message,
+          createdAt: donation.createdAt,
+        };
+      });
 
       res.json({ success: true, data: publicDonations });
     } catch (error) {
@@ -3324,7 +4021,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (member) {
           memberId = member.id;
-          memberContext = `\n\nContext: You are speaking with ${member.user.firstName} ${member.user.lastName}, an APC member from ${member.ward?.name || 'Nigeria'}, ${member.ward?.lga?.name || ''}, ${member.ward?.lga?.state?.name || ''}. Personalize your responses when relevant.`;
+          const user = Array.isArray(member.user) ? member.user[0] : member.user;
+          const ward = Array.isArray(member.ward) ? member.ward[0] : member.ward;
+          const lga = ward && !Array.isArray(ward.lga) ? ward.lga : (Array.isArray(ward?.lga) ? ward.lga[0] : null);
+          const state = lga && !Array.isArray(lga.state) ? lga.state : (Array.isArray(lga?.state) ? lga.state[0] : null);
+          memberContext = `\n\nContext: You are speaking with ${user?.firstName} ${user?.lastName}, an APC member from ${ward?.name || 'Nigeria'}, ${lga?.name || ''}, ${state?.name || ''}. Personalize your responses when relevant.`;
         }
       }
 
@@ -3518,6 +4219,492 @@ Be friendly, informative, and politically neutral when discussing governance. En
       });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch chatbot stats" });
+    }
+  });
+
+  // ============== COMPREHENSIVE TASK SYSTEM ROUTES ==============
+
+  // MICRO-TASKS ROUTES
+  app.get("/api/tasks/micro", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const tasks = await db.query.microTasks.findMany({
+        orderBy: desc(schema.microTasks.createdAt)
+      });
+
+      const completions = await db.query.taskCompletions.findMany({
+        where: and(
+          eq(schema.taskCompletions.memberId, member.id),
+          eq(schema.taskCompletions.taskType, "micro")
+        )
+      });
+
+      const completionMap = new Map(completions.map(c => [c.taskId, c]));
+      
+      const tasksWithCompletion = tasks.map(task => ({
+        ...task,
+        completed: completionMap.has(task.id),
+        completion: completionMap.get(task.id)
+      }));
+
+      res.json({ success: true, data: tasksWithCompletion });
+    } catch (error) {
+      console.error("Fetch micro-tasks error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch micro-tasks" });
+    }
+  });
+
+  app.get("/api/tasks/micro/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const task = await db.query.microTasks.findFirst({
+        where: eq(schema.microTasks.id, req.params.id)
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Micro-task not found" });
+      }
+
+      res.json({ success: true, data: task });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch micro-task" });
+    }
+  });
+
+  app.post("/api/tasks/micro", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const taskData = schema.insertMicroTaskSchema.parse(req.body);
+      const [task] = await db.insert(schema.microTasks).values(taskData).returning();
+      res.json({ success: true, data: task });
+    } catch (error) {
+      console.error("Create micro-task error:", error);
+      res.status(500).json({ success: false, error: "Failed to create micro-task" });
+    }
+  });
+
+  app.post("/api/tasks/micro/:id/complete", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { selectedAnswers } = req.body;
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const task = await db.query.microTasks.findFirst({
+        where: eq(schema.microTasks.id, req.params.id)
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+
+      const existingCompletion = await db.query.taskCompletions.findFirst({
+        where: and(
+          eq(schema.taskCompletions.taskId, req.params.id),
+          eq(schema.taskCompletions.memberId, member.id),
+          eq(schema.taskCompletions.taskType, "micro")
+        )
+      });
+
+      if (existingCompletion) {
+        return res.status(400).json({ success: false, error: "Task already completed" });
+      }
+
+      const correctAnswers = task.correctAnswers as number[] || [];
+      const isCorrect = JSON.stringify(selectedAnswers.sort()) === JSON.stringify(correctAnswers.sort());
+      const pointsEarned = isCorrect ? task.points : 0;
+
+      const [completion] = await db.insert(schema.taskCompletions).values({
+        taskId: req.params.id,
+        taskType: "micro",
+        memberId: member.id,
+        pointsEarned,
+        verified: true,
+        status: isCorrect ? "approved" : "rejected"
+      }).returning();
+
+      if (isCorrect) {
+        await db.insert(schema.userPoints).values({
+          memberId: member.id,
+          source: "micro-task",
+          amount: pointsEarned,
+          points: pointsEarned
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          completion, 
+          isCorrect, 
+          pointsEarned,
+          correctAnswers: isCorrect ? undefined : correctAnswers
+        } 
+      });
+    } catch (error) {
+      console.error("Complete micro-task error:", error);
+      res.status(500).json({ success: false, error: "Failed to complete micro-task" });
+    }
+  });
+
+  app.delete("/api/tasks/micro/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.microTasks).where(eq(schema.microTasks.id, req.params.id));
+      res.json({ success: true, data: { message: "Micro-task deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete micro-task" });
+    }
+  });
+
+  // VOLUNTEER TASKS ROUTES
+  app.get("/api/tasks/volunteer", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, location, category } = req.query;
+      let query = db.query.volunteerTasks;
+      
+      const tasks = await query.findMany({
+        orderBy: desc(schema.volunteerTasks.createdAt),
+        with: {
+          creator: true
+        }
+      });
+
+      let filteredTasks = tasks;
+      if (status) {
+        filteredTasks = filteredTasks.filter(t => t.status === status);
+      }
+      if (location) {
+        filteredTasks = filteredTasks.filter(t => t.location.toLowerCase().includes((location as string).toLowerCase()));
+      }
+      if (category) {
+        filteredTasks = filteredTasks.filter(t => t.category === category);
+      }
+
+      res.json({ success: true, data: filteredTasks });
+    } catch (error) {
+      console.error("Fetch volunteer tasks error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch volunteer tasks" });
+    }
+  });
+
+  app.get("/api/tasks/volunteer/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const task = await db.query.volunteerTasks.findFirst({
+        where: eq(schema.volunteerTasks.id, req.params.id),
+        with: {
+          applications: {
+            with: {
+              member: {
+                with: { user: true }
+              }
+            }
+          },
+          creator: true
+        }
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Volunteer task not found" });
+      }
+
+      res.json({ success: true, data: task });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch volunteer task" });
+    }
+  });
+
+  app.post("/api/tasks/volunteer", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const taskData = schema.insertVolunteerTaskSchema.parse({
+        ...req.body,
+        creatorId: req.user!.id,
+        currentVolunteers: 0
+      });
+      const [task] = await db.insert(schema.volunteerTasks).values(taskData).returning();
+      res.json({ success: true, data: task });
+    } catch (error) {
+      console.error("Create volunteer task error:", error);
+      res.status(500).json({ success: false, error: "Failed to create volunteer task" });
+    }
+  });
+
+  app.post("/api/tasks/volunteer/:id/assign", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const task = await db.query.volunteerTasks.findFirst({
+        where: eq(schema.volunteerTasks.id, req.params.id)
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+
+      if (task.maxVolunteers && (task.currentVolunteers || 0) >= task.maxVolunteers) {
+        return res.status(400).json({ success: false, error: "Task is full" });
+      }
+
+      const existingApplication = await db.query.taskApplications.findFirst({
+        where: and(
+          eq(schema.taskApplications.taskId, req.params.id),
+          eq(schema.taskApplications.memberId, member.id)
+        )
+      });
+
+      if (existingApplication) {
+        return res.status(400).json({ success: false, error: "Already signed up for this task" });
+      }
+
+      const [application] = await db.insert(schema.taskApplications).values({
+        taskId: req.params.id,
+        memberId: member.id,
+        status: "accepted"
+      }).returning();
+
+      await db.update(schema.volunteerTasks)
+        .set({ currentVolunteers: (task.currentVolunteers || 0) + 1 })
+        .where(eq(schema.volunteerTasks.id, req.params.id));
+
+      res.json({ success: true, data: application });
+    } catch (error) {
+      console.error("Assign volunteer task error:", error);
+      res.status(500).json({ success: false, error: "Failed to sign up for task" });
+    }
+  });
+
+  app.post("/api/tasks/volunteer/:id/complete", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { proofUrl } = req.body;
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const task = await db.query.volunteerTasks.findFirst({
+        where: eq(schema.volunteerTasks.id, req.params.id)
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+
+      const application = await db.query.taskApplications.findFirst({
+        where: and(
+          eq(schema.taskApplications.taskId, req.params.id),
+          eq(schema.taskApplications.memberId, member.id),
+          eq(schema.taskApplications.status, "accepted")
+        )
+      });
+
+      if (!application) {
+        return res.status(400).json({ success: false, error: "Not assigned to this task" });
+      }
+
+      const existingCompletion = await db.query.taskCompletions.findFirst({
+        where: and(
+          eq(schema.taskCompletions.taskId, req.params.id),
+          eq(schema.taskCompletions.memberId, member.id),
+          eq(schema.taskCompletions.taskType, "volunteer")
+        )
+      });
+
+      if (existingCompletion) {
+        return res.status(400).json({ success: false, error: "Task already completed" });
+      }
+
+      const [completion] = await db.insert(schema.taskCompletions).values({
+        taskId: req.params.id,
+        taskType: "volunteer",
+        memberId: member.id,
+        proofUrl,
+        pointsEarned: 0,
+        verified: false,
+        status: "pending"
+      }).returning();
+
+      await db.update(schema.taskApplications)
+        .set({ status: "completed" })
+        .where(eq(schema.taskApplications.id, application.id));
+
+      res.json({ success: true, data: completion });
+    } catch (error) {
+      console.error("Complete volunteer task error:", error);
+      res.status(500).json({ success: false, error: "Failed to mark task complete" });
+    }
+  });
+
+  app.post("/api/tasks/volunteer/:id/verify", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { completionId, approved } = req.body;
+
+      const completion = await db.query.taskCompletions.findFirst({
+        where: eq(schema.taskCompletions.id, completionId)
+      });
+
+      if (!completion) {
+        return res.status(404).json({ success: false, error: "Completion not found" });
+      }
+
+      const task = await db.query.volunteerTasks.findFirst({
+        where: eq(schema.volunteerTasks.id, completion.taskId)
+      });
+
+      if (!task) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+
+      const pointsEarned = approved ? task.points : 0;
+
+      await db.update(schema.taskCompletions)
+        .set({ 
+          status: approved ? "approved" : "rejected",
+          verified: true,
+          pointsEarned
+        })
+        .where(eq(schema.taskCompletions.id, completionId));
+
+      if (approved) {
+        await db.insert(schema.userPoints).values({
+          memberId: completion.memberId,
+          source: "volunteer-task",
+          amount: pointsEarned,
+          points: pointsEarned
+        });
+      }
+
+      res.json({ success: true, data: { message: "Task completion verified", pointsEarned } });
+    } catch (error) {
+      console.error("Verify volunteer task error:", error);
+      res.status(500).json({ success: false, error: "Failed to verify task completion" });
+    }
+  });
+
+  app.delete("/api/tasks/volunteer/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.volunteerTasks).where(eq(schema.volunteerTasks.id, req.params.id));
+      res.json({ success: true, data: { message: "Volunteer task deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete volunteer task" });
+    }
+  });
+
+  // TASK COMPLETIONS & LEADERBOARD ROUTES
+  app.get("/api/tasks/my-completions", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const completions = await db.query.taskCompletions.findMany({
+        where: eq(schema.taskCompletions.memberId, member.id),
+        orderBy: desc(schema.taskCompletions.completedAt)
+      });
+
+      const microTaskIds = completions.filter(c => c.taskType === "micro").map(c => c.taskId);
+      const volunteerTaskIds = completions.filter(c => c.taskType === "volunteer").map(c => c.taskId);
+
+      const microTasks = microTaskIds.length > 0 
+        ? await db.query.microTasks.findMany({
+            where: sql`${schema.microTasks.id} = ANY(${microTaskIds})`
+          })
+        : [];
+
+      const volunteerTasks = volunteerTaskIds.length > 0
+        ? await db.query.volunteerTasks.findMany({
+            where: sql`${schema.volunteerTasks.id} = ANY(${volunteerTaskIds})`
+          })
+        : [];
+
+      const microTaskMap = new Map(microTasks.map(t => [t.id, t]));
+      const volunteerTaskMap = new Map(volunteerTasks.map(t => [t.id, t]));
+
+      const completionsWithTasks = completions.map(c => ({
+        ...c,
+        task: c.taskType === "micro" ? microTaskMap.get(c.taskId) : volunteerTaskMap.get(c.taskId)
+      }));
+
+      const totalPoints = completions.reduce((sum, c) => sum + (c.pointsEarned || 0), 0);
+
+      res.json({ 
+        success: true, 
+        data: { 
+          completions: completionsWithTasks,
+          totalPoints,
+          totalCompleted: completions.filter(c => c.status === "approved").length
+        } 
+      });
+    } catch (error) {
+      console.error("Fetch my completions error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch completions" });
+    }
+  });
+
+  app.get("/api/tasks/leaderboard", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { period = "all", type } = req.query;
+
+      let dateFilter = sql`TRUE`;
+      if (period === "week") {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        dateFilter = gte(schema.taskCompletions.completedAt, weekAgo);
+      } else if (period === "month") {
+        const monthAgo = new Date();
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        dateFilter = gte(schema.taskCompletions.completedAt, monthAgo);
+      }
+
+      let typeFilter = sql`TRUE`;
+      if (type) {
+        typeFilter = eq(schema.taskCompletions.taskType, type as string);
+      }
+
+      const leaderboard = await db
+        .select({
+          memberId: schema.taskCompletions.memberId,
+          totalPoints: sql<number>`SUM(${schema.taskCompletions.pointsEarned})`,
+          totalTasks: sql<number>`COUNT(*)`,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+        })
+        .from(schema.taskCompletions)
+        .innerJoin(schema.members, eq(schema.taskCompletions.memberId, schema.members.id))
+        .innerJoin(schema.users, eq(schema.members.userId, schema.users.id))
+        .where(and(
+          eq(schema.taskCompletions.status, "approved"),
+          dateFilter,
+          typeFilter
+        ))
+        .groupBy(schema.taskCompletions.memberId, schema.users.firstName, schema.users.lastName)
+        .orderBy(desc(sql`SUM(${schema.taskCompletions.pointsEarned})`))
+        .limit(20);
+
+      res.json({ success: true, data: leaderboard });
+    } catch (error) {
+      console.error("Fetch leaderboard error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch leaderboard" });
     }
   });
 
