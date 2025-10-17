@@ -591,6 +591,12 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   recurringDonations: many(recurringDonations),
   newsComments: many(newsComments),
   newsCommentLikes: many(newsCommentLikes),
+  referrals: many(referrals, { relationName: "referrer" }),
+  referredBy: one(members, {
+    fields: [members.referredBy],
+    references: [members.id],
+    relationName: "referredBy"
+  }),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -937,6 +943,19 @@ export const recurringDonationsRelations = relations(recurringDonations, ({ one 
   campaign: one(donationCampaigns, {
     fields: [recurringDonations.campaignId],
     references: [donationCampaigns.id],
+  }),
+}));
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(members, {
+    fields: [referrals.referrerId],
+    references: [members.id],
+    relationName: "referrer"
+  }),
+  referred: one(members, {
+    fields: [referrals.referredId],
+    references: [members.id],
+    relationName: "referred"
   }),
 }));
 

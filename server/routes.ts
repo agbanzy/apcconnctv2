@@ -154,12 +154,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const random = Math.floor(10000 + Math.random() * 90000);
       const memberId = `APC-${year}-NG-${random}`;
 
+      // Generate unique referral code
+      const referralCode = `APC${userData.firstName.substring(0, 3).toUpperCase()}${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+      // Check if referred by someone
+      const { referralCode: referrerCode } = req.body;
+      let referrerId = null;
+      
+      if (referrerCode) {
+        const referrer = await db.query.members.findFirst({
+          where: eq(schema.members.referralCode, referrerCode)
+        });
+        if (referrer) {
+          referrerId = referrer.id;
+        }
+      }
+
       const [member] = await db.insert(schema.members).values({
         userId: user.id,
         memberId,
         wardId: wardId || "",
-        status: "pending"
+        status: "pending",
+        referralCode,
+        referredBy: referrerId
       }).returning();
+
+      // Create referral record if referred
+      if (referrerId) {
+        await db.insert(schema.referrals).values({
+          referrerId,
+          referredId: member.id,
+          status: "pending",
+          pointsEarned: 0
+        });
+      }
 
       req.login(user, (err) => {
         if (err) {
@@ -372,6 +400,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: { qrCode } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to generate QR code" });
+    }
+  });
+
+  // Get current member with referral code
+  app.get("/api/members/me", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+        with: { user: true, ward: { with: { lga: { with: { state: true } } } } }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      res.json({ success: true, data: member });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch member" });
+    }
+  });
+
+  // Get all referrals for current member
+  app.get("/api/referrals/my-referrals", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const referrals = await db.query.referrals.findMany({
+        where: eq(schema.referrals.referrerId, member.id),
+        orderBy: desc(schema.referrals.createdAt),
+        with: {
+          referred: {
+            with: {
+              user: true
+            }
+          }
+        }
+      });
+
+      res.json({ success: true, data: referrals });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch referrals" });
     }
   });
 
