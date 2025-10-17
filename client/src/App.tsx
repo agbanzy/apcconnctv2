@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
@@ -30,6 +31,16 @@ import News from "@/pages/news";
 import Analytics from "@/pages/analytics";
 import Volunteer from "@/pages/volunteer";
 import NotFound from "@/pages/not-found";
+
+import AdminDashboard from "@/pages/admin/dashboard";
+import AdminMembers from "@/pages/admin/members";
+import AdminElections from "@/pages/admin/elections";
+import AdminEvents from "@/pages/admin/events";
+import AdminContent from "@/pages/admin/content";
+import AdminCampaigns from "@/pages/admin/campaigns";
+import AdminIncidents from "@/pages/admin/incidents";
+import AdminSettings from "@/pages/admin/settings";
+import { AdminSidebar } from "@/components/admin-sidebar";
 
 function AppContent() {
   const { user, isLoading } = useAuth();
@@ -54,14 +65,68 @@ function AppContent() {
     return <Component />;
   }
 
+  function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <Skeleton className="h-32 w-64" />
+        </div>
+      );
+    }
+    
+    if (!user) {
+      return <Redirect to="/login" />;
+    }
+
+    if (user.role !== "admin" && user.role !== "coordinator") {
+      return <Redirect to="/dashboard" />;
+    }
+    
+    return <Component />;
+  }
+
   if (!user && !isLoading) {
     return (
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
-        <Route path="/" component={Login} />
-        <Route component={() => <Redirect to="/login" />} />
+        <Route path="/" component={Landing} />
+        <Route component={() => <Redirect to="/" />} />
       </Switch>
+    );
+  }
+
+  const isAdminRoute = window.location.pathname.startsWith('/admin');
+
+  if (isAdminRoute) {
+    return (
+      <SidebarProvider style={style as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AdminSidebar />
+          <div className="flex flex-col flex-1">
+            <header className="flex items-center justify-between p-4 border-b">
+              <SidebarTrigger data-testid="button-admin-sidebar-toggle" />
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+              </div>
+            </header>
+            <main className="flex-1 overflow-auto p-6">
+              <Switch>
+                <Route path="/admin/dashboard" component={() => <AdminRoute component={AdminDashboard} />} />
+                <Route path="/admin/members" component={() => <AdminRoute component={AdminMembers} />} />
+                <Route path="/admin/elections" component={() => <AdminRoute component={AdminElections} />} />
+                <Route path="/admin/events" component={() => <AdminRoute component={AdminEvents} />} />
+                <Route path="/admin/content" component={() => <AdminRoute component={AdminContent} />} />
+                <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
+                <Route path="/admin/incidents" component={() => <AdminRoute component={AdminIncidents} />} />
+                <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
+                <Route path="/admin" component={() => <Redirect to="/admin/dashboard" />} />
+                <Route component={NotFound} />
+              </Switch>
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
     );
   }
 
@@ -84,9 +149,10 @@ function AppContent() {
           </header>
           <main className="flex-1 overflow-auto p-6">
             <Switch>
-              <Route path="/login" component={() => <Redirect to="/" />} />
-              <Route path="/register" component={() => <Redirect to="/" />} />
-              <Route path="/" component={() => <ProtectedRoute component={Home} />} />
+              <Route path="/login" component={() => <Redirect to="/dashboard" />} />
+              <Route path="/register" component={() => <Redirect to="/dashboard" />} />
+              <Route path="/" component={() => <Redirect to="/dashboard" />} />
+              <Route path="/dashboard" component={() => <ProtectedRoute component={Home} />} />
               <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
               <Route path="/dues" component={() => <ProtectedRoute component={Dues} />} />
               <Route path="/events" component={() => <ProtectedRoute component={Events} />} />

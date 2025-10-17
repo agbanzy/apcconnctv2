@@ -16,7 +16,7 @@ import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 
 const PgSession = ConnectPgSimple(session);
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-12-18.acacia" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-11-20.acacia" });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1745,6 +1745,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: { message: "All notifications marked as read" } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.get("/api/analytics/public-overview", async (req: Request, res: Response) => {
+    try {
+      const totalMembers = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.members);
+
+      const activeMembers = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.members)
+        .where(eq(schema.members.status, "active"));
+
+      const totalEvents = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.events);
+
+      const totalElections = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.elections);
+
+      const totalVotes = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.votes);
+
+      res.json({
+        success: true,
+        data: {
+          totalMembers: totalMembers[0]?.count || 0,
+          activeMembers: activeMembers[0]?.count || 0,
+          totalEvents: totalEvents[0]?.count || 0,
+          totalElections: totalElections[0]?.count || 0,
+          totalVotes: totalVotes[0]?.count || 0
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch analytics" });
+    }
+  });
+
+  app.patch("/api/users/:userId/role", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { role } = req.body;
+      
+      if (!["member", "coordinator", "admin"].includes(role)) {
+        return res.status(400).json({ success: false, error: "Invalid role" });
+      }
+
+      const [user] = await db.update(schema.users)
+        .set({ role })
+        .where(eq(schema.users.id, req.params.userId))
+        .returning();
+
+      if (!user) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      res.json({ success: true, data: user });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update user role" });
+    }
+  });
+
+  app.patch("/api/campaigns/:id/reject", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [campaign] = await db.update(schema.issueCampaigns)
+        .set({ status: "rejected" })
+        .where(eq(schema.issueCampaigns.id, req.params.id))
+        .returning();
+
+      if (!campaign) {
+        return res.status(404).json({ success: false, error: "Campaign not found" });
+      }
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to reject campaign" });
+    }
+  });
+
+  app.post("/api/badges", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const badgeData = schema.insertBadgeSchema.parse(req.body);
+      const [badge] = await db.insert(schema.badges).values(badgeData).returning();
+      res.json({ success: true, data: badge });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create badge" });
     }
   });
 

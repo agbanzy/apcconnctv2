@@ -38,7 +38,7 @@ import apcLogo from "@assets/logo_1760719840683.png";
 const menuItems = [
   {
     title: "Home",
-    url: "/",
+    url: "/dashboard",
     icon: Home,
   },
   {
@@ -114,7 +114,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div 
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation("/dashboard")}
           className="flex items-center gap-3 hover-elevate rounded-md p-2 cursor-pointer" 
           data-testid="link-home"
         >
@@ -149,6 +149,14 @@ export function AppSidebar() {
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.startsWith('/admin')}>
+                    <Link href="/admin/dashboard" data-testid="link-admin-panel">
+                      <Settings className="h-4 w-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 {adminItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={location === item.url}>

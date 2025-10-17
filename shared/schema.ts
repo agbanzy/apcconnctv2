@@ -334,6 +334,7 @@ export const insertMicroTaskSchema = createInsertSchema(microTasks).omit({ id: t
 export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, createdAt: true });
 export const insertNewsPostSchema = createInsertSchema(newsPosts).omit({ id: true, publishedAt: true, likes: true, comments: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, createdAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
