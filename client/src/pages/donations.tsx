@@ -107,9 +107,10 @@ export default function Donations() {
       return;
     }
 
+    const finalCampaignId = campaignId || selectedCampaign;
     createDonationMutation.mutate({
       amount,
-      campaignId: campaignId || selectedCampaign || null,
+      campaignId: finalCampaignId && finalCampaignId !== "general" ? finalCampaignId : null,
       isAnonymous,
       message: message || null,
     });
@@ -251,7 +252,7 @@ export default function Donations() {
                 <SelectValue placeholder="General Donation" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">General Donation</SelectItem>
+                <SelectItem value="general">General Donation</SelectItem>
                 {activeCampaigns.map((campaign) => (
                   <SelectItem key={campaign.id} value={campaign.id}>
                     {campaign.title}
