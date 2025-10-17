@@ -10,6 +10,8 @@ export const incidentSeverityEnum = pgEnum("incident_severity", ["low", "medium"
 export const pollingUnitStatusEnum = pgEnum("polling_unit_status", ["active", "delayed", "completed", "incident"]);
 export const campaignStatusEnum = pgEnum("campaign_status", ["active", "approved", "completed", "rejected"]);
 export const taskDifficultyEnum = pgEnum("task_difficulty", ["Easy", "Medium", "Hard"]);
+export const ideaStatusEnum = pgEnum("idea_status", ["pending", "under_review", "approved", "rejected", "implemented"]);
+export const voteTypeEnum = pgEnum("vote_type", ["upvote", "downvote"]);
 
 // Nigerian Administrative Structure
 export const states = pgTable("states", {
@@ -313,6 +315,95 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Ideas System
+export const ideas = pgTable("ideas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull(), // politics, infrastructure, education, health, economy, youth, security, other
+  status: ideaStatusEnum("status").default("pending"),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  votesCount: integer("votes_count").default(0),
+  commentsCount: integer("comments_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const ideaVotes = pgTable("idea_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ideaId: varchar("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  voteType: voteTypeEnum("vote_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const ideaComments = pgTable("idea_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ideaId: varchar("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Knowledge Base
+export const knowledgeCategories = pgTable("knowledge_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  icon: text("icon"), // lucide icon name
+  order: integer("order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const knowledgeArticles = pgTable("knowledge_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: varchar("category_id").notNull().references(() => knowledgeCategories.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  content: text("content").notNull(), // markdown content
+  summary: text("summary"),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  published: boolean("published").default(false),
+  viewsCount: integer("views_count").default(0),
+  helpfulCount: integer("helpful_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const faqs = pgTable("faqs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: varchar("category_id").references(() => knowledgeCategories.id, { onDelete: "set null" }),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  order: integer("order").default(0),
+  published: boolean("published").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const articleFeedback = pgTable("article_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => knowledgeArticles.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  helpful: boolean("helpful").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Chatbot
+export const chatbotConversations = pgTable("chatbot_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").references(() => members.id, { onDelete: "set null" }), // nullable for anonymous
+  sessionId: text("session_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const chatbotMessages = pgTable("chatbot_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => chatbotConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // user or assistant
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const statesRelations = relations(states, ({ many }) => ({
   lgas: many(lgas),
@@ -341,6 +432,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [members.userId],
   }),
   newsPosts: many(newsPosts),
+  knowledgeArticles: many(knowledgeArticles),
 }));
 
 export const membersRelations = relations(members, ({ one, many }) => ({
@@ -364,6 +456,11 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   incidents: many(incidents),
   postEngagement: many(postEngagement),
   notifications: many(notifications),
+  ideas: many(ideas),
+  ideaVotes: many(ideaVotes),
+  ideaComments: many(ideaComments),
+  articleFeedback: many(articleFeedback),
+  chatbotConversations: many(chatbotConversations),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -567,6 +664,87 @@ export const membershipDuesRelations = relations(membershipDues, ({ one }) => ({
   }),
 }));
 
+export const ideasRelations = relations(ideas, ({ one, many }) => ({
+  member: one(members, {
+    fields: [ideas.memberId],
+    references: [members.id],
+  }),
+  votes: many(ideaVotes),
+  comments: many(ideaComments),
+}));
+
+export const ideaVotesRelations = relations(ideaVotes, ({ one }) => ({
+  idea: one(ideas, {
+    fields: [ideaVotes.ideaId],
+    references: [ideas.id],
+  }),
+  member: one(members, {
+    fields: [ideaVotes.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const ideaCommentsRelations = relations(ideaComments, ({ one }) => ({
+  idea: one(ideas, {
+    fields: [ideaComments.ideaId],
+    references: [ideas.id],
+  }),
+  member: one(members, {
+    fields: [ideaComments.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const knowledgeCategoriesRelations = relations(knowledgeCategories, ({ many }) => ({
+  articles: many(knowledgeArticles),
+  faqs: many(faqs),
+}));
+
+export const knowledgeArticlesRelations = relations(knowledgeArticles, ({ one, many }) => ({
+  category: one(knowledgeCategories, {
+    fields: [knowledgeArticles.categoryId],
+    references: [knowledgeCategories.id],
+  }),
+  author: one(users, {
+    fields: [knowledgeArticles.authorId],
+    references: [users.id],
+  }),
+  feedback: many(articleFeedback),
+}));
+
+export const faqsRelations = relations(faqs, ({ one }) => ({
+  category: one(knowledgeCategories, {
+    fields: [faqs.categoryId],
+    references: [knowledgeCategories.id],
+  }),
+}));
+
+export const articleFeedbackRelations = relations(articleFeedback, ({ one }) => ({
+  article: one(knowledgeArticles, {
+    fields: [articleFeedback.articleId],
+    references: [knowledgeArticles.id],
+  }),
+  member: one(members, {
+    fields: [articleFeedback.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const chatbotConversationsRelations = relations(chatbotConversations, ({ one, many }) => ({
+  member: one(members, {
+    fields: [chatbotConversations.memberId],
+    references: [members.id],
+  }),
+  messages: many(chatbotMessages),
+}));
+
+export const chatbotMessagesRelations = relations(chatbotMessages, ({ one }) => ({
+  conversation: one(chatbotConversations, {
+    fields: [chatbotMessages.conversationId],
+    references: [chatbotConversations.id],
+  }),
+}));
+
 // Insert & Select Schemas
 export const insertStateSchema = createInsertSchema(states).omit({ id: true, createdAt: true });
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
@@ -588,6 +766,15 @@ export const insertMicroTaskSchema = createInsertSchema(microTasks).omit({ id: t
 export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, createdAt: true });
 export const insertNewsPostSchema = createInsertSchema(newsPosts).omit({ id: true, publishedAt: true, likes: true, comments: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export const insertIdeaSchema = createInsertSchema(ideas).omit({ id: true, createdAt: true, votesCount: true, commentsCount: true });
+export const insertIdeaVoteSchema = createInsertSchema(ideaVotes).omit({ id: true, createdAt: true });
+export const insertIdeaCommentSchema = createInsertSchema(ideaComments).omit({ id: true, createdAt: true });
+export const insertKnowledgeCategorySchema = createInsertSchema(knowledgeCategories).omit({ id: true, createdAt: true });
+export const insertKnowledgeArticleSchema = createInsertSchema(knowledgeArticles).omit({ id: true, createdAt: true, updatedAt: true, viewsCount: true, helpfulCount: true });
+export const insertFaqSchema = createInsertSchema(faqs).omit({ id: true, createdAt: true });
+export const insertArticleFeedbackSchema = createInsertSchema(articleFeedback).omit({ id: true, createdAt: true });
+export const insertChatbotConversationSchema = createInsertSchema(chatbotConversations).omit({ id: true, createdAt: true });
+export const insertChatbotMessageSchema = createInsertSchema(chatbotMessages).omit({ id: true, createdAt: true });
 export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, createdAt: true });
 
 // Types
@@ -627,3 +814,21 @@ export type InsertNewsPost = z.infer<typeof insertNewsPostSchema>;
 export type NewsPost = typeof newsPosts.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+export type InsertIdea = z.infer<typeof insertIdeaSchema>;
+export type Idea = typeof ideas.$inferSelect;
+export type InsertIdeaVote = z.infer<typeof insertIdeaVoteSchema>;
+export type IdeaVote = typeof ideaVotes.$inferSelect;
+export type InsertIdeaComment = z.infer<typeof insertIdeaCommentSchema>;
+export type IdeaComment = typeof ideaComments.$inferSelect;
+export type InsertKnowledgeCategory = z.infer<typeof insertKnowledgeCategorySchema>;
+export type KnowledgeCategory = typeof knowledgeCategories.$inferSelect;
+export type InsertKnowledgeArticle = z.infer<typeof insertKnowledgeArticleSchema>;
+export type KnowledgeArticle = typeof knowledgeArticles.$inferSelect;
+export type InsertFaq = z.infer<typeof insertFaqSchema>;
+export type Faq = typeof faqs.$inferSelect;
+export type InsertArticleFeedback = z.infer<typeof insertArticleFeedbackSchema>;
+export type ArticleFeedback = typeof articleFeedback.$inferSelect;
+export type InsertChatbotConversation = z.infer<typeof insertChatbotConversationSchema>;
+export type ChatbotConversation = typeof chatbotConversations.$inferSelect;
+export type InsertChatbotMessage = z.infer<typeof insertChatbotMessageSchema>;
+export type ChatbotMessage = typeof chatbotMessages.$inferSelect;

@@ -1831,6 +1831,630 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Ideas Endpoints
+  app.get("/api/ideas", async (req: Request, res: Response) => {
+    try {
+      const { category, status, sortBy = "date", limit = "20", offset = "0" } = req.query;
+      
+      let query = db.query.ideas.findMany({
+        with: {
+          member: { with: { user: true } },
+          votes: true,
+          comments: { with: { member: { with: { user: true } } } }
+        },
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        orderBy: sortBy === "votes" ? desc(schema.ideas.votesCount) : desc(schema.ideas.createdAt)
+      });
+
+      let ideas = await query;
+
+      if (category) {
+        ideas = ideas.filter(idea => idea.category === category);
+      }
+
+      if (status) {
+        ideas = ideas.filter(idea => idea.status === status);
+      }
+
+      res.json({ success: true, data: ideas });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch ideas" });
+    }
+  });
+
+  app.get("/api/ideas/:id", async (req: Request, res: Response) => {
+    try {
+      const idea = await db.query.ideas.findFirst({
+        where: eq(schema.ideas.id, req.params.id),
+        with: {
+          member: { with: { user: true } },
+          votes: { with: { member: { with: { user: true } } } },
+          comments: { 
+            with: { member: { with: { user: true } } },
+            orderBy: desc(schema.ideaComments.createdAt)
+          }
+        }
+      });
+
+      if (!idea) {
+        return res.status(404).json({ success: false, error: "Idea not found" });
+      }
+
+      res.json({ success: true, data: idea });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch idea" });
+    }
+  });
+
+  app.post("/api/ideas", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const ideaData = schema.insertIdeaSchema.parse({
+        ...req.body,
+        memberId: member.id
+      });
+
+      const [idea] = await db.insert(schema.ideas).values(ideaData).returning();
+      res.json({ success: true, data: idea });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create idea" });
+    }
+  });
+
+  app.patch("/api/ideas/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const idea = await db.query.ideas.findFirst({
+        where: eq(schema.ideas.id, req.params.id),
+        with: { member: true }
+      });
+
+      if (!idea) {
+        return res.status(404).json({ success: false, error: "Idea not found" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (idea.member.userId !== req.user!.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      const [updated] = await db.update(schema.ideas)
+        .set(req.body)
+        .where(eq(schema.ideas.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update idea" });
+    }
+  });
+
+  app.delete("/api/ideas/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const idea = await db.query.ideas.findFirst({
+        where: eq(schema.ideas.id, req.params.id),
+        with: { member: true }
+      });
+
+      if (!idea) {
+        return res.status(404).json({ success: false, error: "Idea not found" });
+      }
+
+      if (idea.member.userId !== req.user!.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      await db.delete(schema.ideas).where(eq(schema.ideas.id, req.params.id));
+      res.json({ success: true, data: { message: "Idea deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete idea" });
+    }
+  });
+
+  app.post("/api/ideas/:id/vote", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const { voteType } = req.body;
+
+      if (!["upvote", "downvote"].includes(voteType)) {
+        return res.status(400).json({ success: false, error: "Invalid vote type" });
+      }
+
+      const existingVote = await db.query.ideaVotes.findFirst({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.memberId, member.id)
+        )
+      });
+
+      if (existingVote) {
+        if (existingVote.voteType === voteType) {
+          return res.status(400).json({ success: false, error: "Already voted" });
+        }
+        await db.delete(schema.ideaVotes).where(eq(schema.ideaVotes.id, existingVote.id));
+      }
+
+      const [vote] = await db.insert(schema.ideaVotes).values({
+        ideaId: req.params.id,
+        memberId: member.id,
+        voteType
+      }).returning();
+
+      const upvotes = await db.query.ideaVotes.findMany({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.voteType, "upvote")
+        )
+      });
+
+      const downvotes = await db.query.ideaVotes.findMany({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.voteType, "downvote")
+        )
+      });
+
+      await db.update(schema.ideas)
+        .set({ votesCount: upvotes.length - downvotes.length })
+        .where(eq(schema.ideas.id, req.params.id));
+
+      res.json({ success: true, data: vote });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to vote on idea" });
+    }
+  });
+
+  app.delete("/api/ideas/:id/vote", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const vote = await db.query.ideaVotes.findFirst({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.memberId, member.id)
+        )
+      });
+
+      if (!vote) {
+        return res.status(404).json({ success: false, error: "Vote not found" });
+      }
+
+      await db.delete(schema.ideaVotes).where(eq(schema.ideaVotes.id, vote.id));
+
+      const upvotes = await db.query.ideaVotes.findMany({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.voteType, "upvote")
+        )
+      });
+
+      const downvotes = await db.query.ideaVotes.findMany({
+        where: and(
+          eq(schema.ideaVotes.ideaId, req.params.id),
+          eq(schema.ideaVotes.voteType, "downvote")
+        )
+      });
+
+      await db.update(schema.ideas)
+        .set({ votesCount: upvotes.length - downvotes.length })
+        .where(eq(schema.ideas.id, req.params.id));
+
+      res.json({ success: true, data: { message: "Vote removed successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to remove vote" });
+    }
+  });
+
+  app.post("/api/ideas/:id/comments", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const commentData = schema.insertIdeaCommentSchema.parse({
+        ...req.body,
+        ideaId: req.params.id,
+        memberId: member.id
+      });
+
+      const [comment] = await db.insert(schema.ideaComments).values(commentData).returning();
+
+      const commentsCount = await db.query.ideaComments.findMany({
+        where: eq(schema.ideaComments.ideaId, req.params.id)
+      });
+
+      await db.update(schema.ideas)
+        .set({ commentsCount: commentsCount.length })
+        .where(eq(schema.ideas.id, req.params.id));
+
+      res.json({ success: true, data: comment });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to add comment" });
+    }
+  });
+
+  app.patch("/api/ideas/:id/status", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { status } = req.body;
+
+      if (!["pending", "under_review", "approved", "rejected", "implemented"].includes(status)) {
+        return res.status(400).json({ success: false, error: "Invalid status" });
+      }
+
+      const [idea] = await db.update(schema.ideas)
+        .set({ status })
+        .where(eq(schema.ideas.id, req.params.id))
+        .returning();
+
+      if (!idea) {
+        return res.status(404).json({ success: false, error: "Idea not found" });
+      }
+
+      res.json({ success: true, data: idea });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update idea status" });
+    }
+  });
+
+  // Knowledge Base Endpoints
+  app.get("/api/knowledge/categories", async (req: Request, res: Response) => {
+    try {
+      const categories = await db.query.knowledgeCategories.findMany({
+        orderBy: asc(schema.knowledgeCategories.order)
+      });
+      res.json({ success: true, data: categories });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch categories" });
+    }
+  });
+
+  app.get("/api/knowledge/articles", async (req: Request, res: Response) => {
+    try {
+      const { category, published, limit = "20", offset = "0" } = req.query;
+
+      let articles = await db.query.knowledgeArticles.findMany({
+        with: {
+          category: true,
+          author: true
+        },
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        orderBy: desc(schema.knowledgeArticles.createdAt)
+      });
+
+      if (category) {
+        articles = articles.filter(article => article.categoryId === category);
+      }
+
+      if (published !== undefined) {
+        const isPublished = published === "true";
+        articles = articles.filter(article => article.published === isPublished);
+      }
+
+      res.json({ success: true, data: articles });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch articles" });
+    }
+  });
+
+  app.get("/api/knowledge/articles/:slug", async (req: Request, res: Response) => {
+    try {
+      const article = await db.query.knowledgeArticles.findFirst({
+        where: eq(schema.knowledgeArticles.slug, req.params.slug),
+        with: {
+          category: true,
+          author: true,
+          feedback: true
+        }
+      });
+
+      if (!article) {
+        return res.status(404).json({ success: false, error: "Article not found" });
+      }
+
+      res.json({ success: true, data: article });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch article" });
+    }
+  });
+
+  app.post("/api/knowledge/articles", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const articleData = schema.insertKnowledgeArticleSchema.parse({
+        ...req.body,
+        authorId: req.user!.id
+      });
+
+      const [article] = await db.insert(schema.knowledgeArticles).values(articleData).returning();
+      res.json({ success: true, data: article });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create article" });
+    }
+  });
+
+  app.patch("/api/knowledge/articles/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [article] = await db.update(schema.knowledgeArticles)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(schema.knowledgeArticles.id, req.params.id))
+        .returning();
+
+      if (!article) {
+        return res.status(404).json({ success: false, error: "Article not found" });
+      }
+
+      res.json({ success: true, data: article });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update article" });
+    }
+  });
+
+  app.delete("/api/knowledge/articles/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.knowledgeArticles).where(eq(schema.knowledgeArticles.id, req.params.id));
+      res.json({ success: true, data: { message: "Article deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete article" });
+    }
+  });
+
+  app.post("/api/knowledge/articles/:id/view", async (req: Request, res: Response) => {
+    try {
+      const article = await db.query.knowledgeArticles.findFirst({
+        where: eq(schema.knowledgeArticles.id, req.params.id)
+      });
+
+      if (!article) {
+        return res.status(404).json({ success: false, error: "Article not found" });
+      }
+
+      await db.update(schema.knowledgeArticles)
+        .set({ viewsCount: (article.viewsCount || 0) + 1 })
+        .where(eq(schema.knowledgeArticles.id, req.params.id));
+
+      res.json({ success: true, data: { message: "View count incremented" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to increment view count" });
+    }
+  });
+
+  app.post("/api/knowledge/articles/:id/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const { helpful } = req.body;
+
+      const existingFeedback = await db.query.articleFeedback.findFirst({
+        where: and(
+          eq(schema.articleFeedback.articleId, req.params.id),
+          eq(schema.articleFeedback.memberId, member.id)
+        )
+      });
+
+      if (existingFeedback) {
+        await db.delete(schema.articleFeedback).where(eq(schema.articleFeedback.id, existingFeedback.id));
+      }
+
+      const [feedback] = await db.insert(schema.articleFeedback).values({
+        articleId: req.params.id,
+        memberId: member.id,
+        helpful
+      }).returning();
+
+      const allFeedback = await db.query.articleFeedback.findMany({
+        where: eq(schema.articleFeedback.articleId, req.params.id)
+      });
+
+      const helpfulCount = allFeedback.filter(f => f.helpful).length;
+
+      await db.update(schema.knowledgeArticles)
+        .set({ helpfulCount })
+        .where(eq(schema.knowledgeArticles.id, req.params.id));
+
+      res.json({ success: true, data: feedback });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to submit feedback" });
+    }
+  });
+
+  app.get("/api/knowledge/faqs", async (req: Request, res: Response) => {
+    try {
+      const { category, published, limit = "50", offset = "0" } = req.query;
+
+      let faqs = await db.query.faqs.findMany({
+        with: { category: true },
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        orderBy: asc(schema.faqs.order)
+      });
+
+      if (category) {
+        faqs = faqs.filter(faq => faq.categoryId === category);
+      }
+
+      if (published !== undefined) {
+        const isPublished = published === "true";
+        faqs = faqs.filter(faq => faq.published === isPublished);
+      }
+
+      res.json({ success: true, data: faqs });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch FAQs" });
+    }
+  });
+
+  app.post("/api/knowledge/faqs", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const faqData = schema.insertFaqSchema.parse(req.body);
+      const [faq] = await db.insert(schema.faqs).values(faqData).returning();
+      res.json({ success: true, data: faq });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create FAQ" });
+    }
+  });
+
+  app.patch("/api/knowledge/faqs/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [faq] = await db.update(schema.faqs)
+        .set(req.body)
+        .where(eq(schema.faqs.id, req.params.id))
+        .returning();
+
+      if (!faq) {
+        return res.status(404).json({ success: false, error: "FAQ not found" });
+      }
+
+      res.json({ success: true, data: faq });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update FAQ" });
+    }
+  });
+
+  app.delete("/api/knowledge/faqs/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.faqs).where(eq(schema.faqs.id, req.params.id));
+      res.json({ success: true, data: { message: "FAQ deleted successfully" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete FAQ" });
+    }
+  });
+
+  app.get("/api/knowledge/search", async (req: Request, res: Response) => {
+    try {
+      const { q, limit = "20" } = req.query;
+
+      if (!q) {
+        return res.status(400).json({ success: false, error: "Search query required" });
+      }
+
+      const searchQuery = (q as string).toLowerCase();
+
+      const articles = await db.query.knowledgeArticles.findMany({
+        with: { category: true, author: true },
+        limit: parseInt(limit as string)
+      });
+
+      const faqs = await db.query.faqs.findMany({
+        with: { category: true },
+        limit: parseInt(limit as string)
+      });
+
+      const matchedArticles = articles.filter(article => 
+        article.title.toLowerCase().includes(searchQuery) ||
+        article.content.toLowerCase().includes(searchQuery) ||
+        (article.summary && article.summary.toLowerCase().includes(searchQuery))
+      );
+
+      const matchedFaqs = faqs.filter(faq =>
+        faq.question.toLowerCase().includes(searchQuery) ||
+        faq.answer.toLowerCase().includes(searchQuery)
+      );
+
+      res.json({
+        success: true,
+        data: {
+          articles: matchedArticles,
+          faqs: matchedFaqs
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Search failed" });
+    }
+  });
+
+  // Chatbot Endpoints
+  app.post("/api/chatbot/conversations", async (req: Request, res: Response) => {
+    try {
+      const { memberId, sessionId } = req.body;
+      const [conversation] = await db.insert(schema.chatbotConversations)
+        .values({ memberId, sessionId })
+        .returning();
+      res.json({ success: true, data: conversation });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to create conversation" });
+    }
+  });
+
+  app.get("/api/chatbot/conversations/:id", async (req: Request, res: Response) => {
+    try {
+      const conversation = await db.query.chatbotConversations.findFirst({
+        where: eq(schema.chatbotConversations.id, req.params.id),
+        with: {
+          messages: {
+            orderBy: asc(schema.chatbotMessages.createdAt)
+          }
+        }
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      res.json({ success: true, data: conversation });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch conversation" });
+    }
+  });
+
+  app.post("/api/chatbot/message", async (req: Request, res: Response) => {
+    try {
+      const { conversationId, content } = req.body;
+
+      const [userMessage] = await db.insert(schema.chatbotMessages)
+        .values({ conversationId, role: "user", content })
+        .returning();
+
+      const aiResponse = "I'm an AI assistant for APC Connect. How can I help you today?";
+
+      const [assistantMessage] = await db.insert(schema.chatbotMessages)
+        .values({ conversationId, role: "assistant", content: aiResponse })
+        .returning();
+
+      res.json({
+        success: true,
+        data: {
+          userMessage,
+          assistantMessage
+        }
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, error: "Failed to send message" });
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("Client connected to situation room");
 
