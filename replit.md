@@ -60,13 +60,13 @@ Preferred communication style: Simple, everyday language.
 
 ### External Dependencies
 
-**Payment Processing**: Stripe integration for membership dues collection. Creates checkout sessions with webhook support for payment confirmation. Configured with Stripe API version 2024-12-18.acacia.
+**Payment Processing**: Paystack integration for membership dues collection and donations. Creates payment sessions with webhook support for payment confirmation. Optimized for Nigerian payment methods.
 
 **Geolocation**: Planned integration with Mapbox for event navigation and location-based ward assignment.
 
 **Blockchain**: Planned integration for election vote audit trails and tamper-proof voting records.
 
-**Payment Alternatives**: Designed to support Paystack/Flutterwave for Nigerian-specific payment processing (mentioned in requirements but not yet implemented).
+**Payment Gateway**: Fully integrated Paystack for Nigerian-specific payment processing (membership dues, donations, recurring payments).
 
 **Google Fonts**: Inter (UI/body text), Plus Jakarta Sans (display/headlines), JetBrains Mono (technical data/IDs) loaded via CDN.
 

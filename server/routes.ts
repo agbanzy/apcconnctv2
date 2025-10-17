@@ -6,7 +6,6 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import { Server as SocketIOServer } from "socket.io";
-import Stripe from "stripe";
 // @ts-ignore - No types available for paystack-api
 import Paystack from "paystack-api";
 import multer from "multer";
@@ -20,7 +19,6 @@ import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 
 const PgSession = ConnectPgSimple(session);
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2025-09-30.clover" });
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
 
 const openai = new OpenAI({
@@ -582,41 +580,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Dues verification error:", error);
       res.status(500).json({ success: false, error: "Failed to verify payment" });
-    }
-  });
-
-  app.post("/api/dues/stripe-webhook", async (req: Request, res: Response) => {
-    try {
-      const sig = req.headers["stripe-signature"] as string;
-      const event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET || ""
-      );
-
-      if (event.type === "checkout.session.completed") {
-        const session = event.data.object as any;
-        const { duesId, memberId } = session.metadata;
-
-        await db.update(schema.membershipDues)
-          .set({
-            paymentStatus: "completed",
-            stripePaymentId: session.payment_intent,
-            paidAt: new Date()
-          })
-          .where(eq(schema.membershipDues.id, duesId));
-
-        await db.insert(schema.notifications).values({
-          memberId,
-          title: "Payment Successful",
-          message: "Your membership dues payment has been confirmed!",
-          type: "dues_reminder"
-        });
-      }
-
-      res.json({ received: true });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Webhook error" });
     }
   });
 
@@ -3643,118 +3606,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Payment verification error:", error);
       res.status(500).json({ success: false, error: "Failed to verify payment" });
-    }
-  });
-
-  app.post("/api/donations/webhook", async (req: Request, res: Response) => {
-    const sig = req.headers["stripe-signature"] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (err: any) {
-      console.error("Webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    try {
-      if (event.type === "checkout.session.completed") {
-        const session = event.data.object as any;
-        const { donationId, campaignId, isRecurring, memberId } = session.metadata;
-
-        await db.update(schema.donations)
-          .set({ 
-            paymentStatus: "completed",
-            stripePaymentIntentId: session.payment_intent || session.subscription || session.id
-          })
-          .where(eq(schema.donations.id, donationId));
-
-        const donation = await db.query.donations.findFirst({
-          where: eq(schema.donations.id, donationId)
-        });
-
-        if (campaignId && donation) {
-          await db.update(schema.donationCampaigns)
-            .set({ 
-              currentAmount: sql`${schema.donationCampaigns.currentAmount} + ${donation.amount}` 
-            })
-            .where(eq(schema.donationCampaigns.id, campaignId));
-        }
-
-        if (isRecurring === "true" && memberId && donation) {
-          const nextPaymentDate = new Date();
-          if (donation.recurringFrequency === "monthly") {
-            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-          } else if (donation.recurringFrequency === "quarterly") {
-            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 3);
-          } else if (donation.recurringFrequency === "yearly") {
-            nextPaymentDate.setFullYear(nextPaymentDate.getFullYear() + 1);
-          }
-
-          await db.insert(schema.recurringDonations).values({
-            donationId,
-            memberId,
-            campaignId: campaignId || null,
-            amount: donation.amount,
-            frequency: donation.recurringFrequency!,
-            status: "active",
-            nextPaymentDate,
-            stripeSubscriptionId: (session as any).subscription || null,
-          });
-        }
-      } else if (event.type === "invoice.payment_succeeded" && (event.data.object as any).subscription) {
-        const invoice = event.data.object as any;
-        const subscriptionId = invoice.subscription;
-
-        const recurring = await db.query.recurringDonations.findFirst({
-          where: eq(schema.recurringDonations.stripeSubscriptionId, subscriptionId)
-        });
-
-        if (recurring) {
-          const [newDonation] = await db.insert(schema.donations).values({
-            memberId: recurring.memberId,
-            campaignId: recurring.campaignId,
-            amount: recurring.amount,
-            currency: "NGN",
-            paymentMethod: "stripe",
-            paymentStatus: "completed",
-            stripePaymentIntentId: invoice.payment_intent,
-            isRecurring: true,
-            recurringFrequency: recurring.frequency,
-          }).returning();
-
-          if (recurring.campaignId) {
-            await db.update(schema.donationCampaigns)
-              .set({ 
-                currentAmount: sql`${schema.donationCampaigns.currentAmount} + ${recurring.amount}` 
-              })
-              .where(eq(schema.donationCampaigns.id, recurring.campaignId));
-          }
-
-          const nextPaymentDate = new Date();
-          if (recurring.frequency === "monthly") {
-            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-          } else if (recurring.frequency === "quarterly") {
-            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 3);
-          } else if (recurring.frequency === "yearly") {
-            nextPaymentDate.setFullYear(nextPaymentDate.getFullYear() + 1);
-          }
-
-          await db.update(schema.recurringDonations)
-            .set({ 
-              nextPaymentDate,
-              updatedAt: new Date()
-            })
-            .where(eq(schema.recurringDonations.id, recurring.id));
-        }
-      }
-
-      res.json({ received: true });
-    } catch (error) {
-      console.error("Webhook processing error:", error);
-      res.status(500).json({ error: "Webhook processing failed" });
     }
   });
 

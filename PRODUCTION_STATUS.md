@@ -200,12 +200,12 @@ APC Connect is a comprehensive political engagement platform for Nigeria's All P
 - ✅ Cross-device session support
 
 ### 22. Payment Integration
-- ✅ Paystack integration (primary payment processor)
-- ✅ Stripe integration (alternative payment option)
+- ✅ Paystack integration (Nigerian payment processor)
 - ✅ Webhook handling for payment confirmation
 - ✅ Payment status tracking
 - ✅ Transaction history
 - ✅ Automatic receipt generation
+- ✅ Support for membership dues and donations
 
 ---
 
@@ -359,7 +359,7 @@ APC Connect is a comprehensive political engagement platform for Nigeria's All P
 | **Authentication** | Passport.js + express-session |
 | **State Management** | TanStack Query (React Query) |
 | **Real-time** | Socket.IO |
-| **Payments** | Paystack (primary) + Stripe |
+| **Payments** | Paystack (Nigerian payment gateway) |
 | **AI** | OpenAI API (via Replit integration) |
 | **Routing** | Wouter (client-side) |
 | **Forms** | React Hook Form + Zod validation |
