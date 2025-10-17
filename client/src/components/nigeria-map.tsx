@@ -101,19 +101,19 @@ export function NigeriaMap({
     switch (selectedMode) {
       case 'members':
         value = state.memberCount;
-        max = Math.max(...(data?.states.map(s => s.memberCount) || [1]));
+        max = Math.max(...(data?.states?.map(s => s.memberCount) || [1]));
         break;
       case 'events':
         value = state.upcomingEvents;
-        max = Math.max(...(data?.states.map(s => s.upcomingEvents) || [1]));
+        max = Math.max(...(data?.states?.map(s => s.upcomingEvents) || [1]));
         break;
       case 'campaigns':
         value = state.activeCampaigns;
-        max = Math.max(...(data?.states.map(s => s.activeCampaigns) || [1]));
+        max = Math.max(...(data?.states?.map(s => s.activeCampaigns) || [1]));
         break;
       case 'activity':
         value = state.memberCount + state.upcomingEvents + state.activeCampaigns;
-        max = Math.max(...(data?.states.map(s => 
+        max = Math.max(...(data?.states?.map(s => 
           s.memberCount + s.upcomingEvents + s.activeCampaigns
         ) || [1]));
         break;
@@ -128,7 +128,7 @@ export function NigeriaMap({
   };
 
   const getStateData = (stateName: string): StateData | undefined => {
-    return data?.states.find(s => s.name === stateName);
+    return data?.states?.find(s => s.name === stateName);
   };
 
   const handleStateClick = (stateName: string) => {
@@ -294,7 +294,7 @@ export function NigeriaMap({
               </div>
             </div>
             <Badge variant="outline" data-testid="text-total-states">
-              {data?.states.length || 0} States
+              {data?.states?.length || 0} States
             </Badge>
           </div>
         </Card>

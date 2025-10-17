@@ -2085,8 +2085,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(schema.members);
 
       const totalEngagementPoints = await db
-        .select({ total: sql<number>`COALESCE(SUM(${schema.points.amount}), 0)` })
-        .from(schema.points);
+        .select({ total: sql<number>`COALESCE(SUM(${schema.userPoints.amount}), 0)` })
+        .from(schema.userPoints);
 
       res.json({
         success: true,

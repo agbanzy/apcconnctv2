@@ -588,12 +588,8 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   recurringDonations: many(recurringDonations),
   newsComments: many(newsComments),
   newsCommentLikes: many(newsCommentLikes),
-  referrals: many(referrals, { relationName: "referrer" }),
-  referredBy: one(members, {
-    fields: [members.referredBy],
-    references: [members.id],
-    relationName: "referredBy"
-  }),
+  referralsMade: many(referrals, { relationName: "referrer" }),
+  referralsReceived: many(referrals, { relationName: "referred" }),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -827,7 +823,7 @@ export const membershipDuesRelations = relations(membershipDues, ({ one }) => ({
 }));
 
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
-  member: one(members, {
+  author: one(members, {
     fields: [ideas.memberId],
     references: [members.id],
   }),
