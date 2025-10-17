@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,6 +116,7 @@ function App() {
           <AuthProvider>
             <AppContent />
             <Toaster />
+            <PWAInstallPrompt />
           </AuthProvider>
         </ThemeProvider>
       </TooltipProvider>

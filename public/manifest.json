@@ -1,0 +1,62 @@
+{
+  "name": "APC Connect - Political Engagement Platform",
+  "short_name": "APC Connect",
+  "description": "All Progressives Congress political engagement platform for Nigerian youth. Join, vote, learn, and engage in democratic processes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#8FA658",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["politics", "social", "government"],
+  "shortcuts": [
+    {
+      "name": "Elections",
+      "short_name": "Vote",
+      "description": "Participate in electronic primaries",
+      "url": "/elections",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Events",
+      "short_name": "Events",
+      "description": "View and RSVP to events",
+      "url": "/events",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "News",
+      "short_name": "News",
+      "description": "Read latest party news",
+      "url": "/news",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ]
+}
