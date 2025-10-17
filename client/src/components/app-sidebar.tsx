@@ -77,7 +77,7 @@ const engagementItems = [
   },
   {
     title: "Invite & Earn",
-    url: "/referrals",
+    url: "/invite-earn",
     icon: UserPlus,
   },
 ];
