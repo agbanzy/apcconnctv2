@@ -3731,9 +3731,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
 
-      if (recurring.stripeSubscriptionId) {
-        await stripe.subscriptions.cancel(recurring.stripeSubscriptionId);
-      }
+      // Note: Paystack handles recurring donations differently than Stripe subscriptions.
+      // With Paystack, we initiate charges on the nextPaymentDate, so cancellation
+      // simply means updating our database to stop initiating future charges.
+      // No Paystack API call needed for cancellation.
 
       const [updated] = await db.update(schema.recurringDonations)
         .set({ 
@@ -3856,17 +3857,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ success: false, error: "Can only refund completed donations" });
       }
 
-      if (!donation.stripePaymentIntentId) {
-        return res.status(400).json({ success: false, error: "No payment intent found" });
-      }
-
-      try {
-        await stripe.refunds.create({
-          payment_intent: donation.stripePaymentIntentId,
+      // Process Paystack refund if payment was via Paystack
+      if (donation.paymentMethod === "paystack" && donation.paystackReference) {
+        try {
+          await paystack.refund.create({
+            transaction: donation.paystackReference,
+            amount: donation.amount, // amount in kobo
+          });
+        } catch (paystackError: any) {
+          console.error("Paystack refund error:", paystackError);
+          return res.status(400).json({ success: false, error: "Paystack refund failed: " + paystackError.message });
+        }
+      } else if (donation.paymentMethod !== "paystack") {
+        // For bank transfers or other payment methods, manual refund required
+        return res.status(400).json({ 
+          success: false, 
+          error: "Automated refunds only available for Paystack payments. Please process manual refund." 
         });
-      } catch (stripeError: any) {
-        console.error("Stripe refund error:", stripeError);
-        return res.status(400).json({ success: false, error: "Stripe refund failed: " + stripeError.message });
+      } else {
+        return res.status(400).json({ success: false, error: "No payment reference found for refund" });
       }
 
       const [updated] = await db.update(schema.donations)
