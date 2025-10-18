@@ -18,6 +18,7 @@ import * as schema from "@shared/schema";
 import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 import { emailService } from "./email-service";
+import { smsService } from "./sms-service";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -228,6 +229,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const member = await db.query.members.findFirst({
           where: eq(schema.members.userId, user.id)
         });
+
+        // SMS INTEGRATION POINT: Send OTP for two-factor authentication
+        // Uncomment the following code when ready to enable 2FA with SMS:
+        /*
+        if (user.phone) {
+          const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+          // Store OTP in database or cache (e.g., Redis) with expiry
+          await smsService.sendOTPSMS(user.phone, otpCode);
+          // Return response requiring OTP verification before completing login
+        }
+        */
 
         return res.json({ success: true, data: { user, member } });
       });
@@ -501,6 +513,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .values(duesData)
         .returning();
 
+      // SMS INTEGRATION POINT: Send dues reminder SMS to member
+      // Uncomment the following code when ready to send dues reminder SMS:
+      /*
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.id, req.user!.id)
+      });
+
+      if (user?.phone) {
+        const dueDate = new Date(dues.dueDate).toLocaleDateString('en-NG', { 
+          month: 'short', 
+          day: 'numeric' 
+        });
+        await smsService.sendDuesReminderSMS(user.phone, {
+          name: user.firstName,
+          amount: `₦${Number(dues.amount) / 100}`,
+          dueDate: dueDate
+        });
+      }
+      */
+
       res.json({ success: true, data: dues });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create dues record" });
@@ -724,6 +756,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       */
 
+      // SMS INTEGRATION POINT: Send event reminder SMS to members with phone numbers
+      // Uncomment the following code when ready to send event SMS notifications:
+      /*
+      // Fetch all active members with phone numbers for SMS notifications
+      const members = await db.query.members.findMany({
+        where: eq(schema.members.status, "active"),
+        with: { user: true }
+      });
+
+      // Send event reminder SMS to members (consider using a job queue for large lists)
+      // IMPORTANT: Implement rate limiting to prevent SMS spam
+      for (const member of members) {
+        const user = Array.isArray(member.user) ? member.user[0] : member.user;
+        if (user?.phone) {
+          const eventDate = new Date(event.date).toLocaleDateString('en-NG', { 
+            month: 'short', 
+            day: 'numeric' 
+          });
+          await smsService.sendEventReminderSMS(user.phone, {
+            name: user.firstName,
+            event: event.title,
+            date: eventDate,
+            location: event.location
+          });
+        }
+      }
+      */
+
       res.json({ success: true, data: event });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create event" });
@@ -913,6 +973,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               minute: '2-digit' 
             }),
             electionDescription: election.description || ''
+          });
+        }
+      }
+      */
+
+      // SMS INTEGRATION POINT: Send election notice SMS to members with phone numbers
+      // Uncomment the following code when ready to send election SMS notifications:
+      /*
+      // Fetch all active members eligible to vote with phone numbers
+      const members = await db.query.members.findMany({
+        where: eq(schema.members.status, "active"),
+        with: { user: true }
+      });
+
+      // Send election notice SMS to members (consider using a job queue for large lists)
+      // IMPORTANT: Implement rate limiting to prevent SMS spam
+      for (const member of members) {
+        const user = Array.isArray(member.user) ? member.user[0] : member.user;
+        if (user?.phone) {
+          const startDate = new Date(election.startDate).toLocaleDateString('en-NG', { 
+            month: 'short', 
+            day: 'numeric' 
+          });
+          await smsService.sendElectionNoticeSMS(user.phone, {
+            name: user.firstName,
+            election: election.title,
+            date: startDate
           });
         }
       }
