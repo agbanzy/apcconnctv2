@@ -17,6 +17,7 @@ import { pool } from "./db";
 import * as schema from "@shared/schema";
 import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
+import { emailService } from "./email-service";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -186,6 +187,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pointsEarned: 0
         });
       }
+
+      // EMAIL INTEGRATION POINT: Send welcome email to new member
+      // Uncomment the following code when ready to send welcome emails:
+      /*
+      await emailService.sendWelcomeEmail({
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        memberId: member.memberId,
+        referralCode: member.referralCode
+      });
+      */
 
       req.login(user, (err) => {
         if (err) {
@@ -677,6 +690,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const eventData = schema.insertEventSchema.parse(req.body);
       const [event] = await db.insert(schema.events).values(eventData).returning();
+
+      // EMAIL INTEGRATION POINT: Send event notification to all members
+      // Uncomment the following code when ready to send event notifications:
+      /*
+      // Fetch all active members to send event notifications
+      const members = await db.query.members.findMany({
+        where: eq(schema.members.status, "active"),
+        with: { user: true }
+      });
+
+      // Send event reminder emails to all members (consider using a job queue for large lists)
+      for (const member of members) {
+        const user = Array.isArray(member.user) ? member.user[0] : member.user;
+        if (user?.email) {
+          await emailService.sendEventReminderEmail(user.email, {
+            firstName: user.firstName,
+            eventTitle: event.title,
+            eventDate: new Date(event.date).toLocaleDateString('en-NG', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            }),
+            eventTime: new Date(event.date).toLocaleTimeString('en-NG', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }),
+            eventLocation: event.location,
+            eventDescription: event.description || ''
+          });
+        }
+      }
+      */
+
       res.json({ success: true, data: event });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create event" });
@@ -834,6 +881,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const electionData = schema.insertElectionSchema.parse(req.body);
       const [election] = await db.insert(schema.elections).values(electionData).returning();
+
+      // EMAIL INTEGRATION POINT: Send election notification to all eligible members
+      // Uncomment the following code when ready to send election notifications:
+      /*
+      // Fetch all active members eligible to vote
+      const members = await db.query.members.findMany({
+        where: eq(schema.members.status, "active"),
+        with: { user: true }
+      });
+
+      // Send election notification emails to all eligible members (consider using a job queue for large lists)
+      for (const member of members) {
+        const user = Array.isArray(member.user) ? member.user[0] : member.user;
+        if (user?.email) {
+          await emailService.sendElectionNotificationEmail(user.email, {
+            firstName: user.firstName,
+            electionTitle: election.title,
+            electionDate: new Date(election.startDate).toLocaleDateString('en-NG', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            }),
+            votingStartTime: new Date(election.startDate).toLocaleTimeString('en-NG', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }),
+            votingEndTime: new Date(election.endDate).toLocaleTimeString('en-NG', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }),
+            electionDescription: election.description || ''
+          });
+        }
+      }
+      */
+
       res.json({ success: true, data: election });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create election" });
@@ -4882,6 +4966,54 @@ Be friendly, informative, and politically neutral when discussing governance. En
     } catch (error) {
       console.error("Donations export error:", error);
       res.status(500).json({ success: false, error: "Failed to export donations data" });
+    }
+  });
+
+  // TEST ENDPOINT: Email service verification
+  // This endpoint tests all three email templates
+  // Remove or comment out in production
+  app.get("/api/test/email-service", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      console.log("\n========== TESTING EMAIL SERVICE ==========\n");
+      
+      // Test welcome email
+      await emailService.sendWelcomeEmail({
+        firstName: "John",
+        lastName: "Doe",
+        email: "john.doe@example.com",
+        memberId: "APC-2025-NG-12345",
+        referralCode: "APCJOH1A2B3"
+      });
+      
+      // Test event reminder email
+      await emailService.sendEventReminderEmail("john.doe@example.com", {
+        firstName: "John",
+        eventTitle: "APC Youth Rally 2025",
+        eventDate: "Saturday, January 25, 2025",
+        eventTime: "10:00 AM",
+        eventLocation: "Eagle Square, Abuja",
+        eventDescription: "Join us for the biggest youth rally of the year! Meet party leaders, network with fellow members, and learn about our vision for Nigeria's future."
+      });
+      
+      // Test election notification email
+      await emailService.sendElectionNotificationEmail("john.doe@example.com", {
+        firstName: "John",
+        electionTitle: "Ward Chairman Election 2025",
+        electionDate: "Monday, February 10, 2025",
+        votingStartTime: "08:00 AM",
+        votingEndTime: "05:00 PM",
+        electionDescription: "Vote for your ward chairman to represent your interests at the local government level. Your voice matters in shaping the leadership of our party."
+      });
+      
+      console.log("\n========== EMAIL SERVICE TEST COMPLETE ==========\n");
+      
+      res.json({ 
+        success: true, 
+        message: "Email service test completed. Check server logs for email previews."
+      });
+    } catch (error) {
+      console.error("Email service test error:", error);
+      res.status(500).json({ success: false, error: "Email service test failed" });
     }
   });
 
