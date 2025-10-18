@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Users, 
   Vote, 
@@ -10,7 +12,8 @@ import {
   TrendingUp,
   Plus,
   FileText,
-  Activity
+  Activity,
+  Download
 } from "lucide-react";
 import { 
   LineChart, 
@@ -30,9 +33,62 @@ import {
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
 export default function AdminDashboard() {
+  const { toast } = useToast();
+  const [exportingMembers, setExportingMembers] = useState(false);
+  const [exportingVotes, setExportingVotes] = useState(false);
+  const [exportingDonations, setExportingDonations] = useState(false);
+
   const { data: overview, isLoading } = useQuery({
     queryKey: ["/api/analytics/overview"],
   });
+
+  const handleExport = async (type: 'members' | 'votes' | 'donations') => {
+    const setters = {
+      members: setExportingMembers,
+      votes: setExportingVotes,
+      donations: setExportingDonations
+    };
+
+    try {
+      setters[type](true);
+      const response = await fetch(`/api/admin/export/${type}`, {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to export ${type}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch ? filenameMatch[1] : `${type}_export_${Date.now()}.csv`;
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Export successful",
+        description: `${type.charAt(0).toUpperCase() + type.slice(1)} data has been exported successfully.`
+      });
+    } catch (error) {
+      console.error(`Export ${type} error:`, error);
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : `Failed to export ${type} data`,
+        variant: "destructive"
+      });
+    } finally {
+      setters[type](false);
+    }
+  };
 
   const membersTrendData = [
     { month: 'Jan', members: 850 },
@@ -71,7 +127,7 @@ export default function AdminDashboard() {
     { id: 10, action: 'RSVP confirmed', user: 'Member', time: '8 hours ago' },
   ];
 
-  const stats = overview?.data || {
+  const stats = (overview as any)?.data || {
     totalMembers: 1450,
     activeElections: 3,
     upcomingEvents: 8,
@@ -200,6 +256,100 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card data-testid="card-data-export">
+        <CardHeader>
+          <CardTitle>Data Export</CardTitle>
+          <p className="text-sm text-muted-foreground">Download data in CSV format for reporting and analysis</p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-medium">Members Data</h3>
+                  <p className="text-xs text-muted-foreground">Export all member information</p>
+                </div>
+              </div>
+              <Button 
+                onClick={() => handleExport('members')}
+                disabled={exportingMembers}
+                className="w-full"
+                data-testid="button-export-members"
+              >
+                {exportingMembers ? (
+                  <>
+                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Members
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Vote className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-medium">Votes Data</h3>
+                  <p className="text-xs text-muted-foreground">Export election voting records</p>
+                </div>
+              </div>
+              <Button 
+                onClick={() => handleExport('votes')}
+                disabled={exportingVotes}
+                className="w-full"
+                data-testid="button-export-votes"
+              >
+                {exportingVotes ? (
+                  <>
+                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Votes
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-medium">Donations Data</h3>
+                  <p className="text-xs text-muted-foreground">Export donation transactions</p>
+                </div>
+              </div>
+              <Button 
+                onClick={() => handleExport('donations')}
+                disabled={exportingDonations}
+                className="w-full"
+                data-testid="button-export-donations"
+              >
+                {exportingDonations ? (
+                  <>
+                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Donations
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card data-testid="card-engagement-chart" className="md:col-span-1">

@@ -4745,6 +4745,146 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // CSV Helper Function
+  const convertToCSV = (data: any[], headers: string[]): string => {
+    if (data.length === 0) {
+      return headers.join(',') + '\n';
+    }
+
+    const escapeCSV = (value: any): string => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    const csvRows = [headers.join(',')];
+    
+    for (const row of data) {
+      const values = headers.map(header => escapeCSV(row[header]));
+      csvRows.push(values.join(','));
+    }
+
+    return csvRows.join('\n');
+  };
+
+  // Export Members Data
+  app.get("/api/admin/export/members", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const members = await db.query.members.findMany({
+        with: {
+          user: true,
+          ward: {
+            with: {
+              lga: {
+                with: { state: true }
+              }
+            }
+          }
+        },
+        orderBy: asc(schema.members.joinDate)
+      });
+
+      const csvData = members.map(member => {
+        const user = Array.isArray(member.user) ? member.user[0] : member.user;
+        const ward = Array.isArray(member.ward) ? member.ward[0] : member.ward;
+        const lga = ward && !Array.isArray(ward.lga) ? ward.lga : null;
+        const state = lga && !Array.isArray(lga.state) ? lga.state : null;
+
+        return {
+          id: member.id,
+          firstName: user?.firstName || '',
+          lastName: user?.lastName || '',
+          email: user?.email || '',
+          phone: user?.phone || '',
+          wardId: member.wardId,
+          lgaId: lga?.id || '',
+          stateId: state?.id || '',
+          membershipNumber: member.memberId,
+          ninVerified: member.nin ? 'Yes' : 'No',
+          createdAt: member.joinDate ? new Date(member.joinDate).toISOString() : ''
+        };
+      });
+
+      const headers = ['id', 'firstName', 'lastName', 'email', 'phone', 'wardId', 'lgaId', 'stateId', 'membershipNumber', 'ninVerified', 'createdAt'];
+      const csv = convertToCSV(csvData, headers);
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `members_export_${timestamp}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Members export error:", error);
+      res.status(500).json({ success: false, error: "Failed to export members data" });
+    }
+  });
+
+  // Export Votes Data
+  app.get("/api/admin/export/votes", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const votes = await db.query.votes.findMany({
+        orderBy: desc(schema.votes.castedAt)
+      });
+
+      const csvData = votes.map(vote => ({
+        electionId: vote.electionId,
+        candidateId: vote.candidateId,
+        voterId: vote.voterId,
+        timestamp: vote.castedAt ? new Date(vote.castedAt).toISOString() : '',
+        blockchainHash: vote.blockchainHash || ''
+      }));
+
+      const headers = ['electionId', 'candidateId', 'voterId', 'timestamp', 'blockchainHash'];
+      const csv = convertToCSV(csvData, headers);
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `votes_export_${timestamp}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Votes export error:", error);
+      res.status(500).json({ success: false, error: "Failed to export votes data" });
+    }
+  });
+
+  // Export Donations Data
+  app.get("/api/admin/export/donations", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const donations = await db.query.donations.findMany({
+        orderBy: desc(schema.donations.createdAt)
+      });
+
+      const csvData = donations.map(donation => ({
+        id: donation.id,
+        memberId: donation.memberId,
+        amount: donation.amount,
+        currency: donation.currency || 'NGN',
+        status: donation.paymentStatus || '',
+        paymentRef: donation.paystackReference || '',
+        createdAt: donation.createdAt ? new Date(donation.createdAt).toISOString() : ''
+      }));
+
+      const headers = ['id', 'memberId', 'amount', 'currency', 'status', 'paymentRef', 'createdAt'];
+      const csv = convertToCSV(csvData, headers);
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `donations_export_${timestamp}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Donations export error:", error);
+      res.status(500).json({ success: false, error: "Failed to export donations data" });
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("Client connected to situation room");
 
