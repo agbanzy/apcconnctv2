@@ -23,6 +23,7 @@ import {
   Award,
   GraduationCap,
   UserPlus,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,6 +57,11 @@ const coreMenuItems = [
     title: "News",
     url: "/news",
     icon: Newspaper,
+  },
+  {
+    title: "Search",
+    url: "/search",
+    icon: Search,
   },
 ];
 

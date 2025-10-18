@@ -40,6 +40,7 @@ import EventsGallery from "@/pages/events-gallery";
 import LeadershipBoard from "@/pages/leadership-board";
 import Tasks from "@/pages/tasks";
 import InviteEarn from "@/pages/invite-earn";
+import SearchPage from "@/pages/search";
 import NotFound from "@/pages/not-found";
 import { ChatbotWidget } from "@/components/chatbot-widget";
 
@@ -200,6 +201,7 @@ function AppContent() {
               <Route path="/tasks" component={() => <ProtectedRoute component={Tasks} />} />
               <Route path="/rewards" component={() => <ProtectedRoute component={Rewards} />} />
               <Route path="/invite-earn" component={() => <ProtectedRoute component={InviteEarn} />} />
+              <Route path="/search" component={() => <ProtectedRoute component={SearchPage} />} />
               <Route component={NotFound} />
             </Switch>
           </main>

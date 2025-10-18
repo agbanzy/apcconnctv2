@@ -4643,6 +4643,108 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // Advanced Search API
+  app.get("/api/search", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, category, limit = "20" } = req.query;
+      
+      if (!q || typeof q !== "string" || q.trim().length < 2) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Search query must be at least 2 characters" 
+        });
+      }
+
+      const searchTerm = `%${q.trim()}%`;
+      const searchLimit = Math.min(parseInt(limit as string) || 20, 50);
+      
+      const results: any = {
+        news: [],
+        events: [],
+        campaigns: [],
+        knowledgeBase: [],
+        ideas: [],
+        total: 0
+      };
+
+      // Search News if category matches or is not specified
+      if (!category || category === "news") {
+        const newsResults = await db.query.newsPosts.findMany({
+          where: sql`${schema.newsPosts.title} ILIKE ${searchTerm} OR ${schema.newsPosts.excerpt} ILIKE ${searchTerm}`,
+          limit: searchLimit,
+          orderBy: [desc(schema.newsPosts.publishedAt)],
+          with: {
+            author: true
+          }
+        });
+        results.news = newsResults;
+      }
+
+      // Search Events
+      if (!category || category === "events") {
+        const eventsResults = await db.query.events.findMany({
+          where: sql`${schema.events.title} ILIKE ${searchTerm} OR ${schema.events.description} ILIKE ${searchTerm}`,
+          limit: searchLimit,
+          orderBy: [desc(schema.events.date)]
+        });
+        results.events = eventsResults;
+      }
+
+      // Search Campaigns
+      if (!category || category === "campaigns") {
+        const campaignsResults = await db.query.issueCampaigns.findMany({
+          where: sql`${schema.issueCampaigns.title} ILIKE ${searchTerm} OR ${schema.issueCampaigns.description} ILIKE ${searchTerm}`,
+          limit: searchLimit,
+          orderBy: [desc(schema.issueCampaigns.createdAt)]
+        });
+        results.campaigns = campaignsResults;
+      }
+
+      // Search Knowledge Base
+      if (!category || category === "knowledge") {
+        const kbResults = await db.query.knowledgeBaseArticles.findMany({
+          where: sql`${schema.knowledgeBaseArticles.title} ILIKE ${searchTerm} OR ${schema.knowledgeBaseArticles.content} ILIKE ${searchTerm}`,
+          limit: searchLimit,
+          orderBy: [desc(schema.knowledgeBaseArticles.createdAt)]
+        });
+        results.knowledgeBase = kbResults;
+      }
+
+      // Search Ideas
+      if (!category || category === "ideas") {
+        const ideasResults = await db.query.ideas.findMany({
+          where: sql`${schema.ideas.title} ILIKE ${searchTerm} OR ${schema.ideas.description} ILIKE ${searchTerm}`,
+          limit: searchLimit,
+          orderBy: [desc(schema.ideas.createdAt)],
+          with: {
+            author: true
+          }
+        });
+        results.ideas = ideasResults;
+      }
+
+      // Calculate total results
+      results.total = 
+        results.news.length + 
+        results.events.length + 
+        results.campaigns.length + 
+        results.knowledgeBase.length +
+        results.ideas.length;
+
+      res.json({ 
+        success: true, 
+        data: {
+          query: q,
+          category: category || "all",
+          results
+        }
+      });
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ success: false, error: "Search failed" });
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("Client connected to situation room");
 
