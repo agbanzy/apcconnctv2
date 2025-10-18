@@ -63,6 +63,9 @@ export const members = pgTable("members", {
   userId: varchar("user_id").notNull().references(() => users.id),
   memberId: text("member_id").notNull().unique(), // e.g., APC-2024-NG-12345
   nin: text("nin"), // National Identification Number
+  ninVerified: boolean("nin_verified").default(false), // NIN verification status
+  ninVerificationAttempts: integer("nin_verification_attempts").default(0), // Number of verification attempts
+  ninVerifiedAt: timestamp("nin_verified_at"), // Timestamp when NIN was verified
   wardId: varchar("ward_id").notNull().references(() => wards.id),
   status: membershipStatusEnum("status").default("pending"),
   joinDate: timestamp("join_date").defaultNow(),

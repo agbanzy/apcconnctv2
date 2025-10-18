@@ -19,6 +19,7 @@ import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
+import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
