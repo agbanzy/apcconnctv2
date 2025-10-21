@@ -5260,10 +5260,10 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       // Search Knowledge Base
       if (!category || category === "knowledge") {
-        const kbResults = await db.query.knowledgeBaseArticles.findMany({
-          where: sql`${schema.knowledgeBaseArticles.title} ILIKE ${searchTerm} OR ${schema.knowledgeBaseArticles.content} ILIKE ${searchTerm}`,
+        const kbResults = await db.query.knowledgeArticles.findMany({
+          where: sql`${schema.knowledgeArticles.title} ILIKE ${searchTerm} OR ${schema.knowledgeArticles.content} ILIKE ${searchTerm}`,
           limit: searchLimit,
-          orderBy: [desc(schema.knowledgeBaseArticles.createdAt)]
+          orderBy: [desc(schema.knowledgeArticles.createdAt)]
         });
         results.knowledgeBase = kbResults;
       }

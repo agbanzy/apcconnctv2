@@ -334,11 +334,11 @@ class CronService {
     console.log("[CronService] Use cronService.executeJob(name) to manually trigger jobs");
     
     // Log registered jobs
-    for (const [name, job] of this.jobs) {
+    Array.from(this.jobs.entries()).forEach(([name, job]) => {
       if (job.config.enabled) {
         console.log(`  - ${name}: ${job.config.schedule} (${job.config.description})`);
       }
-    }
+    });
   }
 
   /**
