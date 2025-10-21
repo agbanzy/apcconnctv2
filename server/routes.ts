@@ -64,10 +64,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cors: { origin: "*" }
   });
 
+  // ============================================================================
+  // SESSION SECRET VALIDATION
+  // ============================================================================
+  // In production, SESSION_SECRET must be set and cannot use the default value
+  const SESSION_SECRET = process.env.SESSION_SECRET || "apc-connect-secret-key-2024";
+  const isProduction = process.env.NODE_ENV === "production";
+  const isDefaultSecret = SESSION_SECRET === "apc-connect-secret-key-2024";
+
+  if (isProduction) {
+    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+      console.error("\n" + "=".repeat(80));
+      console.error("CRITICAL SECURITY ERROR: SESSION_SECRET Not Configured");
+      console.error("=".repeat(80));
+      console.error("Production environment detected but SESSION_SECRET is not set or using default value.");
+      console.error("This is a critical security vulnerability that could compromise user sessions.");
+      console.error("");
+      console.error("To fix this:");
+      console.error("1. Generate a strong random secret:");
+      console.error("   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+      console.error("2. Set the SESSION_SECRET environment variable to this value");
+      console.error("3. Restart the application");
+      console.error("=".repeat(80) + "\n");
+      throw new Error("SESSION_SECRET must be set in production environment");
+    }
+  } else {
+    // Development mode warning
+    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+      console.warn("\n⚠️  WARNING: Using default SESSION_SECRET in development mode");
+      console.warn("   For production, set a secure SESSION_SECRET environment variable\n");
+    }
+  }
+  // ============================================================================
+
   app.use(
     session({
       store: new PgSession({ pool, createTableIfMissing: true }),
-      secret: process.env.SESSION_SECRET || "apc-connect-secret-key-2024",
+      secret: SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       cookie: {

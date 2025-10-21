@@ -38,9 +38,58 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch strategy: Network first, falling back to cache
-// For API calls, always try network first
-// For static assets, use cache first with network fallback
+// ============================================================================
+// FETCH STRATEGY WITH AUTHENTICATION-AWARE CACHING
+// ============================================================================
+// Network first for API calls, with special handling for authenticated requests
+// Cache first for static assets with network fallback
+// 
+// SECURITY CONSIDERATIONS:
+// - Authenticated API responses are NEVER cached to prevent data leakage
+// - Only public/unauthenticated endpoints can be cached
+// - Cache keys do not include user-specific data to prevent cross-user leakage
+// ============================================================================
+
+/**
+ * Check if a request includes authentication credentials
+ * @param {Request} request - The request to check
+ * @returns {boolean} True if request appears to be authenticated
+ */
+function isAuthenticatedRequest(request) {
+  // Check if request has cookies (session-based auth)
+  const hasCookies = request.headers.has('Cookie') || 
+                     document.cookie.length > 0;
+  
+  // Check if request has authorization header (token-based auth)
+  const hasAuthHeader = request.headers.has('Authorization');
+  
+  return hasCookies || hasAuthHeader;
+}
+
+/**
+ * Check if an API endpoint is public (safe to cache)
+ * @param {string} pathname - The request pathname
+ * @returns {boolean} True if endpoint is public and can be cached
+ */
+function isPublicEndpoint(pathname) {
+  // List of public endpoints that can be safely cached
+  const publicEndpoints = [
+    '/api/locations/states',
+    '/api/locations/states/',
+    '/api/locations/lgas/',
+    '/api/locations/wards/',
+    '/api/news',
+    '/api/events',
+    '/api/analytics/public-overview',
+    '/api/analytics/map-data',
+  ];
+  
+  // Check if pathname exactly matches or starts with a public endpoint
+  return publicEndpoints.some(endpoint => 
+    pathname === endpoint || pathname.startsWith(endpoint)
+  );
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -50,39 +99,74 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API requests: Network first, cache as fallback
+  // ============================================================================
+  // API REQUESTS: Network first with authentication-aware caching
+  // ============================================================================
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Clone the response before caching
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
+          // IMPORTANT: Only cache if this is a public endpoint AND
+          // the request does NOT include authentication
+          const isPublic = isPublicEndpoint(url.pathname);
+          const isAuthenticated = isAuthenticatedRequest(request);
+          const canCache = isPublic && !isAuthenticated && response.status === 200;
+          
+          if (canCache) {
+            // Safe to cache - this is a public endpoint without auth
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+            console.log('[SW] Cached public endpoint:', url.pathname);
+          } else {
+            // Do NOT cache authenticated or non-public responses
+            if (isAuthenticated) {
+              console.log('[SW] Skipping cache for authenticated request:', url.pathname);
+            }
+          }
+          
           return response;
         })
         .catch(() => {
-          return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            // Return offline page or error response
+          // Network failed - try to return cached version only for public endpoints
+          if (isPublicEndpoint(url.pathname) && !isAuthenticatedRequest(request)) {
+            return caches.match(request).then((cachedResponse) => {
+              if (cachedResponse) {
+                console.log('[SW] Serving cached public endpoint (offline):', url.pathname);
+                return cachedResponse;
+              }
+              
+              // No cached version available
+              return new Response(
+                JSON.stringify({ 
+                  success: false, 
+                  error: 'You are offline. Please check your internet connection.' 
+                }),
+                {
+                  status: 503,
+                  headers: { 'Content-Type': 'application/json' }
+                }
+              );
+            });
+          } else {
+            // Authenticated request failed and offline - cannot serve cached data
             return new Response(
               JSON.stringify({ 
                 success: false, 
-                error: 'You are offline. Please check your internet connection.' 
+                error: 'You are offline and this content requires authentication.' 
               }),
               {
                 status: 503,
                 headers: { 'Content-Type': 'application/json' }
               }
             );
-          });
+          }
         })
     );
     return;
   }
+  // ============================================================================
 
   // Static assets: Cache first, network fallback
   event.respondWith(

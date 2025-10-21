@@ -88,6 +88,99 @@ class EmailService {
     };
 
     this.templatesPath = path.join(__dirname, 'email-templates');
+
+    // Validate configuration and log warnings
+    this.validateConfiguration();
+  }
+
+  /**
+   * Validate email service configuration
+   * Logs warnings if running in simulation mode or missing required variables
+   */
+  private validateConfiguration(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (this.config.provider === 'console') {
+      if (isProduction) {
+        console.warn('\n⚠️  WARNING: Email service running in CONSOLE mode in production');
+        console.warn('   Emails will only be logged, not actually sent');
+        console.warn('   Set EMAIL_SERVICE_PROVIDER environment variable to use a real provider\n');
+      } else {
+        console.log('📧 Email Service: Console mode (simulation)');
+      }
+      return;
+    }
+
+    // Validate provider-specific configuration
+    if (this.config.provider === 'nodemailer') {
+      if (!this.config.smtp || !this.config.smtp.host || !this.config.smtp.user) {
+        console.error('\n❌ ERROR: Nodemailer provider selected but SMTP configuration is incomplete');
+        console.error('   Required: SMTP_HOST, SMTP_USER, SMTP_PASS');
+        console.error('   Falling back to console mode\n');
+        this.config.provider = 'console';
+      } else {
+        console.log(`📧 Email Service: Nodemailer (${this.config.smtp.host})`);
+      }
+    } else if (this.config.provider === 'sendgrid') {
+      if (!this.config.apiKey) {
+        console.error('\n❌ ERROR: SendGrid provider selected but EMAIL_SERVICE_API_KEY is not set');
+        console.error('   Falling back to console mode\n');
+        this.config.provider = 'console';
+      } else {
+        console.log('📧 Email Service: SendGrid');
+      }
+    } else if (this.config.provider === 'ses') {
+      if (!this.config.apiKey) {
+        console.error('\n❌ ERROR: SES provider selected but EMAIL_SERVICE_API_KEY is not set');
+        console.error('   Falling back to console mode\n');
+        this.config.provider = 'console';
+      } else {
+        console.log('📧 Email Service: Amazon SES');
+      }
+    }
+  }
+
+  /**
+   * Health check method to verify email service configuration
+   * @returns Object with health status and details
+   */
+  getHealthCheck(): {
+    status: 'ok' | 'warning' | 'error';
+    provider: string;
+    configured: boolean;
+    simulation: boolean;
+    message: string;
+  } {
+    const isSimulation = this.config.provider === 'console';
+    const isConfigured = !isSimulation;
+
+    if (isSimulation) {
+      return {
+        status: 'warning',
+        provider: 'console',
+        configured: false,
+        simulation: true,
+        message: 'Email service running in simulation mode - emails will not be sent'
+      };
+    }
+
+    // Check provider-specific configuration
+    let isValid = true;
+    if (this.config.provider === 'nodemailer') {
+      isValid = !!(this.config.smtp && this.config.smtp.host && this.config.smtp.user);
+    } else if (['sendgrid', 'ses'].includes(this.config.provider)) {
+      isValid = !!this.config.apiKey;
+    }
+
+    return {
+      status: isValid ? 'ok' : 'error',
+      provider: this.config.provider,
+      configured: isValid,
+      simulation: false,
+      message: isValid 
+        ? `Email service configured with ${this.config.provider}`
+        : `Email service configuration incomplete for ${this.config.provider}`
+    };
   }
 
   /**

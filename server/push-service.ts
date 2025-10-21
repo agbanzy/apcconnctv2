@@ -337,6 +337,7 @@ export class PushService {
   constructor() {
     this.provider = process.env.PUSH_SERVICE_PROVIDER || "none";
     this.initialize();
+    this.validateConfiguration();
   }
 
   /**
@@ -359,6 +360,67 @@ export class PushService {
         console.log("[PushService] No provider configured. Running in simulation mode.");
         this.initialized = true;
     }
+  }
+
+  /**
+   * Validate push service configuration
+   * Logs warnings if running in simulation mode or missing required variables
+   */
+  private validateConfiguration(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (this.provider === "none" || !this.initialized) {
+      if (isProduction) {
+        console.warn('\n⚠️  WARNING: Push notification service running in SIMULATION mode in production');
+        console.warn('   Push notifications will only be logged, not actually sent');
+        console.warn('   Set PUSH_SERVICE_PROVIDER environment variable (fcm | onesignal | web-push)\n');
+      } else {
+        console.log('🔔 Push Service: Simulation mode (no provider configured)');
+      }
+      return;
+    }
+
+    // Provider-specific validation is done in the initialize methods
+    if (this.initialized) {
+      console.log(`🔔 Push Service: ${this.provider} initialized successfully`);
+    }
+  }
+
+  /**
+   * Health check method to verify push service configuration
+   * @returns Object with health status and details
+   */
+  getHealthCheck(): {
+    status: 'ok' | 'warning' | 'error';
+    provider: string;
+    configured: boolean;
+    simulation: boolean;
+    initialized: boolean;
+    message: string;
+  } {
+    const isSimulation = this.provider === "none" || !this.initialized;
+
+    if (isSimulation) {
+      return {
+        status: 'warning',
+        provider: this.provider,
+        configured: false,
+        simulation: true,
+        initialized: this.initialized,
+        message: 'Push notification service running in simulation mode'
+      };
+    }
+
+    return {
+      status: this.initialized ? 'ok' : 'error',
+      provider: this.provider,
+      configured: this.initialized,
+      simulation: false,
+      initialized: this.initialized,
+      message: this.initialized 
+        ? `Push service configured with ${this.provider}`
+        : `Push service failed to initialize with ${this.provider}`
+    };
   }
 
   /**

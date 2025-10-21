@@ -10,25 +10,62 @@ import { setupVite, serveStatic, log } from "./vite";
 // Uncomment the following lines to enable automated cron jobs
 // import { cronService, initializeCronJobs } from "./cron-service";
 
+// ============================================================================
+// PUSH NOTIFICATION SERVICE INTEGRATION
+// ============================================================================
+// Uncomment the following line to enable push notifications
+// import { pushService } from "./push-service";
+
 const app = express();
 
-// Security headers with helmet.js
+// ============================================================================
+// SECURITY HEADERS WITH HELMET.JS
+// ============================================================================
+// Different CSP policies for development vs production environments
+const isDevelopment = process.env.NODE_ENV === "development";
+
+// Production CSP: Strict security without unsafe-inline or unsafe-eval
+const productionCSP = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'", "https://fonts.googleapis.com"],
+  styleSrc: ["'self'", "https://fonts.googleapis.com"],
+  fontSrc: ["'self'", "https://fonts.gstatic.com"],
+  imgSrc: ["'self'", "data:", "https:", "blob:"],
+  connectSrc: ["'self'", "ws:", "wss:"],
+  frameSrc: ["'none'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+  frameAncestors: ["'none'"],
+  upgradeInsecureRequests: [],
+};
+
+// Development CSP: Permissive to allow HMR and development tools
+const developmentCSP = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://fonts.googleapis.com"],
+  styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+  fontSrc: ["'self'", "https://fonts.gstatic.com"],
+  imgSrc: ["'self'", "data:", "https:", "blob:"],
+  connectSrc: ["'self'", "ws:", "wss:"],
+  frameSrc: ["'none'"],
+  objectSrc: ["'none'"],
+};
+
+if (!isDevelopment) {
+  console.log("🔒 Production mode: Using strict Content Security Policy");
+} else {
+  console.log("⚠️  Development mode: Using permissive CSP for HMR");
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://fonts.googleapis.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      frameSrc: ["'none'"],
-      objectSrc: ["'none'"],
-    },
+    directives: isDevelopment ? developmentCSP : productionCSP,
   },
   crossOriginEmbedderPolicy: false, // Allow embedding for socket.io
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resources
 }));
+// ============================================================================
 
 // Rate limiting for API endpoints
 const apiLimiter = rateLimit({
@@ -134,6 +171,72 @@ app.use((req, res, next) => {
   // await cronService.runJob("event-reminders");
   // await cronService.runJob("dues-reminders");
   // etc.
+  // ============================================================================
+
+  // ============================================================================
+  // INITIALIZE PUSH NOTIFICATION SERVICE
+  // ============================================================================
+  // The push notification service is initialized automatically when imported.
+  // It runs in simulation mode by default (console logging only).
+  // 
+  // To enable actual push notifications:
+  // 
+  // OPTION 1: Firebase Cloud Messaging (FCM) - For mobile apps
+  // ----------------------------------------------------------
+  // 1. Set environment variables:
+  //    PUSH_SERVICE_PROVIDER=fcm
+  //    FCM_SERVER_KEY=your-server-key
+  //    FCM_PROJECT_ID=your-project-id
+  // 2. Install Firebase Admin SDK: npm install firebase-admin
+  // 3. Uncomment the import statement at the top of this file
+  // 
+  // OPTION 2: OneSignal - For web and mobile
+  // -----------------------------------------
+  // 1. Set environment variables:
+  //    PUSH_SERVICE_PROVIDER=onesignal
+  //    ONESIGNAL_API_KEY=your-api-key
+  //    ONESIGNAL_APP_ID=your-app-id
+  // 2. Install OneSignal SDK: npm install @onesignal/node-onesignal
+  // 3. Uncomment the import statement at the top of this file
+  // 
+  // OPTION 3: Web Push (VAPID) - For web only
+  // ------------------------------------------
+  // 1. Generate VAPID keys: npx web-push generate-vapid-keys
+  // 2. Set environment variables:
+  //    PUSH_SERVICE_PROVIDER=web-push
+  //    VAPID_PUBLIC_KEY=your-public-key
+  //    VAPID_PRIVATE_KEY=your-private-key
+  //    VAPID_SUBJECT=mailto:admin@apcconnect.ng
+  // 3. Install web-push: npm install web-push
+  // 4. Uncomment the import statement at the top of this file
+  // 
+  // Usage in code (after uncommenting the import):
+  // -----------------------------------------------
+  // import { pushService, NotificationTemplates } from "./push-service";
+  // 
+  // // Send to a single user
+  // await pushService.sendPushNotification(
+  //   userId,
+  //   NotificationTemplates.eventReminder("Town Hall", "tomorrow", "event-123")
+  // );
+  // 
+  // // Broadcast to all users
+  // await pushService.broadcast(
+  //   NotificationTemplates.systemAnnouncement("Important", "System update tonight")
+  // );
+  // 
+  // // Send to a segment
+  // await pushService.sendToSegment(
+  //   "ward-leaders",
+  //   NotificationTemplates.taskAssignment("Organize meeting", "high", "task-456")
+  // );
+  // 
+  // Health check (for monitoring):
+  // ------------------------------
+  // const health = pushService.getHealthCheck();
+  // console.log("Push service status:", health.status);
+  // console.log("Provider:", health.provider);
+  // console.log("Configured:", health.configured);
   // ============================================================================
 
   // ALWAYS serve the app on the port specified in the environment variable PORT

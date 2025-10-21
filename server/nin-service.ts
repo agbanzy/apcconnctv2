@@ -122,6 +122,59 @@ export class NINService {
     this.nimcApiKey = process.env.NIMC_API_KEY || "";
     this.nimcApiSecret = process.env.NIMC_API_SECRET || "";
     this.nimcBaseUrl = process.env.NIMC_BASE_URL || "";
+
+    // Validate configuration and log warnings
+    this.validateConfiguration();
+  }
+
+  /**
+   * Validate NIN service configuration
+   * Logs warnings if running in simulation mode or missing required variables
+   */
+  private validateConfiguration(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isConfigured = !!(this.nimcApiKey && this.nimcApiSecret && this.nimcBaseUrl);
+
+    if (!isConfigured) {
+      if (isProduction) {
+        console.warn('\n⚠️  WARNING: NIN verification service running in SIMULATION mode in production');
+        console.warn('   NIN verifications will use mock responses, not real NIMC API');
+        console.warn('   Set NIMC_API_KEY, NIMC_API_SECRET, and NIMC_BASE_URL environment variables\n');
+      } else {
+        console.log('🆔 NIN Service: Simulation mode (NIMC API not configured)');
+      }
+    } else {
+      console.log(`🆔 NIN Service: Configured (${this.nimcBaseUrl})`);
+    }
+  }
+
+  /**
+   * Health check method to verify NIN service configuration
+   * @returns Object with health status and details
+   */
+  getHealthCheck(): {
+    status: 'ok' | 'warning' | 'error';
+    configured: boolean;
+    simulation: boolean;
+    message: string;
+  } {
+    const isConfigured = !!(this.nimcApiKey && this.nimcApiSecret && this.nimcBaseUrl);
+
+    if (!isConfigured) {
+      return {
+        status: 'warning',
+        configured: false,
+        simulation: true,
+        message: 'NIN verification service running in simulation mode - NIMC API not configured'
+      };
+    }
+
+    return {
+      status: 'ok',
+      configured: true,
+      simulation: false,
+      message: 'NIN verification service configured with NIMC API'
+    };
   }
 
   /**

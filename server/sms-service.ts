@@ -64,6 +64,86 @@ class SMSService {
   constructor() {
     this.provider = (process.env.SMS_PROVIDER as SMSProvider) || "twilio";
     this.senderId = process.env.SMS_SENDER_ID || "APC";
+
+    // Validate configuration and log warnings
+    this.validateConfiguration();
+  }
+
+  /**
+   * Validate SMS service configuration
+   * Logs warnings if running in simulation mode or missing required variables
+   */
+  private validateConfiguration(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Check if provider credentials are configured
+    const isConfigured = this.isProviderConfigured();
+
+    if (!isConfigured) {
+      if (isProduction) {
+        console.warn('\n⚠️  WARNING: SMS service running in SIMULATION mode in production');
+        console.warn(`   Provider: ${this.provider} (not configured)`);
+        console.warn('   SMS messages will only be logged, not actually sent');
+        console.warn('   Configure the appropriate environment variables for your SMS provider\n');
+      } else {
+        console.log(`📱 SMS Service: ${this.provider} (simulation mode)`);
+      }
+    } else {
+      console.log(`📱 SMS Service: ${this.provider} (configured)`);
+    }
+  }
+
+  /**
+   * Check if the selected provider has required credentials configured
+   * @returns true if provider is properly configured
+   */
+  private isProviderConfigured(): boolean {
+    switch (this.provider) {
+      case "twilio":
+        return !!(process.env.TWILIO_ACCOUNT_SID && 
+                  process.env.TWILIO_AUTH_TOKEN && 
+                  process.env.TWILIO_PHONE_NUMBER);
+      case "termii":
+        return !!(process.env.TERMII_API_KEY && 
+                  process.env.TERMII_SENDER_ID);
+      case "africas_talking":
+        return !!(process.env.AFRICAS_TALKING_API_KEY && 
+                  process.env.AFRICAS_TALKING_USERNAME);
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Health check method to verify SMS service configuration
+   * @returns Object with health status and details
+   */
+  getHealthCheck(): {
+    status: 'ok' | 'warning' | 'error';
+    provider: string;
+    configured: boolean;
+    simulation: boolean;
+    message: string;
+  } {
+    const isConfigured = this.isProviderConfigured();
+
+    if (!isConfigured) {
+      return {
+        status: 'warning',
+        provider: this.provider,
+        configured: false,
+        simulation: true,
+        message: `SMS service running in simulation mode - ${this.provider} not configured`
+      };
+    }
+
+    return {
+      status: 'ok',
+      provider: this.provider,
+      configured: true,
+      simulation: false,
+      message: `SMS service configured with ${this.provider}`
+    };
   }
 
   /**
