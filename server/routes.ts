@@ -20,6 +20,9 @@ import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
+// PUSH NOTIFICATION INTEGRATION: Import push service
+// Uncomment the following line when ready to use push notifications:
+// import { pushService, NotificationTemplates } from "./push-service";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -175,9 +178,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: user.id,
         memberId,
         wardId: wardId || "",
-        status: "pending",
+        status: "pending", // Member starts as 'pending' until NIN is verified
         referralCode,
-        referredBy: referrerId
+        referredBy: referrerId,
+        // NIN fields initialized during registration:
+        // nin: null,                     // Will be set during NIN verification
+        // ninVerified: false,            // Default: false (not verified yet)
+        // ninVerificationAttempts: 0,    // Tracks verification attempts
+        // ninVerifiedAt: null            // Timestamp when NIN is verified
       }).returning();
 
       // Create referral record if referred
@@ -189,6 +197,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pointsEarned: 0
         });
       }
+
+      // ========================================================================
+      // NIN VERIFICATION FLOW INTEGRATION POINT
+      // ========================================================================
+      // 
+      // OPTION 1: OPTIONAL NIN VERIFICATION DURING REGISTRATION
+      // --------------------------------------------------------
+      // Allow members to optionally provide NIN during registration for immediate verification.
+      // This can streamline the onboarding process for members who have their NIN ready.
+      //
+      // Implementation:
+      // 1. Frontend sends optional NIN and dateOfBirth fields in registration request
+      // 2. Backend validates and verifies NIN if provided
+      // 3. Member account is activated immediately upon successful verification
+      // 4. If verification fails, member is still registered but remains in 'pending' status
+      //
+      // Example code:
+      /*
+      const { nin, dateOfBirth } = req.body;
+      
+      if (nin && dateOfBirth) {
+        console.log(`Attempting NIN verification during registration for ${memberId}`);
+        
+        // Validate NIN format before calling API
+        if (!validateNINFormat(nin)) {
+          console.log("Invalid NIN format provided during registration");
+          // Continue registration but don't verify - member can verify later
+        } else {
+          try {
+            // Verify NIN with NIMC API
+            const verificationResult = await ninService.verifyNIN({
+              nin,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              dateOfBirth
+            });
+
+            if (verificationResult.success && verificationResult.data?.verified) {
+              // Update member with verified NIN
+              await db.update(schema.members)
+                .set({
+                  nin: verificationResult.data.nin,
+                  ninVerified: true,
+                  ninVerifiedAt: new Date(),
+                  ninVerificationAttempts: 1,
+                  status: "active" // Activate account immediately
+                })
+                .where(eq(schema.members.id, member.id));
+              
+              console.log(`NIN verified successfully during registration for ${memberId}`);
+              
+              // Update local member object to reflect changes
+              member.nin = verificationResult.data.nin;
+              member.ninVerified = true;
+              member.ninVerifiedAt = new Date();
+              member.status = "active";
+            } else {
+              // Verification failed - increment attempt counter
+              await db.update(schema.members)
+                .set({
+                  ninVerificationAttempts: 1
+                })
+                .where(eq(schema.members.id, member.id));
+              
+              console.log(`NIN verification failed during registration for ${memberId}: ${verificationResult.message}`);
+            }
+          } catch (error) {
+            console.error("NIN verification error during registration:", error);
+            // Continue with registration even if verification fails
+          }
+        }
+      }
+      */
+      //
+      // OPTION 2: POST-REGISTRATION NIN VERIFICATION (CURRENT APPROACH)
+      // ----------------------------------------------------------------
+      // Members register without NIN and verify later via the profile page.
+      // This is the current implementation - members call POST /api/members/:id/verify-nin
+      // 
+      // Benefits:
+      // - Simpler registration flow
+      // - Members can complete registration without NIN immediately available
+      // - Allows members to gather required documents before verification
+      //
+      // UX Flow:
+      // 1. Member registers → Account created with status: "pending"
+      // 2. Member navigates to profile/settings page
+      // 3. Member enters NIN + date of birth → Calls /api/members/:id/verify-nin
+      // 4. Upon successful verification:
+      //    - members.nin field is updated with verified NIN
+      //    - members.ninVerified is set to true
+      //    - members.ninVerifiedAt is set to current timestamp
+      //    - members.status is changed from "pending" to "active"
+      // 5. Upon failed verification:
+      //    - members.ninVerificationAttempts is incremented
+      //    - Member can retry up to MAX_VERIFICATION_ATTEMPTS (default: 10)
+      //    - Error message is shown with remaining attempts
+      //
+      // Database fields managed during NIN verification:
+      // - nin: Stores the 11-digit NIN after successful verification
+      // - ninVerified: Boolean flag indicating verification status
+      // - ninVerifiedAt: Timestamp of when verification succeeded
+      // - ninVerificationAttempts: Counter for failed/total verification attempts
+      // - status: Updated from "pending" to "active" after successful verification
+      //
+      // ========================================================================
 
       // EMAIL INTEGRATION POINT: Send welcome email to new member
       // Uncomment the following code when ready to send welcome emails:
@@ -383,22 +497,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // NIN VERIFICATION ENDPOINT
+  // ==========================
+  // This endpoint handles NIN verification for members using the NIMC API integration
   app.post("/api/members/:id/verify-nin", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { nin } = req.body;
+      const { nin, dateOfBirth } = req.body;
 
-      if (!nin || nin.length !== 11) {
-        return res.status(400).json({ success: false, error: "Invalid NIN format" });
+      // Get member to verify
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, req.params.id),
+        with: { user: true }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
       }
 
-      const [updated] = await db.update(schema.members)
-        .set({ nin, status: "active" })
-        .where(eq(schema.members.id, req.params.id))
-        .returning();
+      // Authorization check: Only the member themselves or an admin can verify NIN
+      if (member.userId !== req.user!.id && req.user!.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
 
-      res.json({ success: true, data: { verified: true, member: updated } });
+      // Check if already verified
+      if (member.ninVerified) {
+        return res.json({
+          success: true,
+          data: {
+            verified: true,
+            message: "NIN already verified",
+            verifiedAt: member.ninVerifiedAt
+          }
+        });
+      }
+
+      // RATE LIMITING: Check verification attempts
+      // Maximum 10 attempts per member (configurable)
+      const MAX_VERIFICATION_ATTEMPTS = 10;
+      if ((member.ninVerificationAttempts || 0) >= MAX_VERIFICATION_ATTEMPTS) {
+        return res.status(429).json({
+          success: false,
+          error: `Maximum verification attempts (${MAX_VERIFICATION_ATTEMPTS}) exceeded. Please contact support.`
+        });
+      }
+
+      // STEP 1: Check if NIN is already used by another member
+      const ninStatus = await ninService.checkNINStatus(nin);
+      if (ninStatus.exists && ninStatus.memberId !== member.memberId) {
+        return res.status(400).json({
+          success: false,
+          error: "This NIN is already registered to another member"
+        });
+      }
+
+      const user = Array.isArray(member.user) ? member.user[0] : member.user;
+
+      // STEP 2: Verify NIN with NIMC API
+      const verificationResult = await ninService.verifyNIN({
+        nin,
+        firstName: user?.firstName || "",
+        lastName: user?.lastName || "",
+        dateOfBirth: dateOfBirth || ""
+      });
+
+      // STEP 3: Update member record based on verification result
+      // Increment verification attempts regardless of success/failure
+      const attempts = (member.ninVerificationAttempts || 0) + 1;
+
+      if (verificationResult.success && verificationResult.data?.verified) {
+        // SUCCESS: Update member with verified NIN
+        const [updated] = await db.update(schema.members)
+          .set({
+            nin: verificationResult.data.nin,
+            ninVerified: true,
+            ninVerifiedAt: new Date(),
+            ninVerificationAttempts: attempts,
+            status: "active" // Activate member account upon successful NIN verification
+          })
+          .where(eq(schema.members.id, req.params.id))
+          .returning();
+
+        console.log(`NIN verified successfully for member ${member.memberId}`);
+
+        // OPTIONAL: Send notification to member
+        // await emailService.sendNINVerificationSuccess(user.email, member.memberId);
+
+        return res.json({
+          success: true,
+          data: {
+            verified: true,
+            member: updated,
+            message: verificationResult.message
+          }
+        });
+      } else {
+        // FAILURE: Update only the attempt counter, do not save the NIN
+        await db.update(schema.members)
+          .set({
+            ninVerificationAttempts: attempts
+          })
+          .where(eq(schema.members.id, req.params.id));
+
+        // RETRY LOGIC: Inform user of remaining attempts
+        const remainingAttempts = MAX_VERIFICATION_ATTEMPTS - attempts;
+        console.log(`NIN verification failed for member ${member.memberId}. Remaining attempts: ${remainingAttempts}`);
+
+        return res.status(400).json({
+          success: false,
+          error: verificationResult.message,
+          code: verificationResult.code,
+          remainingAttempts
+        });
+      }
     } catch (error) {
-      res.status(500).json({ success: false, error: "NIN verification failed" });
+      console.error("NIN verification error:", error);
+      res.status(500).json({
+        success: false,
+        error: "NIN verification failed. Please try again later."
+      });
     }
   });
 
@@ -785,6 +1001,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       */
 
+      // ========================================================================
+      // PUSH NOTIFICATION INTEGRATION POINT: Event Creation
+      // ========================================================================
+      // Send push notification to all members about the new event
+      // Uncomment the following code when ready to send push notifications:
+      /*
+      import { pushService, NotificationTemplates } from "./push-service";
+      
+      // Get formatted event date for notification
+      const eventDate = new Date(event.date).toLocaleDateString('en-NG', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Broadcast event notification to all members
+      await pushService.broadcast(
+        NotificationTemplates.eventReminder(
+          event.title,
+          eventDate,
+          event.id
+        )
+      );
+      
+      // Alternative: Send to specific segment (e.g., only active members)
+      // await pushService.sendToSegment(
+      //   "verified-members",
+      //   NotificationTemplates.eventReminder(event.title, eventDate, event.id)
+      // );
+      
+      console.log(`Push notification sent for event: ${event.title}`);
+      */
+
       res.json({ success: true, data: event });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create event" });
@@ -801,6 +1051,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!event) {
         return res.status(404).json({ success: false, error: "Event not found" });
       }
+
+      // ========================================================================
+      // PUSH NOTIFICATION INTEGRATION POINT: Event Update
+      // ========================================================================
+      // Notify members who RSVPed to this event about the update
+      // Uncomment the following code when ready to send push notifications:
+      /*
+      import { pushService, NotificationTemplates } from "./push-service";
+      
+      // Get all members who RSVPed to this event
+      const rsvps = await db.query.eventRsvps.findMany({
+        where: and(
+          eq(schema.eventRsvps.eventId, event.id),
+          eq(schema.eventRsvps.status, "confirmed")
+        ),
+        with: { member: true }
+      });
+      
+      // Send notification to each RSVP'd member about the event update
+      const userIds = rsvps.map(rsvp => rsvp.member.userId);
+      
+      const eventDate = new Date(event.date).toLocaleDateString('en-NG', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      await pushService.sendToMultiple(
+        userIds,
+        NotificationTemplates.eventReminder(
+          `Updated: ${event.title}`,
+          eventDate,
+          event.id
+        )
+      );
+      
+      console.log(`Push notification sent to ${userIds.length} members about event update`);
+      */
 
       res.json({ success: true, data: event });
     } catch (error) {
@@ -1004,6 +1293,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
+      */
+
+      // ========================================================================
+      // PUSH NOTIFICATION INTEGRATION POINT: Election Announcement
+      // ========================================================================
+      // Send push notification to all eligible voters about the new election
+      // Uncomment the following code when ready to send push notifications:
+      /*
+      import { pushService, NotificationTemplates } from "./push-service";
+      
+      // Get formatted deadline for notification
+      const deadline = new Date(election.endDate).toLocaleDateString('en-NG', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Broadcast election announcement to all verified members
+      // Only verified members should be allowed to vote
+      await pushService.sendToSegment(
+        "verified-members",
+        NotificationTemplates.electionAnnouncement(
+          election.title,
+          deadline,
+          election.id
+        )
+      );
+      
+      // Alternative: Broadcast to all members
+      // await pushService.broadcast(
+      //   NotificationTemplates.electionAnnouncement(election.title, deadline, election.id)
+      // );
+      
+      console.log(`Push notification sent for election: ${election.title}`);
       */
 
       res.json({ success: true, data: election });
@@ -1232,6 +1556,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const taskData = schema.insertVolunteerTaskSchema.parse(req.body);
       const [task] = await db.insert(schema.volunteerTasks).values(taskData as any).returning();
+      
+      // ========================================================================
+      // PUSH NOTIFICATION INTEGRATION POINT: Task Creation (General)
+      // ========================================================================
+      // Broadcast new task to eligible members
+      // Uncomment the following code when ready to send push notifications:
+      /*
+      import { pushService, NotificationTemplates } from "./push-service";
+      
+      // Broadcast task to all members or specific segment
+      await pushService.broadcast(
+        NotificationTemplates.taskAssignment(
+          task.title,
+          task.priority || "normal",
+          task.id
+        )
+      );
+      
+      // Alternative: Send to specific segment based on task requirements
+      // if (task.category === "Ward Mobilization") {
+      //   await pushService.sendToSegment(
+      //     "ward-leaders",
+      //     NotificationTemplates.taskAssignment(task.title, task.priority || "normal", task.id)
+      //   );
+      // }
+      
+      console.log(`Push notification sent for task: ${task.title}`);
+      */
+      
       res.json({ success: true, data: task });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create task" });
@@ -1828,6 +2181,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const [post] = await db.insert(schema.newsPosts).values(postData).returning();
+      
+      // ========================================================================
+      // PUSH NOTIFICATION INTEGRATION POINT: News Publishing
+      // ========================================================================
+      // Send push notification to all members about the new news article
+      // Only send for important/featured news to avoid notification fatigue
+      // Uncomment the following code when ready to send push notifications:
+      /*
+      import { pushService, NotificationTemplates } from "./push-service";
+      
+      // Only send push notifications for featured/important news
+      if (post.featured || post.category === "Breaking News") {
+        // Broadcast news alert to all members
+        await pushService.broadcast(
+          NotificationTemplates.newsAlert(
+            post.title,
+            post.category || "News",
+            post.id
+          )
+        );
+        
+        console.log(`Push notification sent for news: ${post.title}`);
+      }
+      
+      // Alternative: Send to specific segment based on news category
+      // if (post.category === "Policy") {
+      //   await pushService.sendToSegment(
+      //     "ward-leaders",
+      //     NotificationTemplates.newsAlert(post.title, post.category, post.id)
+      //   );
+      // }
+      */
+      
       res.json({ success: true, data: post });
     } catch (error) {
       res.status(400).json({ success: false, error: "Failed to create post" });

@@ -8,7 +8,8 @@
  * 
  * Required Environment Variables:
  * - NIMC_API_KEY: Your NIMC API authentication key
- * - NIMC_API_URL: NIMC API base URL (e.g., https://api.nimc.gov.ng/v1)
+ * - NIMC_API_SECRET: Your NIMC API secret for request signing
+ * - NIMC_BASE_URL: NIMC API base URL (e.g., https://api.nimc.gov.ng/v1)
  * 
  * NIMC API Endpoints:
  * - POST /verify - Verify NIN against personal details
@@ -73,6 +74,21 @@ export interface NINVerificationResponse {
 }
 
 /**
+ * Sanitizes NIN by removing spaces, dashes, and other non-numeric characters
+ * 
+ * @param nin - National Identification Number to sanitize
+ * @returns Sanitized NIN containing only digits
+ */
+export function sanitizeNIN(nin: string): string {
+  if (!nin || typeof nin !== 'string') {
+    return '';
+  }
+
+  // Remove all non-numeric characters (spaces, dashes, etc.)
+  return nin.replace(/\D/g, '');
+}
+
+/**
  * Validates NIN format
  * Nigerian NIN is 11 digits, numbers only
  * 
@@ -84,9 +100,12 @@ export function validateNINFormat(nin: string): boolean {
     return false;
   }
 
+  // Sanitize first, then validate
+  const sanitized = sanitizeNIN(nin);
+  
   // NIN must be exactly 11 digits
   const ninRegex = /^\d{11}$/;
-  return ninRegex.test(nin.trim());
+  return ninRegex.test(sanitized);
 }
 
 /**
@@ -95,12 +114,100 @@ export function validateNINFormat(nin: string): boolean {
  */
 export class NINService {
   private readonly nimcApiKey: string;
-  private readonly nimcApiUrl: string;
+  private readonly nimcApiSecret: string;
+  private readonly nimcBaseUrl: string;
 
   constructor() {
     // Environment variables for NIMC API integration
     this.nimcApiKey = process.env.NIMC_API_KEY || "";
-    this.nimcApiUrl = process.env.NIMC_API_URL || "";
+    this.nimcApiSecret = process.env.NIMC_API_SECRET || "";
+    this.nimcBaseUrl = process.env.NIMC_BASE_URL || "";
+  }
+
+  /**
+   * Check if a NIN is already verified in the database
+   * 
+   * This method queries the database to determine if a given NIN
+   * has already been verified for any member in the system.
+   * 
+   * Use Cases:
+   * - Prevent duplicate NIN usage across multiple accounts
+   * - Check verification status before initiating new verification
+   * - Display verification status to users
+   * 
+   * @param nin - National Identification Number to check
+   * @returns Object containing verification status and member details if found
+   */
+  async checkNINStatus(nin: string): Promise<{
+    isVerified: boolean;
+    exists: boolean;
+    memberId?: string;
+    verifiedAt?: Date;
+    attempts?: number;
+  }> {
+    // This method requires database access
+    // Import required: import { db } from './db';
+    // Import required: import { members } from '@shared/schema';
+    // Import required: import { eq } from 'drizzle-orm';
+    
+    console.log("=== Checking NIN Status ===");
+    console.log("NIN:", nin);
+    
+    // Sanitize NIN before checking
+    const sanitizedNIN = sanitizeNIN(nin);
+    
+    if (!validateNINFormat(sanitizedNIN)) {
+      console.log("Invalid NIN format");
+      return {
+        isVerified: false,
+        exists: false,
+      };
+    }
+
+    // DATABASE INTEGRATION POINT:
+    // ============================
+    // Uncomment the following code when ready to integrate with database:
+    /*
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(members.nin, sanitizedNIN),
+      });
+
+      if (!member) {
+        console.log("NIN not found in database");
+        return {
+          isVerified: false,
+          exists: false,
+        };
+      }
+
+      console.log("NIN found in database");
+      console.log("Member ID:", member.memberId);
+      console.log("Verified:", member.ninVerified);
+      console.log("Attempts:", member.ninVerificationAttempts);
+
+      return {
+        isVerified: member.ninVerified || false,
+        exists: true,
+        memberId: member.memberId,
+        verifiedAt: member.ninVerifiedAt || undefined,
+        attempts: member.ninVerificationAttempts || 0,
+      };
+    } catch (error) {
+      console.error("Database error while checking NIN status:", error);
+      return {
+        isVerified: false,
+        exists: false,
+      };
+    }
+    */
+
+    // Mock response (for testing without database)
+    console.log("MOCK: NIN not found in database");
+    return {
+      isVerified: false,
+      exists: false,
+    };
   }
 
   /**
@@ -121,8 +228,12 @@ export class NINService {
     console.log("Date of Birth:", request.dateOfBirth);
     console.log("===============================");
 
+    // Sanitize NIN (remove spaces, dashes, etc.)
+    const sanitizedNIN = sanitizeNIN(request.nin);
+    console.log("Sanitized NIN:", sanitizedNIN);
+
     // Validate NIN format
-    if (!validateNINFormat(request.nin)) {
+    if (!validateNINFormat(sanitizedNIN)) {
       console.log("Validation Failed: Invalid NIN format");
       return {
         success: false,
@@ -136,7 +247,7 @@ export class NINService {
     // Uncomment the following code when ready to integrate with actual NIMC API:
     /*
     try {
-      if (!this.nimcApiKey || !this.nimcApiUrl) {
+      if (!this.nimcApiKey || !this.nimcApiSecret || !this.nimcBaseUrl) {
         console.error("NIMC API credentials not configured");
         return {
           success: false,
@@ -145,15 +256,16 @@ export class NINService {
         };
       }
 
-      const response = await fetch(`${this.nimcApiUrl}/verify`, {
+      const response = await fetch(`${this.nimcBaseUrl}/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.nimcApiKey}`,
+          'X-API-Secret': this.nimcApiSecret,
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          nin: request.nin,
+          nin: sanitizedNIN,
           firstName: request.firstName,
           lastName: request.lastName,
           dateOfBirth: request.dateOfBirth,
@@ -223,7 +335,7 @@ export class NINService {
       code: NINVerificationErrorCode.VERIFIED,
       message: "NIN verified successfully (MOCK)",
       data: {
-        nin: request.nin,
+        nin: sanitizedNIN,
         firstName: request.firstName,
         lastName: request.lastName,
         dateOfBirth: request.dateOfBirth,

@@ -4,6 +4,12 @@ import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// ============================================================================
+// CRON SERVICE INTEGRATION
+// ============================================================================
+// Uncomment the following lines to enable automated cron jobs
+// import { cronService, initializeCronJobs } from "./cron-service";
+
 const app = express();
 
 // Security headers with helmet.js
@@ -101,6 +107,35 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
+  // ============================================================================
+  // INITIALIZE CRON JOBS
+  // ============================================================================
+  // Uncomment the following lines to start automated scheduled tasks
+  // 
+  // STEP 1: Initialize and register all cron jobs
+  // initializeCronJobs();
+  // 
+  // STEP 2: Start the cron service
+  // cronService.start();
+  // 
+  // This will start all registered jobs according to their schedules:
+  // - Event reminders: Daily at 8 AM
+  // - Dues reminders: 1st of every month
+  // - Membership renewals: Every Sunday
+  // - Election notifications: 9 AM, 3 PM, 8 PM daily
+  // - Inactive member cleanup: 1st of month at 2 AM
+  // - Analytics aggregation: Daily at midnight
+  // 
+  // Environment variables required:
+  // - ENABLE_CRON_JOBS=true (to enable jobs)
+  // - TIMEZONE=Africa/Lagos (default timezone)
+  // 
+  // For manual testing in development:
+  // await cronService.runJob("event-reminders");
+  // await cronService.runJob("dues-reminders");
+  // etc.
+  // ============================================================================
+
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
@@ -113,4 +148,37 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  // ============================================================================
+  // GRACEFUL SHUTDOWN - STOP CRON JOBS
+  // ============================================================================
+  // Handle graceful shutdown to stop all cron jobs
+  // This ensures jobs are not interrupted mid-execution
+  // 
+  // process.on("SIGTERM", async () => {
+  //   log("SIGTERM signal received: closing HTTP server and stopping cron jobs");
+  //   
+  //   // Stop all cron jobs
+  //   cronService.stop();
+  //   
+  //   // Close HTTP server
+  //   server.close(() => {
+  //     log("HTTP server closed");
+  //     process.exit(0);
+  //   });
+  // });
+  // 
+  // process.on("SIGINT", async () => {
+  //   log("SIGINT signal received: closing HTTP server and stopping cron jobs");
+  //   
+  //   // Stop all cron jobs
+  //   cronService.stop();
+  //   
+  //   // Close HTTP server
+  //   server.close(() => {
+  //     log("HTTP server closed");
+  //     process.exit(0);
+  //   });
+  // });
+  // ============================================================================
 })();

@@ -214,6 +214,140 @@ export default function Register() {
               </Select>
             </div>
 
+            {/* ================================================================
+                NIN VERIFICATION INTEGRATION POINT - OPTIONAL DURING REGISTRATION
+                ================================================================
+                
+                APPROACH 1: OPTIONAL NIN VERIFICATION DURING REGISTRATION
+                ---------------------------------------------------------
+                Add optional NIN input fields here to allow members to verify
+                their NIN immediately during registration for faster activation.
+                
+                Benefits:
+                - Streamlined onboarding - members can be activated immediately
+                - Reduces friction for members who have NIN readily available
+                - One-step registration and verification process
+                
+                Implementation:
+                1. Add nin and dateOfBirth fields to formData state
+                2. Add input fields below for NIN and date of birth
+                3. Include these fields in the registration mutation
+                4. Backend will attempt verification and activate if successful
+                5. If verification fails, registration still succeeds but member
+                   remains in 'pending' status for later verification
+                
+                Example UI Components to add here:
+
+                <div className="space-y-2">
+                  <Label htmlFor="nin">
+                    National Identification Number (NIN) - Optional
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Verify your NIN now to activate your account immediately
+                  </p>
+                  <Input
+                    id="nin"
+                    type="text"
+                    maxLength={11}
+                    placeholder="12345678901"
+                    value={formData.nin || ""}
+                    onChange={(e) => handleChange("nin", e.target.value)}
+                    data-testid="input-nin"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your 11-digit National Identification Number
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">
+                    Date of Birth - Required for NIN verification
+                  </Label>
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    value={formData.dateOfBirth || ""}
+                    onChange={(e) => handleChange("dateOfBirth", e.target.value)}
+                    disabled={!formData.nin}
+                    data-testid="input-dob"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Must match the date of birth on your NIN record
+                  </p>
+                </div>
+
+                <Alert>
+                  <AlertDescription className="text-xs">
+                    <strong>Why verify your NIN?</strong>
+                    <ul className="list-disc ml-4 mt-2 space-y-1">
+                      <li>Instant account activation</li>
+                      <li>Access to all APC Connect features</li>
+                      <li>Participate in elections and events</li>
+                      <li>Required for membership verification</li>
+                    </ul>
+                    <p className="mt-2">
+                      Don't have your NIN handy? You can verify later from your profile.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+                
+                UX Flow with Optional NIN Verification:
+                ----------------------------------------
+                1. User fills registration form
+                2. User optionally enters NIN + date of birth
+                3. User clicks "Create Account"
+                4. Frontend sends registration data including NIN if provided
+                5. Backend creates account and attempts NIN verification if provided
+                   
+                   SUCCESS CASE:
+                   - NIN verified successfully
+                   - Account status: "active"
+                   - User is logged in and redirected to dashboard
+                   - Success message: "Account created and verified successfully!"
+                   
+                   PARTIAL SUCCESS CASE:
+                   - NIN verification failed but account created
+                   - Account status: "pending"
+                   - User is logged in but sees verification prompt
+                   - Message: "Account created! Please verify your NIN to activate your account."
+                   
+                   NO NIN PROVIDED CASE:
+                   - Account created without NIN
+                   - Account status: "pending"
+                   - User redirected to complete profile/verification
+                   - Message: "Account created! Complete your profile to get started."
+                
+                ================================================================
+                
+                APPROACH 2: POST-REGISTRATION NIN VERIFICATION (CURRENT)
+                ---------------------------------------------------------
+                Members register first, then verify NIN later via profile page.
+                This is the simpler approach and is currently implemented.
+                
+                Benefits:
+                - Simpler registration form
+                - Lower barrier to entry
+                - Members can register even without NIN immediately available
+                
+                UX Flow with Post-Registration Verification:
+                --------------------------------------------
+                1. User registers without NIN
+                2. User is logged in with status: "pending"
+                3. Dashboard shows prominent "Verify NIN" card/banner
+                4. User navigates to Profile/Settings page
+                5. Profile page shows NIN verification form
+                6. User enters NIN + date of birth
+                7. User clicks "Verify NIN"
+                8. Frontend calls POST /api/members/:id/verify-nin
+                9. Success: Account activated, user can access all features
+                10. Failure: Error shown with remaining attempts counter
+                
+                For this approach, the verification UI is in:
+                - client/src/pages/profile.tsx (NIN verification form)
+                - Dashboard shows verification status banner
+                
+                ================================================================ */}
+
             <Button
               type="submit"
               className="w-full"
