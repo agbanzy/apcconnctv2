@@ -58,6 +58,7 @@ import AdminDonations from "@/pages/admin/donations";
 import AdminChatbotAnalytics from "@/pages/admin/chatbot-analytics";
 import AdminTasks from "@/pages/admin/tasks";
 import AdminBadges from "@/pages/admin/badges";
+import AdminDues from "@/pages/admin/dues";
 import Rewards from "@/pages/rewards";
 import { AdminSidebar } from "@/components/admin-sidebar";
 
@@ -133,6 +134,7 @@ function AppContent() {
               <Switch>
                 <Route path="/admin/dashboard" component={() => <AdminRoute component={AdminDashboard} />} />
                 <Route path="/admin/members" component={() => <AdminRoute component={AdminMembers} />} />
+                <Route path="/admin/dues" component={() => <AdminRoute component={AdminDues} />} />
                 <Route path="/admin/elections" component={() => <AdminRoute component={AdminElections} />} />
                 <Route path="/admin/events" component={() => <AdminRoute component={AdminEvents} />} />
                 <Route path="/admin/content" component={() => <AdminRoute component={AdminContent} />} />

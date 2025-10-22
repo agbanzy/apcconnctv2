@@ -14,6 +14,7 @@ import {
   MessageCircle,
   CheckSquare,
   Award,
+  DollarSign,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +41,11 @@ const adminMenuItems = [
     title: "Members",
     url: "/admin/members",
     icon: Users,
+  },
+  {
+    title: "Dues",
+    url: "/admin/dues",
+    icon: DollarSign,
   },
   {
     title: "Elections",
