@@ -18,6 +18,10 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+// Trust proxy for Replit deployment environment
+// This allows express to trust the X-Forwarded-* headers from the proxy
+app.set('trust proxy', 1);
+
 // ============================================================================
 // SECURITY HEADERS WITH HELMET.JS
 // ============================================================================
