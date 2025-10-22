@@ -484,6 +484,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current member with referral code (must be before /api/members/:id)
+  app.get("/api/members/me", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+        with: {
+          ward: {
+            with: {
+              lga: {
+                with: { state: true }
+              }
+            }
+          }
+        }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      res.json({ success: true, data: member });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch member" });
+    }
+  });
+
+  // Get current member's points (must be before /api/members/:id)
+  app.get("/api/members/points", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const pointsBreakdown = await db
+        .select({
+          totalPoints: sql<number>`COALESCE(SUM(${schema.userPoints.amount}), 0)`,
+        })
+        .from(schema.userPoints)
+        .where(eq(schema.userPoints.memberId, member.id));
+
+      res.json({ success: true, data: { totalPoints: pointsBreakdown[0]?.totalPoints || 0 } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch points" });
+    }
+  });
+
   app.get("/api/members/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({
@@ -676,41 +726,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: { qrCode } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to generate QR code" });
-    }
-  });
-
-  // Get current member with referral code
-  app.get("/api/members/me", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = req.user!.id;
-      console.log("===== /api/members/me START =====");
-      console.log("Looking for member with userId:", userId);
-      
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, userId),
-        with: { user: true, ward: { with: { lga: { with: { state: true } } } } }
-      });
-
-      console.log("Query result:", member ? "FOUND" : "NOT FOUND");
-      if (member) {
-        console.log("Member details:", {
-          id: member.id,
-          memberId: member.memberId,
-          referralCode: member.referralCode,
-          userId: member.userId
-        });
-      }
-      console.log("===== /api/members/me END =====");
-
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member not found" });
-      }
-
-      res.json({ success: true, data: member });
-    } catch (error) {
-      console.error("===== /api/members/me ERROR =====");
-      console.error("Error details:", error);
-      res.status(500).json({ success: false, error: "Failed to fetch member" });
     }
   });
 
