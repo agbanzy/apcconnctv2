@@ -86,6 +86,20 @@ export const membershipDues = pgTable("membership_dues", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const recurringMembershipDues = pgTable("recurring_membership_dues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  frequency: recurringFrequencyEnum("frequency").notNull(), // monthly, quarterly, yearly
+  status: recurringStatusEnum("status").default("active"), // active, paused, cancelled
+  nextPaymentDate: timestamp("next_payment_date").notNull(),
+  lastPaymentDate: timestamp("last_payment_date"),
+  paystackAuthorizationCode: text("paystack_authorization_code"), // For automatic charging
+  paystackCustomerCode: text("paystack_customer_code"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Elections & Voting
 export const elections = pgTable("elections", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -589,6 +603,8 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   chatbotConversations: many(chatbotConversations),
   donations: many(donations),
   recurringDonations: many(recurringDonations),
+  membershipDues: many(membershipDues),
+  recurringMembershipDues: many(recurringMembershipDues),
   newsComments: many(newsComments),
   newsCommentLikes: many(newsCommentLikes),
   referralsMade: many(referrals, { relationName: "referrer" }),
@@ -825,6 +841,13 @@ export const membershipDuesRelations = relations(membershipDues, ({ one }) => ({
   }),
 }));
 
+export const recurringMembershipDuesRelations = relations(recurringMembershipDues, ({ one }) => ({
+  member: one(members, {
+    fields: [recurringMembershipDues.memberId],
+    references: [members.id],
+  }),
+}));
+
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
   author: one(members, {
     fields: [ideas.memberId],
@@ -962,6 +985,7 @@ export const insertWardSchema = createInsertSchema(wards).omit({ id: true, creat
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertMemberSchema = createInsertSchema(members).omit({ id: true, joinDate: true });
 export const insertDuesSchema = createInsertSchema(membershipDues).omit({ id: true, createdAt: true, paidAt: true });
+export const insertRecurringDuesSchema = createInsertSchema(recurringMembershipDues).omit({ id: true, createdAt: true, updatedAt: true, lastPaymentDate: true });
 export const insertElectionSchema = createInsertSchema(elections).omit({ id: true, createdAt: true, totalVotes: true });
 export const insertCandidateSchema = createInsertSchema(candidates).omit({ id: true, createdAt: true, votes: true });
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true, castedAt: true });
@@ -1010,6 +1034,8 @@ export type InsertMember = z.infer<typeof insertMemberSchema>;
 export type Member = typeof members.$inferSelect;
 export type InsertDues = z.infer<typeof insertDuesSchema>;
 export type MembershipDues = typeof membershipDues.$inferSelect;
+export type InsertRecurringDues = z.infer<typeof insertRecurringDuesSchema>;
+export type RecurringMembershipDues = typeof recurringMembershipDues.$inferSelect;
 export type InsertElection = z.infer<typeof insertElectionSchema>;
 export type Election = typeof elections.$inferSelect;
 export type InsertCandidate = z.infer<typeof insertCandidateSchema>;

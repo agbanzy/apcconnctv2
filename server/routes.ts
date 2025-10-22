@@ -809,7 +809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [payment] = await db.insert(schema.membershipDues).values({
         id: crypto.randomUUID(),
         memberId: member.id,
-        amount: String(amount * 100),
+        amount: String(amount), // Store in naira, not kobo
         paymentStatus: "pending",
         paymentMethod: "paystack",
         dueDate: new Date(),
@@ -818,7 +818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = Array.isArray(member.user) ? member.user[0] : member.user;
       const paystackResponse = await paystack.transaction.initialize({
         email: user?.email || "",
-        amount: amount * 100,
+        amount: amount * 100, // Paystack expects kobo
         reference: payment.id,
         callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/verify`,
         metadata: {
@@ -934,6 +934,386 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: history });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch payment history" });
+    }
+  });
+
+  // ============================================================================
+  // RECURRING MEMBERSHIP DUES ENDPOINTS
+  // ============================================================================
+
+  // Get current recurring dues status
+  app.get("/api/dues/recurring", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const recurringDues = await db.query.recurringMembershipDues.findFirst({
+        where: eq(schema.recurringMembershipDues.memberId, member.id)
+      });
+
+      res.json({ success: true, data: recurringDues || null });
+    } catch (error) {
+      console.error("Get recurring dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch recurring dues" });
+    }
+  });
+
+  // Setup recurring dues payment
+  app.post("/api/dues/recurring/setup", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { amount, frequency } = req.body;
+      
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+        with: { user: true }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // Check if already has active recurring dues
+      const existing = await db.query.recurringMembershipDues.findFirst({
+        where: and(
+          eq(schema.recurringMembershipDues.memberId, member.id),
+          eq(schema.recurringMembershipDues.status, "active")
+        )
+      });
+
+      if (existing) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Active recurring dues already exists. Cancel or pause first." 
+        });
+      }
+
+      // Calculate next payment date based on frequency
+      const nextDate = new Date();
+      switch (frequency) {
+        case "monthly":
+          nextDate.setMonth(nextDate.getMonth() + 1);
+          break;
+        case "quarterly":
+          nextDate.setMonth(nextDate.getMonth() + 3);
+          break;
+        case "yearly":
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+          break;
+      }
+
+      const user = Array.isArray(member.user) ? member.user[0] : member.user;
+      
+      // Initialize first payment with Paystack
+      const paystackResponse = await paystack.transaction.initialize({
+        email: user?.email || "",
+        amount: amount * 100, // Paystack expects kobo
+        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/recurring/verify`,
+        metadata: {
+          member_id: member.id,
+          type: "recurring_dues_setup",
+          frequency,
+          amount,
+        },
+        channels: ["card"], // Only card for recurring payments
+      });
+
+      res.json({
+        success: true,
+        data: {
+          authorization_url: paystackResponse.data.authorization_url,
+          access_code: paystackResponse.data.access_code,
+          reference: paystackResponse.data.reference,
+        }
+      });
+    } catch (error) {
+      console.error("Recurring dues setup error:", error);
+      res.status(500).json({ success: false, error: "Failed to setup recurring dues" });
+    }
+  });
+
+  // Verify recurring dues setup and save authorization
+  app.post("/api/dues/recurring/verify", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { reference } = req.body;
+
+      const verification = await paystack.transaction.verify(reference);
+
+      if (verification.data.status === "success") {
+        const { metadata, authorization } = verification.data;
+
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user!.id)
+        });
+
+        if (!member) {
+          return res.status(404).json({ success: false, error: "Member not found" });
+        }
+
+        // Calculate next payment date
+        const nextDate = new Date();
+        switch (metadata.frequency) {
+          case "monthly":
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+          case "quarterly":
+            nextDate.setMonth(nextDate.getMonth() + 3);
+            break;
+          case "yearly":
+            nextDate.setFullYear(nextDate.getFullYear() + 1);
+            break;
+        }
+
+        // Create or update recurring dues record
+        const [recurringDues] = await db.insert(schema.recurringMembershipDues).values({
+          memberId: member.id,
+          amount: String(metadata.amount), // Store in naira, not kobo
+          frequency: metadata.frequency,
+          status: "active",
+          nextPaymentDate: nextDate,
+          lastPaymentDate: new Date(),
+          paystackAuthorizationCode: authorization.authorization_code,
+          paystackCustomerCode: authorization.customer_code || verification.data.customer.customer_code,
+        }).returning();
+
+        // Also create a dues payment record
+        await db.insert(schema.membershipDues).values({
+          memberId: member.id,
+          amount: String(metadata.amount), // Store in naira, not kobo
+          paymentMethod: "paystack",
+          paystackReference: reference,
+          paymentStatus: "completed",
+          dueDate: new Date(),
+          paidAt: new Date(),
+        });
+
+        // Update member status to active
+        await db.update(schema.members)
+          .set({ status: "active" })
+          .where(eq(schema.members.id, member.id));
+
+        res.json({ success: true, data: recurringDues });
+      } else {
+        res.status(400).json({ success: false, error: "Payment verification failed" });
+      }
+    } catch (error: any) {
+      console.error("Recurring dues verification error:", error);
+      res.status(500).json({ success: false, error: "Failed to verify recurring payment" });
+    }
+  });
+
+  // Pause recurring dues
+  app.patch("/api/dues/recurring/pause", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db.update(schema.recurringMembershipDues)
+        .set({ status: "paused", updatedAt: new Date() })
+        .where(and(
+          eq(schema.recurringMembershipDues.memberId, member.id),
+          eq(schema.recurringMembershipDues.status, "active")
+        ));
+
+      res.json({ success: true, message: "Recurring dues paused successfully" });
+    } catch (error) {
+      console.error("Pause recurring dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to pause recurring dues" });
+    }
+  });
+
+  // Resume recurring dues
+  app.patch("/api/dues/recurring/resume", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db.update(schema.recurringMembershipDues)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(and(
+          eq(schema.recurringMembershipDues.memberId, member.id),
+          eq(schema.recurringMembershipDues.status, "paused")
+        ));
+
+      res.json({ success: true, message: "Recurring dues resumed successfully" });
+    } catch (error) {
+      console.error("Resume recurring dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to resume recurring dues" });
+    }
+  });
+
+  // Cancel recurring dues
+  app.delete("/api/dues/recurring", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db.update(schema.recurringMembershipDues)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(schema.recurringMembershipDues.memberId, member.id));
+
+      res.json({ success: true, message: "Recurring dues cancelled successfully" });
+    } catch (error) {
+      console.error("Cancel recurring dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to cancel recurring dues" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN DUES MANAGEMENT ENDPOINTS
+  // ============================================================================
+
+  // Get all members with their dues status (admin only)
+  app.get("/api/admin/dues/all", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const members = await db.query.members.findMany({
+        with: {
+          user: true,
+          ward: {
+            with: {
+              lga: {
+                with: { state: true }
+              }
+            }
+          },
+          membershipDues: {
+            orderBy: desc(schema.membershipDues.createdAt),
+            limit: 1
+          },
+          recurringMembershipDues: true
+        }
+      });
+
+      const membersWithDuesStatus = members.map(member => {
+        const latestDues = member.membershipDues[0];
+        const recurringDues = member.recurringMembershipDues.find((rd: any) => rd.status !== "cancelled");
+        
+        return {
+          ...member,
+          latestDues,
+          recurringDues,
+          duesStatus: latestDues?.paymentStatus === "completed" ? "paid" : 
+                       latestDues?.paymentStatus === "pending" ? "pending" : "none",
+          hasRecurring: recurringDues?.status === "active"
+        };
+      });
+
+      res.json({ success: true, data: membersWithDuesStatus });
+    } catch (error) {
+      console.error("Admin dues fetch error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch members dues" });
+    }
+  });
+
+  // Generate bulk dues for all active members (admin only)
+  app.post("/api/admin/dues/generate", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { amount, dueDate } = req.body;
+
+      if (!amount || !dueDate) {
+        return res.status(400).json({ success: false, error: "Amount and due date are required" });
+      }
+
+      // Get all active members
+      const members = await db.query.members.findMany({
+        where: eq(schema.members.status, "active")
+      });
+
+      // Create dues records for all active members
+      const duesRecords = members.map(member => ({
+        memberId: member.id,
+        amount: String(amount), // Store in naira, not kobo
+        paymentStatus: "pending" as const,
+        dueDate: new Date(dueDate),
+        paymentMethod: null,
+      }));
+
+      await db.insert(schema.membershipDues).values(duesRecords);
+
+      res.json({ 
+        success: true, 
+        message: `Generated dues for ${members.length} active members`,
+        count: members.length 
+      });
+    } catch (error) {
+      console.error("Generate bulk dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to generate bulk dues" });
+    }
+  });
+
+  // Check and suspend members with overdue dues (admin only)
+  app.post("/api/admin/dues/check-overdue", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const today = new Date();
+      
+      // Find all pending dues that are overdue (due date < today and not paid)
+      const overdueDues = await db.query.membershipDues.findMany({
+        where: and(
+          eq(schema.membershipDues.paymentStatus, "pending"),
+          sql`${schema.membershipDues.dueDate} < ${today}`
+        ),
+        with: {
+          member: true
+        }
+      });
+
+      // Get unique member IDs with overdue dues
+      const overdueMembers = new Map();
+      overdueDues.forEach(dues => {
+        if (!overdueMembers.has(dues.memberId)) {
+          overdueMembers.set(dues.memberId, dues.member);
+        }
+      });
+
+      // Update members with overdue dues to "expired" status
+      // Only update if they don't have active recurring dues
+      let suspendedCount = 0;
+      for (const [memberId, member] of overdueMembers) {
+        // Check if member has active recurring dues
+        const recurringDues = await db.query.recurringMembershipDues.findFirst({
+          where: and(
+            eq(schema.recurringMembershipDues.memberId, memberId),
+            eq(schema.recurringMembershipDues.status, "active")
+          )
+        });
+
+        // Only suspend if no active recurring dues
+        if (!recurringDues && member.status === "active") {
+          await db.update(schema.members)
+            .set({ status: "expired" })
+            .where(eq(schema.members.id, memberId));
+          suspendedCount++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Suspended ${suspendedCount} members with overdue dues`,
+        overdueDuesCount: overdueDues.length,
+        suspendedMembersCount: suspendedCount
+      });
+    } catch (error) {
+      console.error("Check overdue dues error:", error);
+      res.status(500).json({ success: false, error: "Failed to check overdue dues" });
     }
   });
 
