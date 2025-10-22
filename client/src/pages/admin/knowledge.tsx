@@ -60,14 +60,17 @@ export default function AdminKnowledge() {
 
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
     queryKey: ["/api/knowledge/categories"],
+    select: (data: any) => data.data || [],
   });
 
   const { data: articles = [], isLoading: articlesLoading } = useQuery({
     queryKey: ["/api/knowledge/articles"],
+    select: (data: any) => data.data || [],
   });
 
   const { data: faqs = [], isLoading: faqsLoading } = useQuery({
     queryKey: ["/api/knowledge/faqs"],
+    select: (data: any) => data.data || [],
   });
 
   const categoryForm = useForm({

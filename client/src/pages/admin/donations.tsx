@@ -47,10 +47,12 @@ export default function AdminDonations() {
 
   const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
     queryKey: ["/api/donation-campaigns"],
+    select: (data: any) => data.data || [],
   });
 
   const { data: donations = [], isLoading: donationsLoading } = useQuery({
     queryKey: ["/api/admin/donations"],
+    select: (data: any) => data.data || [],
   });
 
   const campaignForm = useForm({

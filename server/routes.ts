@@ -1756,7 +1756,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, data: election });
     } catch (error) {
-      res.status(400).json({ success: false, error: "Failed to create election" });
+      console.error("Create election error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to create election";
+      res.status(400).json({ success: false, error: errorMessage });
     }
   });
 
@@ -3789,7 +3791,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let query = db.query.ideas.findMany({
         with: {
-          member: { with: { user: true } },
+          author: { with: { user: true } },
           votes: true,
           comments: { with: { member: { with: { user: true } } } }
         },
@@ -3819,7 +3821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
         with: {
-          member: { with: { user: true } },
+          author: { with: { user: true } },
           votes: { with: { member: { with: { user: true } } } },
           comments: { 
             with: { member: { with: { user: true } } },
@@ -3864,7 +3866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
-        with: { member: true }
+        with: { author: { with: { user: true } } }
       });
 
       if (!idea) {
@@ -3875,8 +3877,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         where: eq(schema.members.userId, req.user!.id)
       });
 
-      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
-      if (ideaMember?.userId !== req.user!.id && req.user!.role !== "admin") {
+      const ideaAuthor = Array.isArray(idea.author) ? idea.author[0] : idea.author;
+      const ideaUser = ideaAuthor && !Array.isArray(ideaAuthor.user) ? ideaAuthor.user : (Array.isArray(ideaAuthor?.user) ? ideaAuthor.user[0] : null);
+      if (ideaUser?.id !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
 
@@ -3895,15 +3898,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
-        with: { member: true }
+        with: { author: { with: { user: true } } }
       });
 
       if (!idea) {
         return res.status(404).json({ success: false, error: "Idea not found" });
       }
 
-      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
-      if (ideaMember?.userId !== req.user!.id && req.user!.role !== "admin") {
+      const ideaAuthor = Array.isArray(idea.author) ? idea.author[0] : idea.author;
+      const ideaUser = ideaAuthor && !Array.isArray(ideaAuthor.user) ? ideaAuthor.user : (Array.isArray(ideaAuthor?.user) ? ideaAuthor.user[0] : null);
+      if (ideaUser?.id !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
 
