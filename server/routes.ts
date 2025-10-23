@@ -20,7 +20,7 @@ import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry } from "./jwt-utils";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry, hashRefreshToken, verifyRefreshTokenHash } from "./jwt-utils";
 // PUSH NOTIFICATION INTEGRATION: Import push service
 // Uncomment the following line when ready to use push notifications:
 // import { pushService, NotificationTemplates } from "./push-service";
@@ -434,10 +434,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const accessToken = generateAccessToken(user.id);
       const refreshToken = generateRefreshToken(user.id);
+      const hashedRefreshToken = await hashRefreshToken(refreshToken);
 
       await db.insert(schema.refreshTokens).values({
         userId: user.id,
-        token: refreshToken,
+        token: hashedRefreshToken,
         expiresAt: getRefreshTokenExpiry(),
       });
 
@@ -468,19 +469,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const userId = verifyRefreshToken(refreshToken);
 
-      const storedToken = await db.query.refreshTokens.findFirst({
+      const userTokens = await db.query.refreshTokens.findMany({
         where: and(
-          eq(schema.refreshTokens.token, refreshToken),
-          eq(schema.refreshTokens.userId, userId)
+          eq(schema.refreshTokens.userId, userId),
+          sql`${schema.refreshTokens.revokedAt} IS NULL`
         ),
       });
 
-      if (!storedToken) {
-        return res.status(401).json({ success: false, error: "Invalid refresh token" });
+      let storedToken = null;
+      for (const token of userTokens) {
+        const isMatch = await verifyRefreshTokenHash(refreshToken, token.token);
+        if (isMatch) {
+          storedToken = token;
+          break;
+        }
       }
 
-      if (storedToken.revokedAt) {
-        return res.status(401).json({ success: false, error: "Refresh token has been revoked" });
+      if (!storedToken) {
+        return res.status(401).json({ success: false, error: "Invalid refresh token" });
       }
 
       if (new Date() > storedToken.expiresAt) {
@@ -493,10 +499,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const newAccessToken = generateAccessToken(userId);
       const newRefreshToken = generateRefreshToken(userId);
+      const hashedNewRefreshToken = await hashRefreshToken(newRefreshToken);
 
       await db.insert(schema.refreshTokens).values({
         userId,
-        token: newRefreshToken,
+        token: hashedNewRefreshToken,
         expiresAt: getRefreshTokenExpiry(),
       });
 
@@ -526,12 +533,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const userId = verifyRefreshToken(refreshToken);
 
-      await db.update(schema.refreshTokens)
-        .set({ revokedAt: new Date() })
-        .where(and(
-          eq(schema.refreshTokens.token, refreshToken),
-          eq(schema.refreshTokens.userId, userId)
-        ));
+      const userTokens = await db.query.refreshTokens.findMany({
+        where: and(
+          eq(schema.refreshTokens.userId, userId),
+          sql`${schema.refreshTokens.revokedAt} IS NULL`
+        ),
+      });
+
+      let storedToken = null;
+      for (const token of userTokens) {
+        const isMatch = await verifyRefreshTokenHash(refreshToken, token.token);
+        if (isMatch) {
+          storedToken = token;
+          break;
+        }
+      }
+
+      if (storedToken) {
+        await db.update(schema.refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(eq(schema.refreshTokens.id, storedToken.id));
+      }
 
       return res.json({
         success: true,

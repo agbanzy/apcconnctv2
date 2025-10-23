@@ -66,13 +66,15 @@ export const auth = {
   },
 
   async logout(): Promise<void> {
-    try {
-      await api.post('/api/auth/mobile/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      await storage.clearAll();
+    const refreshToken = await storage.getRefreshToken();
+    if (refreshToken) {
+      try {
+        await api.post('/api/auth/mobile/logout', { refreshToken });
+      } catch (error) {
+        console.log('Logout request failed:', error);
+      }
     }
+    await storage.clearAll();
   },
 
   async getAccessToken(): Promise<string | null> {

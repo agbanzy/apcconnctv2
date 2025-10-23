@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
 
@@ -61,4 +62,13 @@ export function getRefreshTokenExpiry(): Date {
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + 7);
   return expiryDate;
+}
+
+export async function hashRefreshToken(token: string): Promise<string> {
+  const saltRounds = 10;
+  return await bcrypt.hash(token, saltRounds);
+}
+
+export async function verifyRefreshTokenHash(token: string, hash: string): Promise<boolean> {
+  return await bcrypt.compare(token, hash);
 }
