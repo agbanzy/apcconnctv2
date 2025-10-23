@@ -20,6 +20,7 @@ import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry } from "./jwt-utils";
 // PUSH NOTIFICATION INTEGRATION: Import push service
 // Uncomment the following line when ready to use push notifications:
 // import { pushService, NotificationTemplates } from "./push-service";
@@ -404,6 +405,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ success: true, data: { message: "Logged out successfully" } });
     });
+  });
+
+  app.post("/api/auth/mobile/login", async (req: AuthRequest, res: Response) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: "Email and password are required" });
+      }
+
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.email, email)
+      });
+
+      if (!user) {
+        return res.status(401).json({ success: false, error: "Invalid email or password" });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ success: false, error: "Invalid email or password" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, user.id)
+      });
+
+      const accessToken = generateAccessToken(user.id);
+      const refreshToken = generateRefreshToken(user.id);
+
+      await db.insert(schema.refreshTokens).values({
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: getRefreshTokenExpiry(),
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+
+      return res.json({
+        success: true,
+        data: {
+          accessToken,
+          refreshToken,
+          user: userWithoutPassword,
+          member,
+        },
+      });
+    } catch (error) {
+      console.error("Mobile login error:", error);
+      return res.status(500).json({ success: false, error: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/mobile/refresh", async (req: AuthRequest, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, error: "Refresh token is required" });
+      }
+
+      const userId = verifyRefreshToken(refreshToken);
+
+      const storedToken = await db.query.refreshTokens.findFirst({
+        where: and(
+          eq(schema.refreshTokens.token, refreshToken),
+          eq(schema.refreshTokens.userId, userId)
+        ),
+      });
+
+      if (!storedToken) {
+        return res.status(401).json({ success: false, error: "Invalid refresh token" });
+      }
+
+      if (storedToken.revokedAt) {
+        return res.status(401).json({ success: false, error: "Refresh token has been revoked" });
+      }
+
+      if (new Date() > storedToken.expiresAt) {
+        return res.status(401).json({ success: false, error: "Refresh token expired" });
+      }
+
+      await db.update(schema.refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(schema.refreshTokens.id, storedToken.id));
+
+      const newAccessToken = generateAccessToken(userId);
+      const newRefreshToken = generateRefreshToken(userId);
+
+      await db.insert(schema.refreshTokens).values({
+        userId,
+        token: newRefreshToken,
+        expiresAt: getRefreshTokenExpiry(),
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        },
+      });
+    } catch (error) {
+      console.error("Token refresh error:", error);
+      return res.status(401).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Token refresh failed",
+      });
+    }
+  });
+
+  app.post("/api/auth/mobile/logout", async (req: AuthRequest, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, error: "Refresh token is required" });
+      }
+
+      const userId = verifyRefreshToken(refreshToken);
+
+      await db.update(schema.refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(
+          eq(schema.refreshTokens.token, refreshToken),
+          eq(schema.refreshTokens.userId, userId)
+        ));
+
+      return res.json({
+        success: true,
+        data: { message: "Logged out successfully" },
+      });
+    } catch (error) {
+      console.error("Mobile logout error:", error);
+      return res.status(500).json({ success: false, error: "Logout failed" });
+    }
   });
 
   app.get("/api/auth/me", requireAuth, async (req: AuthRequest, res: Response) => {

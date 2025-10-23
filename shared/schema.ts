@@ -66,6 +66,15 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   usedAt: timestamp("used_at"),
 });
 
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+});
+
 // Members & Membership
 export const members = pgTable("members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -992,6 +1001,7 @@ export const insertStateSchema = createInsertSchema(states).omit({ id: true, cre
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
 export const insertWardSchema = createInsertSchema(wards).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({ id: true, createdAt: true });
 export const insertMemberSchema = createInsertSchema(members).omit({ id: true, joinDate: true });
 export const insertDuesSchema = createInsertSchema(membershipDues).omit({ id: true, createdAt: true, paidAt: true });
 export const insertRecurringDuesSchema = createInsertSchema(recurringMembershipDues).omit({ id: true, createdAt: true, updatedAt: true, lastPaymentDate: true });
@@ -1039,6 +1049,8 @@ export type InsertWard = z.infer<typeof insertWardSchema>;
 export type Ward = typeof wards.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
+export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type InsertMember = z.infer<typeof insertMemberSchema>;
 export type Member = typeof members.$inferSelect;
 export type InsertDues = z.infer<typeof insertDuesSchema>;
