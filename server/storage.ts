@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { PaginatedResponse, FilterDTO, BulkAction } from "@shared/admin-types";
@@ -12,7 +12,7 @@ interface IStorage {
 
 // Database storage implementation
 class DbStorage implements IStorage {
-  constructor(private db: typeof db) {}
+  constructor(private db: typeof import("./db").db) {}
 
   async listAuditLogs(filters: FilterDTO) {
     const { page = 1, pageSize = 20, search = '', sortBy = 'createdAt', sortOrder = 'desc' } = filters;
@@ -43,10 +43,20 @@ class DbStorage implements IStorage {
     const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
     const sortOrderFn = sortOrder === 'asc' ? asc : desc;
     
+    // Safe column mapping for sorting (only allow whitelisted columns)
+    const allowedSortColumns: Record<string, any> = {
+      createdAt: schema.auditLogs.createdAt,
+      action: schema.auditLogs.action,
+      status: schema.auditLogs.status,
+      fraudScore: schema.auditLogs.fraudScore,
+      suspiciousActivity: schema.auditLogs.suspiciousActivity,
+    };
+    const sortColumn = allowedSortColumns[sortBy as string] || schema.auditLogs.createdAt;
+    
     const [data, countResult] = await Promise.all([
       this.db.query.auditLogs.findMany({
         where: whereClause,
-        orderBy: sortOrderFn(schema.auditLogs[sortBy as keyof typeof schema.auditLogs] || schema.auditLogs.createdAt),
+        orderBy: sortOrderFn(sortColumn),
         limit: pageSize,
         offset,
         with: {
@@ -100,10 +110,20 @@ class DbStorage implements IStorage {
     const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
     const sortOrderFn = sortOrder === 'asc' ? asc : desc;
     
+    // Safe column mapping for sorting (only allow whitelisted columns)
+    const allowedSortColumns: Record<string, any> = {
+      createdAt: schema.quizzes.createdAt,
+      question: schema.quizzes.question,
+      category: schema.quizzes.category,
+      difficulty: schema.quizzes.difficulty,
+      points: schema.quizzes.points,
+    };
+    const sortColumn = allowedSortColumns[sortBy as string] || schema.quizzes.createdAt;
+    
     const [data, countResult] = await Promise.all([
       this.db.query.quizzes.findMany({
         where: whereClause,
-        orderBy: sortOrderFn(schema.quizzes[sortBy as keyof typeof schema.quizzes] || schema.quizzes.createdAt),
+        orderBy: sortOrderFn(sortColumn),
         limit: pageSize,
         offset,
       }),
@@ -127,31 +147,37 @@ class DbStorage implements IStorage {
   async bulkUpdateMembers(ids: string[], action: BulkAction) {
     switch (action) {
       case BulkAction.APPROVE:
+        // Approve = set status to active
         await this.db.update(schema.members)
-          .set({ status: 'approved' })
+          .set({ status: 'active' })
           .where(inArray(schema.members.id, ids));
         break;
       case BulkAction.REJECT:
+        // Reject = set status to expired (inactive)
         await this.db.update(schema.members)
-          .set({ status: 'rejected' })
+          .set({ status: 'expired' })
           .where(inArray(schema.members.id, ids));
         break;
       case BulkAction.BAN:
+        // Ban = set status to expired (inactive/banned)
         await this.db.update(schema.members)
-          .set({ status: 'banned' })
+          .set({ status: 'expired' })
           .where(inArray(schema.members.id, ids));
         break;
       case BulkAction.UNBAN:
+        // Unban = set status to active
         await this.db.update(schema.members)
           .set({ status: 'active' })
           .where(inArray(schema.members.id, ids));
         break;
       case BulkAction.VERIFY:
+        // Verify NIN
         await this.db.update(schema.members)
           .set({ ninVerified: true })
           .where(inArray(schema.members.id, ids));
         break;
       case BulkAction.UNVERIFY:
+        // Unverify NIN
         await this.db.update(schema.members)
           .set({ ninVerified: false })
           .where(inArray(schema.members.id, ids));
