@@ -133,7 +133,12 @@ function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 }
 
-function FloatingBadge({ icon: Icon, text, delay }: { icon: any; text: string; delay: number }) {
+function FloatingBadge({ icon: Icon, text, delay, style }: { 
+  icon: any; 
+  text: string; 
+  delay: number;
+  style?: React.CSSProperties;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -141,6 +146,7 @@ function FloatingBadge({ icon: Icon, text, delay }: { icon: any; text: string; d
       viewport={{ once: true }}
       transition={{ delay, duration: 0.6 }}
       className="absolute hidden lg:flex items-center gap-2 bg-background/90 backdrop-blur-sm border border-border rounded-full px-4 py-2 shadow-lg"
+      style={style}
       data-testid={`badge-${text.toLowerCase().replace(/\s+/g, '-')}`}
     >
       <Icon className="h-4 w-4 text-primary" />
@@ -440,14 +446,13 @@ export default function Landing() {
               </Badge>
             </motion.div>
             
-            <h1 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white mb-8 tracking-tight leading-tight" data-testid="text-hero-title">
-              Join the Movement:<br />
-              <span className="text-primary">Empowering APC,</span><br />
-              Connecting Nigeria's Youth!
+            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-white mb-6 tracking-tight leading-[1.1]" data-testid="text-hero-title">
+              <span className="block mb-2">Empower Nigeria's Future</span>
+              <span className="block text-primary drop-shadow-[0_0_30px_rgba(20,83,45,0.5)]">Join APC Connect</span>
             </h1>
             
-            <p className="text-xl md:text-2xl lg:text-3xl text-white/95 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
-              Your all-in-one platform to engage with the All Progressives Congress, shape the future, and make your voice heard.
+            <p className="text-lg sm:text-xl md:text-2xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
+              Your all-in-one digital platform to engage, vote, and shape democracy across all 774 LGAs in Nigeria.
             </p>
             
             <motion.div 
@@ -478,25 +483,31 @@ export default function Landing() {
               </Button>
             </motion.div>
 
-            {/* Quick Stats Below Hero */}
+            {/* Quick Stats Below Hero - Enhanced */}
             <motion.div
-              className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6"
+              className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6"
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9, duration: 0.6 }}
             >
               {[
-                { value: analytics?.totalMembers || 1000000, label: "Active Members" },
-                { value: analytics?.totalEvents || 500, label: "Events Hosted" },
-                { value: analytics?.totalElections || 150, label: "Elections Held" },
-                { value: 774, label: "LGAs Covered" }
+                { value: analytics?.totalMembers || 1000000, label: "Active Members", suffix: "+" },
+                { value: analytics?.totalEvents || 500, label: "Events Hosted", suffix: "+" },
+                { value: analytics?.totalElections || 150, label: "Elections Held", suffix: "+" },
+                { value: 774, label: "LGAs Covered", suffix: "" }
               ].map((stat, index) => (
-                <div key={index} className="text-white" data-testid={`stat-${index}`}>
-                  <div className="text-3xl md:text-4xl font-mono font-bold text-primary">
-                    <AnimatedNumber value={stat.value} suffix="+" />
+                <motion.div 
+                  key={index} 
+                  className="text-white bg-white/5 backdrop-blur-sm rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-all duration-300"
+                  data-testid={`stat-${index}`}
+                  whileHover={{ scale: 1.05, y: -5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <div className="text-3xl md:text-5xl lg:text-6xl font-mono font-black text-primary drop-shadow-lg">
+                    <AnimatedNumber value={stat.value} suffix={stat.suffix} />
                   </div>
-                  <div className="text-sm md:text-base text-white/80 mt-1">{stat.label}</div>
-                </div>
+                  <div className="text-xs md:text-sm lg:text-base text-white/90 mt-2 font-medium">{stat.label}</div>
+                </motion.div>
               ))}
             </motion.div>
           </motion.div>
@@ -1002,62 +1013,68 @@ export default function Landing() {
               </p>
             </motion.div>
 
-            {/* Embla Carousel */}
-            <div className="relative">
-              <div className="overflow-hidden" ref={emblaRef}>
+            {/* Enhanced Embla Carousel */}
+            <div className="relative px-4 md:px-12">
+              <div className="overflow-hidden rounded-xl" ref={emblaRef}>
                 <div className="flex gap-6">
                   {testimonials.map((testimonial, index) => (
-                    <div 
+                    <motion.div 
                       key={index} 
-                      className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0"
+                      className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 px-2"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: index * 0.1 }}
                     >
-                      <Card className="h-full hover-elevate transition-all duration-300" data-testid={`card-testimonial-${index}`}>
-                        <CardHeader>
-                          <div className="flex items-center gap-4 mb-4">
-                            <Avatar className="h-16 w-16 border-2 border-primary/20">
-                              <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
+                      <Card className="h-full hover-elevate transition-all duration-300 border-2" data-testid={`card-testimonial-${index}`}>
+                        <CardHeader className="pb-4">
+                          <div className="flex items-start gap-4">
+                            <Avatar className="h-14 w-14 md:h-16 md:w-16 border-2 border-primary/30 flex-shrink-0">
+                              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary text-lg md:text-xl font-black">
                                 {testimonial.initials}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <div className="font-bold text-lg">{testimonial.name}</div>
-                              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                <MapPin className="h-3 w-3" />
-                                {testimonial.location} • {testimonial.age} years
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-base md:text-lg truncate">{testimonial.name}</div>
+                              <div className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                <MapPin className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{testimonial.location}</span>
+                                <span className="text-xs">• {testimonial.age}</span>
                               </div>
                             </div>
                           </div>
                         </CardHeader>
-                        <CardContent>
-                          <Quote className="h-10 w-10 text-primary/20 mb-4" />
-                          <p className="text-muted-foreground italic text-base leading-relaxed">
-                            {testimonial.quote}
-                          </p>
+                        <CardContent className="pt-0">
+                          <div className="relative">
+                            <Quote className="h-8 w-8 md:h-10 md:w-10 text-primary/10 absolute -top-2 -left-2" />
+                            <p className="text-sm md:text-base text-muted-foreground leading-relaxed pl-6 italic">
+                              {testimonial.quote}
+                            </p>
+                          </div>
                         </CardContent>
                       </Card>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
 
-              {/* Navigation Arrows */}
+              {/* Enhanced Navigation Arrows */}
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 h-12 w-12 rounded-full bg-background/90 backdrop-blur-sm hover:bg-background border-2"
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-10 w-10 md:h-12 md:w-12 rounded-full bg-background/95 backdrop-blur-md hover:bg-background border-2 shadow-lg z-10 hover:scale-110 transition-all"
                 onClick={scrollPrev}
                 data-testid="button-carousel-prev"
               >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 h-12 w-12 rounded-full bg-background/90 backdrop-blur-sm hover:bg-background border-2"
+                className="absolute right-0 top-1/2 -translate-y-1/2 h-10 w-10 md:h-12 md:w-12 rounded-full bg-background/95 backdrop-blur-md hover:bg-background border-2 shadow-lg z-10 hover:scale-110 transition-all"
                 onClick={scrollNext}
                 data-testid="button-carousel-next"
               >
-                <ChevronRight className="h-6 w-6" />
+                <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
               </Button>
             </div>
 
