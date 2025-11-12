@@ -4,21 +4,25 @@ import { Badge } from "@/components/ui/badge";
 import { Award, Clock } from "lucide-react";
 
 interface MicroTaskCardProps {
+  id: string;
   title: string;
   description: string;
   points: number;
   timeEstimate: string;
   category: string;
   completed?: boolean;
+  onComplete?: () => void;
 }
 
 export function MicroTaskCard({
+  id,
   title,
   description,
   points,
   timeEstimate,
   category,
   completed = false,
+  onComplete,
 }: MicroTaskCardProps) {
   return (
     <Card
@@ -50,7 +54,7 @@ export function MicroTaskCard({
             Completed ✓
           </Button>
         ) : (
-          <Button className="w-full" data-testid="button-start-task">
+          <Button className="w-full" data-testid="button-start-task" onClick={onComplete}>
             Start Task
           </Button>
         )}

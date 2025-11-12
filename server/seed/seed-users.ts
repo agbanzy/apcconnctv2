@@ -100,6 +100,11 @@ export async function seedUsers(targetCount: number = 5000) {
         role: "member",
       });
       
+      const shouldHavePhoto = Math.random() > 0.7;
+      const photoUrl = shouldHavePhoto 
+        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}+${encodeURIComponent(lastName)}&size=256&background=random`
+        : null;
+      
       wardMembers.push({
         userId: "",
         memberId: generateMemberId(),
@@ -107,6 +112,7 @@ export async function seedUsers(targetCount: number = 5000) {
         ninVerified: Math.random() > 0.3,
         wardId: ward.id,
         status: "active",
+        photoUrl,
       } as schema.InsertMember);
     }
     

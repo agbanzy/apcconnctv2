@@ -11,17 +11,17 @@ export default function MicroTasks() {
   const { toast } = useToast();
 
   const { data: tasksData, isLoading } = useQuery<{ success: boolean; data: MicroTask[] }>({
-    queryKey: ["/api/micro-tasks"],
+    queryKey: ["/api/tasks/micro"],
     enabled: !!member,
   });
 
   const completeMutation = useMutation({
     mutationFn: async ({ taskId, proofUrl }: { taskId: string; proofUrl?: string }) => {
-      const res = await apiRequest("POST", `/api/micro-tasks/${taskId}/complete`, { proofUrl });
+      const res = await apiRequest("POST", `/api/tasks/micro/${taskId}/complete`, { proofUrl });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/micro-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/micro"] });
       queryClient.invalidateQueries({ queryKey: ["/api/gamification/my-stats"] });
       toast({
         title: "Task completed",

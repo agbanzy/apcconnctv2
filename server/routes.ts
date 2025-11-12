@@ -26,6 +26,7 @@ import { apiLimiter, authLimiter, votingLimiter } from "./middleware/rate-limit"
 import { errorHandler, createError } from "./middleware/error-handler";
 import { logAudit, AuditActions } from "./utils/audit-logger";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -1525,6 +1526,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // OBJECT STORAGE ENDPOINTS
+  // ============================================================================
+  // Reference: javascript_object_storage blueprint for protected file uploading
+
+  // Serve objects with ACL check
+  app.get("/objects/:objectPath(*)", async (req: AuthRequest, res: Response) => {
+    const objectStorageService = ObjectStorageService.getInstance();
+    console.log(`[GET /objects/*] ====== OBJECT RETRIEVAL REQUEST ======`);
+    console.log(`[GET /objects/*] Requested path: ${req.path}`);
+    console.log(`[GET /objects/*] Full URL: ${req.url}`);
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      console.log(`[GET /objects/*] Object found, streaming to client`);
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error(`[GET /objects/*] Error accessing object:`, error);
+      if (error instanceof ObjectNotFoundError) {
+        console.log(`[GET /objects/*] Object not found (404)`);
+        return res.sendStatus(404);
+      }
+      console.log(`[GET /objects/*] Internal server error (500)`);
+      return res.sendStatus(500);
+    }
+  });
+
+  // Get upload URL for profile photo
+  app.post("/api/objects/upload", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      console.log(`[POST /api/objects/upload] Request from user: ${req.user?.email}`);
+      const objectStorageService = ObjectStorageService.getInstance();
+      const { uploadUrl, objectKey, method } = await objectStorageService.getObjectEntityUploadURL();
+      console.log(`[POST /api/objects/upload] ====== UPLOAD PARAMETERS RESPONSE ======`);
+      console.log(`[POST /api/objects/upload] Returning objectKey to frontend: ${objectKey}`);
+      console.log(`[POST /api/objects/upload] Returning upload URL to frontend: ${uploadUrl}`);
+      console.log(`[POST /api/objects/upload] Method: ${method}`);
+      console.log(`[POST /api/objects/upload] ========================================`);
+      res.json({ success: true, data: { url: uploadUrl, objectKey, method } });
+    } catch (error) {
+      console.error("[POST /api/objects/upload] Error generating upload URL:", error);
+      res.status(500).json({ success: false, error: "Failed to generate upload URL" });
+    }
+  });
+
+  // Update member profile photo after upload
+  app.post("/api/members/profile-photo", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { objectKey } = req.body;
+
+      console.log(`[POST /api/members/profile-photo] ====== PROFILE PHOTO UPDATE ======`);
+      console.log(`[POST /api/members/profile-photo] User: ${req.user?.email}`);
+      console.log(`[POST /api/members/profile-photo] Received objectKey: ${objectKey}`);
+
+      if (!objectKey) {
+        console.log(`[POST /api/members/profile-photo] ERROR: Missing objectKey`);
+        return res.status(400).json({ success: false, error: "objectKey is required" });
+      }
+
+      if (!objectKey.startsWith("/objects/")) {
+        console.log(`[POST /api/members/profile-photo] ERROR: Invalid objectKey format`);
+        return res.status(400).json({ success: false, error: "Invalid objectKey format" });
+      }
+
+      // Get member for this user
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        console.log(`[POST /api/members/profile-photo] ERROR: Member not found`);
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      console.log(`[POST /api/members/profile-photo] Member ID: ${member.id}`);
+      console.log(`[POST /api/members/profile-photo] Setting ACL policy for object...`);
+
+      // Set ACL policy for the uploaded photo (public visibility for ID cards)
+      const objectStorageService = ObjectStorageService.getInstance();
+      await objectStorageService.setObjectKeyAclPolicy(
+        objectKey,
+        {
+          owner: req.user!.id,
+          visibility: "public",
+        }
+      );
+
+      console.log(`[POST /api/members/profile-photo] ACL policy set successfully`);
+      console.log(`[POST /api/members/profile-photo] Updating member record with photoUrl: ${objectKey}`);
+
+      // Update member's photo URL with the objectKey
+      const [updatedMember] = await db.update(schema.members)
+        .set({ photoUrl: objectKey })
+        .where(eq(schema.members.id, member.id))
+        .returning();
+
+      console.log(`[POST /api/members/profile-photo] Profile photo updated successfully`);
+      console.log(`[POST /api/members/profile-photo] ====================================`);
+
+      res.json({
+        success: true,
+        data: { member: updatedMember, photoUrl: objectKey }
+      });
+    } catch (error) {
+      console.error("[POST /api/members/profile-photo] Error updating profile photo:", error);
+      res.status(500).json({ success: false, error: "Failed to update profile photo" });
+    }
+  });
+
   // Verify ID card authenticity
   app.get("/api/id-card/verify/:memberId", async (req: AuthRequest, res: Response) => {
     try {
@@ -2863,43 +2972,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tasks", async (req: Request, res: Response) => {
-    try {
-      const { difficulty, status } = req.query;
-      let tasks;
-
-      if (difficulty) {
-        tasks = await db.query.volunteerTasks.findMany({
-          where: eq(schema.volunteerTasks.difficulty, difficulty as any),
-          orderBy: desc(schema.volunteerTasks.createdAt)
-        });
-      } else {
-        tasks = await db.query.volunteerTasks.findMany({
-          orderBy: desc(schema.volunteerTasks.createdAt)
-        });
-      }
-
-      res.json({ success: true, data: tasks });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch tasks" });
-    }
-  });
-
-  app.get("/api/tasks/:id", async (req: Request, res: Response) => {
-    try {
-      const task = await db.query.volunteerTasks.findFirst({
-        where: eq(schema.volunteerTasks.id, req.params.id)
-      });
-
-      if (!task) {
-        return res.status(404).json({ success: false, error: "Task not found" });
-      }
-
-      res.json({ success: true, data: task });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch task" });
-    }
-  });
+  // ============================================================================
+  // LEGACY TASK ROUTES - COMMENTED OUT (Replaced by comprehensive task system)
+  // ============================================================================
+  // NOTE: These old routes caused conflicts with the new comprehensive task routes.
+  // The generic /api/tasks/:id was matching /api/tasks/micro before the specific route.
+  // New comprehensive routes are at the end of this file (lines ~6200+)
+  // 
+  // app.get("/api/tasks", async (req: Request, res: Response) => {
+  //   // OLD: Get volunteer tasks - replaced by /api/tasks/volunteer
+  // });
+  // 
+  // app.get("/api/tasks/:id", async (req: Request, res: Response) => {
+  //   // OLD: Get single task by ID - replaced by /api/tasks/volunteer/:id
+  // });
+  // ============================================================================
 
   app.post("/api/tasks", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
@@ -3245,73 +3332,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch stats" });
-    }
-  });
-
-  app.get("/api/micro-tasks", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const tasks = await db.query.microTasks.findMany({
-        orderBy: desc(schema.microTasks.createdAt)
-      });
-      res.json({ success: true, data: tasks });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch micro-tasks" });
-    }
-  });
-
-  app.post("/api/micro-tasks/:id/complete", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const { proofUrl } = req.body;
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id)
-      });
-
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member not found" });
-      }
-
-      const [completion] = await db.insert(schema.taskCompletions).values({
-        taskId: req.params.id,
-        taskType: "micro",
-        memberId: member.id,
-        proofUrl,
-        status: "pending"
-      }).returning();
-
-      res.json({ success: true, data: completion });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to complete micro-task" });
-    }
-  });
-
-  app.patch("/api/micro-tasks/:id/verify", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
-    try {
-      const { completionId } = req.body;
-
-      const completion = await db.query.taskCompletions.findFirst({
-        where: eq(schema.taskCompletions.id, completionId),
-        with: { task: true }
-      });
-
-      if (!completion) {
-        return res.status(404).json({ success: false, error: "Completion not found" });
-      }
-
-      await db.update(schema.taskCompletions)
-        .set({ status: "approved" })
-        .where(eq(schema.taskCompletions.id, completionId));
-
-      const task = Array.isArray(completion.task) ? completion.task[0] : completion.task;
-      await db.insert(schema.userPoints).values({
-        memberId: completion.memberId,
-        source: "micro-task",
-        amount: task?.points || 0,
-        points: task?.points || 0
-      });
-
-      res.json({ success: true, data: { message: "Micro-task verified and points awarded" } });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to verify micro-task" });
     }
   });
 

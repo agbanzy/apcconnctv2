@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useState } from "react";
-import { User, MapPin, Phone, Mail, QrCode, CreditCard } from "lucide-react";
+import { User, MapPin, Phone, Mail, QrCode, CreditCard, Camera, Upload } from "lucide-react";
 import { DigitalIdCard } from "@/components/digital-id-card";
+import { ObjectUploader } from "@/components/object-uploader";
 
 export default function Profile() {
   const { user, member } = useAuth();
@@ -49,6 +51,44 @@ export default function Profile() {
     },
   });
 
+  const photoUploadMutation = useMutation({
+    mutationFn: async (objectKey: string) => {
+      const res = await apiRequest("POST", "/api/members/profile-photo", { objectKey });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/members", member?.id, "id-card"] });
+      toast({
+        title: "Photo updated",
+        description: "Your profile photo has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload profile photo. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGetUploadParameters = async () => {
+    const res = await apiRequest("POST", "/api/objects/upload", {});
+    const data = await res.json();
+    return {
+      method: data.data.method,
+      url: data.data.url,
+      objectKey: data.data.objectKey,
+    };
+  };
+
+  const handleUploadComplete = (objectKey: string) => {
+    if (objectKey) {
+      photoUploadMutation.mutate(objectKey);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     updateMutation.mutate(formData);
@@ -85,6 +125,40 @@ export default function Profile() {
         </TabsList>
 
         <TabsContent value="info" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Photo</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center space-y-4">
+              <Avatar className="h-32 w-32 border-4 border-primary">
+                <AvatarImage src={member?.photoUrl || undefined} alt={`${user.firstName} ${user.lastName}`} />
+                <AvatarFallback className="text-3xl font-bold">
+                  {user.firstName?.[0]}{user.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  {member?.photoUrl ? "Update your profile photo" : "Upload a profile photo for your digital ID card"}
+                </p>
+                <ObjectUploader
+                  maxFileSize={3145728}
+                  allowedFileTypes={["image/jpeg", "image/png", "image/webp"]}
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleUploadComplete}
+                  buttonVariant="default"
+                >
+                  <div className="flex items-center gap-2">
+                    <Camera className="h-4 w-4" />
+                    <span>{member?.photoUrl ? "Change Photo" : "Upload Photo"}</span>
+                  </div>
+                </ObjectUploader>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Max 3MB • JPG, PNG, or WebP
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>

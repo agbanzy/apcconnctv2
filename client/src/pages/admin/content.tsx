@@ -56,10 +56,10 @@ export default function AdminContent() {
   const [quizDialogOpen, setQuizDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
-  const { data: newsData } = useQuery({ queryKey: ["/api/news"] });
-  const { data: quizzesData } = useQuery({ queryKey: ["/api/quizzes"] });
-  const { data: tasksData } = useQuery({ queryKey: ["/api/tasks"] });
-  const { data: microTasksData } = useQuery({ queryKey: ["/api/micro-tasks"] });
+  const { data: newsData } = useQuery<{ data: any[] }>({ queryKey: ["/api/news"] });
+  const { data: quizzesData } = useQuery<{ data: any[] }>({ queryKey: ["/api/quizzes"] });
+  const { data: tasksData } = useQuery<{ data: any[] }>({ queryKey: ["/api/tasks"] });
+  const { data: microTasksData } = useQuery<{ data: any[] }>({ queryKey: ["/api/tasks/micro"] });
 
   const newsForm = useForm({
     resolver: zodResolver(newsSchema),

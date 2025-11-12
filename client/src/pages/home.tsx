@@ -76,7 +76,7 @@ export default function Home() {
     success: boolean;
     data: MicroTask[];
   }>({
-    queryKey: ["/api/micro-tasks"],
+    queryKey: ["/api/tasks/micro"],
     retry: false,
   });
 
