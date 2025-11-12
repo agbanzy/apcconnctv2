@@ -1,37 +1,49 @@
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        const registration = await navigator.serviceWorker.register('/sw.js', {
-          scope: '/'
-        });
-        
-        console.log('Service Worker registered successfully:', registration.scope);
-
-        // Check for updates periodically
-        setInterval(() => {
-          registration.update();
-        }, 60000); // Check every minute
-
-        // Handle updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New service worker available, prompt user to refresh
-                if (confirm('New version available! Reload to update?')) {
-                  window.location.reload();
-                }
-              }
-            });
-          }
-        });
-      } catch (error) {
-        console.error('Service Worker registration failed:', error);
-      }
-    });
+  // Only register service worker in production mode
+  if (!('serviceWorker' in navigator)) {
+    return;
   }
+
+  // Skip service worker registration in development mode
+  if (import.meta.env.DEV) {
+    console.log('Service Worker registration skipped in development mode');
+    return;
+  }
+
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/'
+      });
+      
+      console.log('Service Worker registered successfully:', registration.scope);
+
+      // Check for updates periodically
+      setInterval(() => {
+        registration.update();
+      }, 60000); // Check every minute
+
+      // Handle updates
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New service worker available, prompt user to refresh
+              if (confirm('New version available! Reload to update?')) {
+                window.location.reload();
+              }
+            }
+          });
+        }
+      });
+    } catch (error) {
+      // Provide user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.log(`Service Worker registration not available: ${errorMessage}`);
+      // Don't throw - this is not critical for app functionality
+    }
+  });
 }
 
 // Install prompt for PWA

@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // General API rate limiter (100 requests per 15 minutes)
 export const apiLimiter = rateLimit({
@@ -22,7 +22,14 @@ export const airtimeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   message: 'Too many airtime conversions, please try again later.',
-  keyGenerator: (req) => (req.user as any)?.id || req.ip,
+  keyGenerator: (req) => {
+    // Use user ID if authenticated, otherwise fall back to IP with IPv6 support
+    if ((req.user as any)?.id) {
+      return (req.user as any).id;
+    }
+    // Use ipKeyGenerator for proper IPv4 and IPv6 handling
+    return ipKeyGenerator(req.ip || '');
+  },
 });
 
 // Voting limiter (prevent spam voting)
