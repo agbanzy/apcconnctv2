@@ -3,6 +3,7 @@ import { seedUsers } from "./seed-users";
 import { seedCampaigns } from "./seed-campaigns";
 import { seedEvents } from "./seed-events";
 import { seedKnowledge } from "./seed-knowledge";
+import { seedKnowledgeArticles } from "./seed-knowledge-articles";
 import { seedElectoral } from "./seed-electoral";
 import { seedAdminComplete } from "./seed-admin-complete";
 import { seedDonations } from "./seed-donations";
@@ -109,8 +110,8 @@ async function runAllSeeds() {
       throw error;
     }
     
-    // 6. Seed Knowledge Base
-    console.log("\n📚 Step 7/7: Seeding Political Facts & Quotes");
+    // 6. Seed Knowledge Base (Facts & Quotes)
+    console.log("\n📚 Step 7/8: Seeding Political Facts & Quotes");
     console.log("-".repeat(60));
     try {
       const knowledgeCount = await seedKnowledge();
@@ -119,6 +120,19 @@ async function runAllSeeds() {
     } catch (error) {
       console.error("❌ Knowledge base seeding failed:", error);
       results.knowledge = "FAILED";
+      throw error;
+    }
+    
+    // 7. Seed Knowledge Base (Articles, Categories, FAQs)
+    console.log("\n📖 Step 8/8: Seeding Knowledge Articles & FAQs");
+    console.log("-".repeat(60));
+    try {
+      const articlesCount = await seedKnowledgeArticles();
+      results.knowledgeArticles = articlesCount;
+      console.log(`✅ Knowledge articles seeding completed: ${articlesCount} items`);
+    } catch (error) {
+      console.error("❌ Knowledge articles seeding failed:", error);
+      results.knowledgeArticles = "FAILED";
       throw error;
     }
     

@@ -6888,7 +6888,10 @@ Be friendly, informative, and politically neutral when discussing governance. En
         proofUrl,
         pointsEarned: 0,
         verified: false,
-        status: "pending"
+        status: "pending",
+        ipAddress: req.antiCheat?.ipAddress,
+        userAgent: req.antiCheat?.userAgent,
+        fingerprint: req.antiCheat?.fingerprint
       }).returning();
 
       await db.update(schema.taskApplications)

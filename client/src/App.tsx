@@ -195,6 +195,7 @@ function AppContent() {
               <Route path="/events" component={() => <ProtectedRoute component={Events} />} />
               <Route path="/elections" component={() => <ProtectedRoute component={Elections} />} />
               <Route path="/political-literacy" component={() => <ProtectedRoute component={PoliticalLiteracy} />} />
+              <Route path="/quizzes" component={() => <ProtectedRoute component={PoliticalLiteracy} />} />
               <Route path="/campaigns" component={() => <ProtectedRoute component={Campaigns} />} />
               <Route path="/leaderboard" component={() => <ProtectedRoute component={Leaderboard} />} />
               <Route path="/micro-tasks" component={() => <ProtectedRoute component={MicroTasks} />} />
