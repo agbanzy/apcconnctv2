@@ -26,6 +26,8 @@ export const states = pgTable("states", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   code: text("code").notNull().unique(), // e.g., "LAG" for Lagos
+  region: text("region"), // e.g., "Southwest", "Southeast", "North-Central"
+  capital: text("capital"), // e.g., "Ikeja" for Lagos
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -51,6 +53,34 @@ export const wards = pgTable("wards", {
   // Add unique constraint on lgaId + name combination
   uniqueWardPerLGA: unique().on(table.lgaId, table.name),
 }));
+
+// Electoral System
+export const senatorialDistricts = pgTable("senatorial_districts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // AB-SD1, AB-SD2, etc.
+  stateId: varchar("state_id").notNull().references(() => states.id),
+  districtName: text("district_name").notNull(), // "Abia Central"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const electoralStats = pgTable("electoral_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  year: integer("year").notNull(),
+  totalRegisteredVoters: integer("total_registered_voters"),
+  maleVoters: integer("male_voters"),
+  femaleVoters: integer("female_voters"),
+  pwdVoters: integer("pwd_voters"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const regionalElectoralStats = pgTable("regional_electoral_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  statsId: varchar("stats_id").references(() => electoralStats.id),
+  region: text("region").notNull(),
+  voters: integer("voters"),
+  percentage: decimal("percentage", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // Users & Authentication
 export const users = pgTable("users", {
@@ -544,6 +574,30 @@ export const articleFeedback = pgTable("article_feedback", {
   articleId: varchar("article_id").notNull().references(() => knowledgeArticles.id, { onDelete: "cascade" }),
   memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   helpful: boolean("helpful").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Political Facts & Quotes Knowledge Base
+export const politicalFacts = pgTable("political_facts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  externalId: integer("external_id"),
+  content: text("content").notNull(),
+  source: text("source").notNull(),
+  year: integer("year"),
+  category: text("category").notNull(),
+  subcategory: text("subcategory"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const politicalQuotes = pgTable("political_quotes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  externalId: integer("external_id"),
+  content: text("content").notNull(),
+  speaker: text("speaker").notNull(),
+  position: text("position"),
+  context: text("context"),
+  year: integer("year"),
+  category: text("category").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1117,6 +1171,9 @@ export const pointRedemptionsRelations = relations(pointRedemptions, ({ one }) =
 export const insertStateSchema = createInsertSchema(states).omit({ id: true, createdAt: true });
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
 export const insertWardSchema = createInsertSchema(wards).omit({ id: true, createdAt: true });
+export const insertSenatorialDistrictSchema = createInsertSchema(senatorialDistricts).omit({ id: true, createdAt: true });
+export const insertElectoralStatsSchema = createInsertSchema(electoralStats).omit({ id: true, createdAt: true });
+export const insertRegionalElectoralStatsSchema = createInsertSchema(regionalElectoralStats).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({ id: true, createdAt: true });
 export const insertMemberSchema = createInsertSchema(members).omit({ id: true, joinDate: true });
@@ -1145,6 +1202,8 @@ export const insertKnowledgeCategorySchema = createInsertSchema(knowledgeCategor
 export const insertKnowledgeArticleSchema = createInsertSchema(knowledgeArticles).omit({ id: true, createdAt: true, updatedAt: true, viewsCount: true, helpfulCount: true });
 export const insertFaqSchema = createInsertSchema(faqs).omit({ id: true, createdAt: true });
 export const insertArticleFeedbackSchema = createInsertSchema(articleFeedback).omit({ id: true, createdAt: true });
+export const insertPoliticalFactSchema = createInsertSchema(politicalFacts).omit({ id: true, createdAt: true });
+export const insertPoliticalQuoteSchema = createInsertSchema(politicalQuotes).omit({ id: true, createdAt: true });
 export const insertChatbotConversationSchema = createInsertSchema(chatbotConversations).omit({ id: true, createdAt: true });
 export const insertChatbotMessageSchema = createInsertSchema(chatbotMessages).omit({ id: true, createdAt: true });
 export const insertBadgeSchema = createInsertSchema(badges).omit({ id: true, createdAt: true });
@@ -1170,6 +1229,12 @@ export type InsertLga = z.infer<typeof insertLgaSchema>;
 export type Lga = typeof lgas.$inferSelect;
 export type InsertWard = z.infer<typeof insertWardSchema>;
 export type Ward = typeof wards.$inferSelect;
+export type InsertSenatorialDistrict = z.infer<typeof insertSenatorialDistrictSchema>;
+export type SenatorialDistrict = typeof senatorialDistricts.$inferSelect;
+export type InsertElectoralStats = z.infer<typeof insertElectoralStatsSchema>;
+export type ElectoralStats = typeof electoralStats.$inferSelect;
+export type InsertRegionalElectoralStats = z.infer<typeof insertRegionalElectoralStatsSchema>;
+export type RegionalElectoralStats = typeof regionalElectoralStats.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
@@ -1222,6 +1287,10 @@ export type InsertFaq = z.infer<typeof insertFaqSchema>;
 export type Faq = typeof faqs.$inferSelect;
 export type InsertArticleFeedback = z.infer<typeof insertArticleFeedbackSchema>;
 export type ArticleFeedback = typeof articleFeedback.$inferSelect;
+export type InsertPoliticalFact = z.infer<typeof insertPoliticalFactSchema>;
+export type PoliticalFact = typeof politicalFacts.$inferSelect;
+export type InsertPoliticalQuote = z.infer<typeof insertPoliticalQuoteSchema>;
+export type PoliticalQuote = typeof politicalQuotes.$inferSelect;
 export type InsertChatbotConversation = z.infer<typeof insertChatbotConversationSchema>;
 export type ChatbotConversation = typeof chatbotConversations.$inferSelect;
 export type InsertChatbotMessage = z.infer<typeof insertChatbotMessageSchema>;

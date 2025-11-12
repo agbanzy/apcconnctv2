@@ -8,6 +8,20 @@
       "when": 1762979811105,
       "tag": "0000_flashy_nemesis",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1762981911910,
+      "tag": "0001_chemical_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1762982461859,
+      "tag": "0002_dizzy_thundra",
+      "breakpoints": true
     }
   ]
 }

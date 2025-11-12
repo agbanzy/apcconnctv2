@@ -692,6 +692,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // ELECTORAL SYSTEM ROUTES
+  // ============================================================================
+
+  // Get all senatorial districts (optionally filter by state)
+  app.get("/api/electoral/senatorial-districts", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.query;
+      
+      let districts;
+      if (stateId) {
+        districts = await db.query.senatorialDistricts.findMany({
+          where: eq(schema.senatorialDistricts.stateId, stateId as string),
+          with: { state: true },
+          orderBy: asc(schema.senatorialDistricts.code)
+        });
+      } else {
+        districts = await db.query.senatorialDistricts.findMany({
+          with: { state: true },
+          orderBy: asc(schema.senatorialDistricts.code)
+        });
+      }
+      
+      res.json({ success: true, data: districts });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch senatorial districts" });
+    }
+  });
+
+  // Get electoral statistics
+  app.get("/api/electoral/stats", async (req: Request, res: Response) => {
+    try {
+      const { year } = req.query;
+      
+      let stats;
+      if (year) {
+        stats = await db.query.electoralStats.findFirst({
+          where: eq(schema.electoralStats.year, parseInt(year as string)),
+        });
+      } else {
+        // Get the most recent year
+        stats = await db.query.electoralStats.findFirst({
+          orderBy: desc(schema.electoralStats.year)
+        });
+      }
+      
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch electoral statistics" });
+    }
+  });
+
+  // Get regional electoral statistics
+  app.get("/api/electoral/regional-stats", async (req: Request, res: Response) => {
+    try {
+      const { year } = req.query;
+      
+      let regionalStats;
+      if (year) {
+        // Get stats for specific year
+        const stats = await db.query.electoralStats.findFirst({
+          where: eq(schema.electoralStats.year, parseInt(year as string)),
+        });
+        
+        if (stats) {
+          regionalStats = await db.query.regionalElectoralStats.findMany({
+            where: eq(schema.regionalElectoralStats.statsId, stats.id),
+            orderBy: desc(schema.regionalElectoralStats.voters)
+          });
+        }
+      } else {
+        // Get most recent regional stats
+        const latestStats = await db.query.electoralStats.findFirst({
+          orderBy: desc(schema.electoralStats.year)
+        });
+        
+        if (latestStats) {
+          regionalStats = await db.query.regionalElectoralStats.findMany({
+            where: eq(schema.regionalElectoralStats.statsId, latestStats.id),
+            orderBy: desc(schema.regionalElectoralStats.voters)
+          });
+        }
+      }
+      
+      res.json({ success: true, data: regionalStats || [] });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch regional electoral statistics" });
+    }
+  });
+
+  // ============================================================================
+  // END ELECTORAL SYSTEM ROUTES
+  // ============================================================================
+
   app.get("/api/members", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { wardId, lgaId, stateId } = req.query;
@@ -5807,6 +5901,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit: 10
       });
 
+      let knowledgeContext = "";
+      
+      try {
+        const searchPattern = `%${message}%`;
+        
+        const relevantFacts = await db.query.politicalFacts.findMany({
+          where: sql`${schema.politicalFacts.content} ILIKE ${searchPattern} OR ${schema.politicalFacts.category} ILIKE ${searchPattern}`,
+          limit: 3,
+          orderBy: desc(schema.politicalFacts.year),
+        });
+
+        const relevantQuotes = await db.query.politicalQuotes.findMany({
+          where: sql`${schema.politicalQuotes.content} ILIKE ${searchPattern} OR ${schema.politicalQuotes.speaker} ILIKE ${searchPattern} OR ${schema.politicalQuotes.category} ILIKE ${searchPattern}`,
+          limit: 2,
+          orderBy: desc(schema.politicalQuotes.year),
+        });
+
+        if (relevantFacts.length > 0 || relevantQuotes.length > 0) {
+          knowledgeContext += "\n\nRelevant Knowledge Base Information:";
+          
+          if (relevantFacts.length > 0) {
+            knowledgeContext += "\n\nFacts:";
+            relevantFacts.forEach((fact, idx) => {
+              knowledgeContext += `\n${idx + 1}. ${fact.content} (Source: ${fact.source}, ${fact.year})`;
+            });
+          }
+          
+          if (relevantQuotes.length > 0) {
+            knowledgeContext += "\n\nQuotes:";
+            relevantQuotes.forEach((quote, idx) => {
+              knowledgeContext += `\n${idx + 1}. "${quote.content}" - ${quote.speaker}, ${quote.position} (${quote.year})`;
+            });
+          }
+          
+          knowledgeContext += "\n\nYou can reference these facts and quotes in your response when relevant. Always cite sources when using this information.";
+        }
+      } catch (error) {
+        console.error("Knowledge base search error:", error);
+      }
+
       const messages = [
         {
           role: 'system' as const,
@@ -5819,7 +5953,7 @@ Your role is to help users understand:
 - Democratic participation and civic engagement
 - Platform features like elections, campaigns, events, and volunteer tasks
 
-Be friendly, informative, and politically neutral when discussing governance. Encourage democratic participation and civic engagement. Keep responses concise and helpful.${memberContext}`
+Be friendly, informative, and politically neutral when discussing governance. Encourage democratic participation and civic engagement. Keep responses concise and helpful.${memberContext}${knowledgeContext}`
         },
         ...history.reverse().map(msg => ({
           role: msg.role as 'user' | 'assistant',
@@ -5872,6 +6006,170 @@ Be friendly, informative, and politically neutral when discussing governance. En
     ];
     
     res.json({ success: true, data: suggestions });
+  });
+
+  // Knowledge Base API Routes
+  app.get("/api/knowledge/facts", async (req: Request, res: Response) => {
+    try {
+      const { category, subcategory, year, search, limit = "50", offset = "0" } = req.query;
+      
+      let whereConditions: any[] = [];
+      
+      if (category) {
+        whereConditions.push(eq(schema.politicalFacts.category, category as string));
+      }
+      if (subcategory) {
+        whereConditions.push(eq(schema.politicalFacts.subcategory, subcategory as string));
+      }
+      if (year) {
+        whereConditions.push(eq(schema.politicalFacts.year, parseInt(year as string)));
+      }
+      if (search) {
+        whereConditions.push(
+          sql`${schema.politicalFacts.content} ILIKE ${`%${search}%`} OR ${schema.politicalFacts.source} ILIKE ${`%${search}%`}`
+        );
+      }
+
+      const facts = await db.query.politicalFacts.findMany({
+        where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+        orderBy: desc(schema.politicalFacts.year),
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+      });
+
+      const totalCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.politicalFacts)
+        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined);
+
+      res.json({
+        success: true,
+        data: facts,
+        pagination: {
+          total: Number(totalCount[0]?.count || 0),
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+        },
+      });
+    } catch (error) {
+      console.error("Facts fetch error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch facts" });
+    }
+  });
+
+  app.get("/api/knowledge/quotes", async (req: Request, res: Response) => {
+    try {
+      const { category, speaker, year, search, limit = "50", offset = "0" } = req.query;
+      
+      let whereConditions: any[] = [];
+      
+      if (category) {
+        whereConditions.push(eq(schema.politicalQuotes.category, category as string));
+      }
+      if (speaker) {
+        whereConditions.push(
+          sql`${schema.politicalQuotes.speaker} ILIKE ${`%${speaker}%`}`
+        );
+      }
+      if (year) {
+        whereConditions.push(eq(schema.politicalQuotes.year, parseInt(year as string)));
+      }
+      if (search) {
+        whereConditions.push(
+          sql`${schema.politicalQuotes.content} ILIKE ${`%${search}%`} OR ${schema.politicalQuotes.speaker} ILIKE ${`%${search}%`} OR ${schema.politicalQuotes.context} ILIKE ${`%${search}%`}`
+        );
+      }
+
+      const quotes = await db.query.politicalQuotes.findMany({
+        where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+        orderBy: desc(schema.politicalQuotes.year),
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+      });
+
+      const totalCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(schema.politicalQuotes)
+        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined);
+
+      res.json({
+        success: true,
+        data: quotes,
+        pagination: {
+          total: Number(totalCount[0]?.count || 0),
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+        },
+      });
+    } catch (error) {
+      console.error("Quotes fetch error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch quotes" });
+    }
+  });
+
+  app.get("/api/knowledge/search", async (req: Request, res: Response) => {
+    try {
+      const { q, limit = "20" } = req.query;
+      
+      if (!q || typeof q !== "string") {
+        return res.status(400).json({ success: false, error: "Search query required" });
+      }
+
+      const searchPattern = `%${q}%`;
+
+      const facts = await db.query.politicalFacts.findMany({
+        where: sql`${schema.politicalFacts.content} ILIKE ${searchPattern} OR ${schema.politicalFacts.source} ILIKE ${searchPattern}`,
+        orderBy: desc(schema.politicalFacts.year),
+        limit: Math.floor(parseInt(limit as string) / 2),
+      });
+
+      const quotes = await db.query.politicalQuotes.findMany({
+        where: sql`${schema.politicalQuotes.content} ILIKE ${searchPattern} OR ${schema.politicalQuotes.speaker} ILIKE ${searchPattern}`,
+        orderBy: desc(schema.politicalQuotes.year),
+        limit: Math.floor(parseInt(limit as string) / 2),
+      });
+
+      res.json({
+        success: true,
+        data: {
+          facts: facts.map(f => ({ ...f, type: "fact" })),
+          quotes: quotes.map(q => ({ ...q, type: "quote" })),
+          totalResults: facts.length + quotes.length,
+        },
+      });
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ success: false, error: "Failed to search knowledge base" });
+    }
+  });
+
+  app.get("/api/knowledge/random", async (req: Request, res: Response) => {
+    try {
+      const { type } = req.query;
+      
+      if (type === "fact" || !type) {
+        const randomFact = await db.query.politicalFacts.findFirst({
+          orderBy: sql`RANDOM()`,
+        });
+        if (randomFact) {
+          return res.json({ success: true, data: { ...randomFact, type: "fact" } });
+        }
+      }
+      
+      if (type === "quote" || !type) {
+        const randomQuote = await db.query.politicalQuotes.findFirst({
+          orderBy: sql`RANDOM()`,
+        });
+        if (randomQuote) {
+          return res.json({ success: true, data: { ...randomQuote, type: "quote" } });
+        }
+      }
+
+      res.status(404).json({ success: false, error: "No knowledge items found" });
+    } catch (error) {
+      console.error("Random fetch error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch random item" });
+    }
   });
 
   app.get("/api/admin/chatbot/conversations", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
