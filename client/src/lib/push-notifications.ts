@@ -1,28 +1,35 @@
 import { apiRequest } from './queryClient';
 
-export async function registerPushNotifications(): Promise<boolean> {
+export async function registerPushNotifications(): Promise<{ success: boolean; message?: string }> {
+  // Check browser support
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push notifications not supported');
-    return false;
+    console.warn('Push notifications not supported in this browser');
+    return { success: false, message: 'Push notifications are not supported in your browser' };
   }
 
   // Check for HTTPS (required for service workers except localhost)
-  if (location.protocol !== 'https:' && !location.hostname.includes('localhost')) {
-    console.error('Push notifications require HTTPS');
-    return false;
+  if (location.protocol !== 'https:' && !location.hostname.includes('localhost') && location.hostname !== '127.0.0.1') {
+    console.warn('Push notifications require HTTPS');
+    return { success: false, message: 'Push notifications require a secure connection (HTTPS)' };
   }
 
   try {
+    // Request notification permission first
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       console.log('Notification permission denied');
-      return false;
+      return { success: false, message: 'Notification permission was denied' };
     }
 
     // Check if service worker already registered
     let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
-      registration = await navigator.serviceWorker.register('/service-worker.js');
+      registration = await navigator.serviceWorker.register('/service-worker.js', {
+        scope: '/'
+      });
+      console.log('Service worker registered successfully');
+    } else {
+      console.log('Service worker already registered');
     }
     
     await navigator.serviceWorker.ready;
@@ -38,30 +45,40 @@ export async function registerPushNotifications(): Promise<boolean> {
     await apiRequest('POST', '/api/push/subscribe', subscription);
 
     console.log('Push notifications registered successfully');
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('Failed to register push notifications:', error);
-    return false;
+    return { 
+      success: false, 
+      message: `Registration failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
   }
 }
 
-export async function unregisterPushNotifications(): Promise<boolean> {
+export async function unregisterPushNotifications(): Promise<{ success: boolean; message?: string }> {
   try {
     const registration = await navigator.serviceWorker.getRegistration();
-    if (!registration) return false;
+    if (!registration) {
+      return { success: false, message: 'No service worker registration found' };
+    }
 
     const subscription = await registration.pushManager.getSubscription();
-    if (!subscription) return false;
+    if (!subscription) {
+      return { success: false, message: 'No push subscription found' };
+    }
 
     await subscription.unsubscribe();
 
     await apiRequest('DELETE', '/api/push/unsubscribe', { endpoint: subscription.endpoint });
 
     console.log('Push notifications unregistered');
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('Failed to unregister push notifications:', error);
-    return false;
+    return { 
+      success: false, 
+      message: `Unregistration failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
   }
 }
 

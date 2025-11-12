@@ -53,17 +53,23 @@ export default function NotificationSettings() {
 
   const togglePushNotifications = async () => {
     if (pushEnabled) {
-      const success = await unregisterPushNotifications();
-      if (success) {
+      const result = await unregisterPushNotifications();
+      if (result.success) {
         setPushEnabled(false);
         toast({
           title: "Push notifications disabled",
           description: "You will no longer receive push notifications.",
         });
+      } else {
+        toast({
+          title: "Failed to disable notifications",
+          description: result.message || "An error occurred while disabling push notifications.",
+          variant: "destructive",
+        });
       }
     } else {
-      const success = await registerPushNotifications();
-      if (success) {
+      const result = await registerPushNotifications();
+      if (result.success) {
         setPushEnabled(true);
         toast({
           title: "Push notifications enabled",
@@ -71,8 +77,8 @@ export default function NotificationSettings() {
         });
       } else {
         toast({
-          title: "Permission denied",
-          description: "Please allow notifications in your browser settings.",
+          title: "Failed to enable notifications",
+          description: result.message || "Please allow notifications in your browser settings.",
           variant: "destructive",
         });
       }
