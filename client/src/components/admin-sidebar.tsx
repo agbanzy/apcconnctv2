@@ -15,6 +15,7 @@ import {
   CheckSquare,
   Award,
   DollarSign,
+  Coins,
 } from "lucide-react";
 import {
   Sidebar,
@@ -101,6 +102,11 @@ const adminMenuItems = [
     title: "Badges",
     url: "/admin/badges",
     icon: Award,
+  },
+  {
+    title: "Rewards Settings",
+    url: "/admin/rewards-settings",
+    icon: Coins,
   },
   {
     title: "Settings",

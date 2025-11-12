@@ -19,6 +19,7 @@ export const recurringFrequencyEnum = pgEnum("recurring_frequency", ["monthly", 
 export const recurringStatusEnum = pgEnum("recurring_status", ["active", "paused", "cancelled"]);
 export const achievementRarityEnum = pgEnum("achievement_rarity", ["bronze", "silver", "gold", "platinum"]);
 export const badgeCategoryEnum = pgEnum("badge_category", ["tasks", "events", "quizzes", "campaigns", "ideas", "engagement", "points", "special"]);
+export const quizDifficultyEnum = pgEnum("quiz_difficulty", ["easy", "medium", "hard"]);
 
 // Nigerian Administrative Structure
 export const states = pgTable("states", {
@@ -90,6 +91,7 @@ export const members = pgTable("members", {
   ninVerified: boolean("nin_verified").default(false), // NIN verification status
   ninVerificationAttempts: integer("nin_verification_attempts").default(0), // Number of verification attempts
   ninVerifiedAt: timestamp("nin_verified_at"), // Timestamp when NIN was verified
+  photoUrl: text("photo_url"), // Member photo for ID card
   wardId: varchar("ward_id").notNull().references(() => wards.id),
   status: membershipStatusEnum("status").default("pending"),
   joinDate: timestamp("join_date").defaultNow(),
@@ -122,6 +124,16 @@ export const recurringMembershipDues = pgTable("recurring_membership_dues", {
   paystackCustomerCode: text("paystack_customer_code"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const memberIdCards = pgTable("member_id_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  lastGeneratedAt: timestamp("last_generated_at").defaultNow(),
+  generatedByUserId: varchar("generated_by_user_id").references(() => users.id),
+  signatureNonce: text("signature_nonce").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Elections & Voting
@@ -217,6 +229,8 @@ export const quizzes = pgTable("quizzes", {
   options: jsonb("options").$type<string[]>().notNull(),
   correctAnswer: integer("correct_answer").notNull(),
   category: text("category").notNull(),
+  difficulty: quizDifficultyEnum("difficulty").notNull().default("medium"),
+  explanation: text("explanation"),
   points: integer("points").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -319,6 +333,36 @@ export const referrals = pgTable("referrals", {
   pointsEarned: integer("points_earned").default(0), // Points earned by referrer
   status: text("status").default("pending"), // pending, completed
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Point Conversion Settings (Flutterwave)
+export const pointConversionSettings = pgTable("point_conversion_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productType: text("product_type").notNull(), // "airtime" or "data"
+  baseRate: decimal("base_rate", { precision: 10, scale: 2 }).notNull(), // points to 1 NGN
+  minPoints: integer("min_points").default(100),
+  maxPoints: integer("max_points").default(10000),
+  carrierOverrides: jsonb("carrier_overrides").$type<Record<string, number>>(), // carrier-specific rates
+  isActive: boolean("is_active").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Point Redemptions (Transaction History)
+export const pointRedemptions = pgTable("point_redemptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  phoneNumber: text("phone_number").notNull(),
+  carrier: text("carrier").notNull(), // MTN, Airtel, Glo, 9Mobile
+  productType: text("product_type").notNull(), // airtime or data
+  nairaValue: decimal("naira_value", { precision: 10, scale: 2 }).notNull(),
+  pointsDebited: integer("points_debited").notNull(),
+  flutterwaveReference: text("flutterwave_reference"),
+  status: text("status").notNull().default("pending"), // pending, completed, failed
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
 });
 
 // Micro Tasks
@@ -676,6 +720,19 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   newsCommentLikes: many(newsCommentLikes),
   referralsMade: many(referrals, { relationName: "referrer" }),
   referralsReceived: many(referrals, { relationName: "referred" }),
+  idCards: many(memberIdCards),
+  pointRedemptions: many(pointRedemptions),
+}));
+
+export const memberIdCardsRelations = relations(memberIdCards, ({ one }) => ({
+  member: one(members, {
+    fields: [memberIdCards.memberId],
+    references: [members.id],
+  }),
+  generatedBy: one(users, {
+    fields: [memberIdCards.generatedByUserId],
+    references: [users.id],
+  }),
 }));
 
 export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
@@ -1049,6 +1106,13 @@ export const referralsRelations = relations(referrals, ({ one }) => ({
   }),
 }));
 
+export const pointRedemptionsRelations = relations(pointRedemptions, ({ one }) => ({
+  member: one(members, {
+    fields: [pointRedemptions.memberId],
+    references: [members.id],
+  }),
+}));
+
 // Insert & Select Schemas
 export const insertStateSchema = createInsertSchema(states).omit({ id: true, createdAt: true });
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
@@ -1058,6 +1122,7 @@ export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
 export const insertMemberSchema = createInsertSchema(members).omit({ id: true, joinDate: true });
 export const insertDuesSchema = createInsertSchema(membershipDues).omit({ id: true, createdAt: true, paidAt: true });
 export const insertRecurringDuesSchema = createInsertSchema(recurringMembershipDues).omit({ id: true, createdAt: true, updatedAt: true, lastPaymentDate: true });
+export const insertMemberIdCardSchema = createInsertSchema(memberIdCards).omit({ id: true, createdAt: true, lastGeneratedAt: true });
 export const insertElectionSchema = createInsertSchema(elections).omit({ id: true, createdAt: true, totalVotes: true });
 export const insertCandidateSchema = createInsertSchema(candidates).omit({ id: true, createdAt: true, votes: true });
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true, castedAt: true });
@@ -1095,6 +1160,8 @@ export const insertNewsCommentLikeSchema = createInsertSchema(newsCommentLikes).
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export const insertPointConversionSettingSchema = createInsertSchema(pointConversionSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPointRedemptionSchema = createInsertSchema(pointRedemptions).omit({ id: true, createdAt: true, completedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1113,6 +1180,8 @@ export type InsertDues = z.infer<typeof insertDuesSchema>;
 export type MembershipDues = typeof membershipDues.$inferSelect;
 export type InsertRecurringDues = z.infer<typeof insertRecurringDuesSchema>;
 export type RecurringMembershipDues = typeof recurringMembershipDues.$inferSelect;
+export type InsertMemberIdCard = z.infer<typeof insertMemberIdCardSchema>;
+export type MemberIdCard = typeof memberIdCards.$inferSelect;
 export type InsertElection = z.infer<typeof insertElectionSchema>;
 export type Election = typeof elections.$inferSelect;
 export type InsertCandidate = z.infer<typeof insertCandidateSchema>;
@@ -1183,3 +1252,7 @@ export type InsertNotificationPreference = z.infer<typeof insertNotificationPref
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertPointConversionSetting = z.infer<typeof insertPointConversionSettingSchema>;
+export type PointConversionSetting = typeof pointConversionSettings.$inferSelect;
+export type InsertPointRedemption = z.infer<typeof insertPointRedemptionSchema>;
+export type PointRedemption = typeof pointRedemptions.$inferSelect;

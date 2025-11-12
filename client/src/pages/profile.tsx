@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useState } from "react";
-import { User, MapPin, Phone, Mail, QrCode } from "lucide-react";
+import { User, MapPin, Phone, Mail, QrCode, CreditCard } from "lucide-react";
+import { DigitalIdCard } from "@/components/digital-id-card";
 
 export default function Profile() {
   const { user, member } = useAuth();
@@ -70,7 +72,20 @@ export default function Profile() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <Tabs defaultValue="info" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="info" data-testid="tab-info">
+            <User className="h-4 w-4 mr-2" />
+            Profile Info
+          </TabsTrigger>
+          <TabsTrigger value="id-card" data-testid="tab-id-card">
+            <CreditCard className="h-4 w-4 mr-2" />
+            Digital ID Card
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="info" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
@@ -222,7 +237,26 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
-      </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="id-card" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Digital Party ID Card</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {member?.id ? (
+                <DigitalIdCard memberId={member.id} />
+              ) : (
+                <p className="text-center text-muted-foreground">
+                  Unable to load ID card
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

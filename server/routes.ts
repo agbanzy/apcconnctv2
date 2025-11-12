@@ -175,6 +175,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // ============================================================================
+  // ID CARD TOKEN UTILITIES
+  // ============================================================================
+  const generateIdCardToken = (memberId: string, nonce: string): string => {
+    const secret = SESSION_SECRET;
+    const payload = `${memberId}:${nonce}:${Date.now()}`;
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(payload);
+    return hmac.digest('hex');
+  };
+
+  const verifyIdCardToken = async (memberId: string, token: string): Promise<{ valid: boolean; error?: string }> => {
+    try {
+      // Get the latest non-revoked ID card for this member
+      const idCard = await db.query.memberIdCards.findFirst({
+        where: and(
+          eq(schema.memberIdCards.memberId, memberId),
+          sql`${schema.memberIdCards.revokedAt} IS NULL`
+        ),
+        orderBy: desc(schema.memberIdCards.lastGeneratedAt),
+      });
+
+      if (!idCard) {
+        return { valid: false, error: "ID card not found or has been revoked" };
+      }
+
+      // Regenerate the token with the stored nonce
+      const expectedToken = generateIdCardToken(memberId, idCard.signatureNonce);
+      
+      if (token !== expectedToken) {
+        return { valid: false, error: "Invalid signature" };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error("Error verifying ID card token:", error);
+      return { valid: false, error: "Verification failed" };
+    }
+  };
+
+  // ============================================================================
   // RATE LIMITING MIDDLEWARE
   // ============================================================================
   // Apply general API rate limiter to all /api/* routes (100 requests per 15 minutes)
@@ -724,6 +764,376 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===================================
+  // FLUTTERWAVE INTEGRATION - POINTS REDEMPTION
+  // ===================================
+  
+  // Flutterwave service functions
+  async function purchaseAirtimeViaFlutterwave(phone: string, amount: number, reference: string) {
+    const response = await fetch('https://api.flutterwave.com/v3/bills', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        country: "NG",
+        customer: phone,
+        amount: amount,
+        recurrence: "ONCE",
+        type: "AIRTIME",
+        reference: reference
+      })
+    });
+    return response.json();
+  }
+
+  async function checkFlutterwaveStatus(reference: string) {
+    const response = await fetch(`https://api.flutterwave.com/v3/bills/${reference}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`
+      }
+    });
+    return response.json();
+  }
+
+  // Get conversion settings
+  app.get("/api/rewards/conversion-settings", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const settings = await db.query.pointConversionSettings.findMany({
+        where: eq(schema.pointConversionSettings.isActive, true)
+      });
+      res.json({ success: true, data: settings });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch conversion settings" });
+    }
+  });
+
+  // Calculate conversion quote
+  app.post("/api/rewards/quote", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { productType, carrier, nairaValue } = req.body;
+
+      const setting = await db.query.pointConversionSettings.findFirst({
+        where: and(
+          eq(schema.pointConversionSettings.productType, productType),
+          eq(schema.pointConversionSettings.isActive, true)
+        )
+      });
+
+      if (!setting) {
+        return res.status(404).json({ success: false, error: "Conversion not available for this product type" });
+      }
+
+      // Calculate points needed
+      let rate = parseFloat(setting.baseRate as unknown as string);
+      
+      // Check for carrier-specific override
+      if (setting.carrierOverrides && carrier in setting.carrierOverrides) {
+        rate = setting.carrierOverrides[carrier as keyof typeof setting.carrierOverrides] as unknown as number;
+      }
+
+      const pointsNeeded = Math.ceil(nairaValue * rate);
+
+      // Validate min/max
+      if (pointsNeeded < (setting.minPoints || 0)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Minimum ${setting.minPoints} points required` 
+        });
+      }
+
+      if (pointsNeeded > (setting.maxPoints || 10000)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Maximum ${setting.maxPoints} points allowed` 
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          pointsNeeded, 
+          nairaValue, 
+          rate,
+          minPoints: setting.minPoints,
+          maxPoints: setting.maxPoints
+        } 
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to calculate quote" });
+    }
+  });
+
+  // Redeem points for airtime/data
+  app.post("/api/rewards/redeem", requireAuth, apiLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const { phoneNumber, carrier, productType, nairaValue } = req.body;
+
+      // Validate Nigerian phone number
+      const phoneRegex = /^0[789][01]\d{8}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Invalid Nigerian phone number format" 
+        });
+      }
+
+      // Get member
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // Check rate limiting - max 5 redemptions per day
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayRedemptions = await db.query.pointRedemptions.findMany({
+        where: and(
+          eq(schema.pointRedemptions.memberId, member.id),
+          gte(schema.pointRedemptions.createdAt, today)
+        )
+      });
+
+      if (todayRedemptions.length >= 5) {
+        return res.status(429).json({ 
+          success: false, 
+          error: "Maximum 5 redemptions per day allowed" 
+        });
+      }
+
+      // Get conversion setting
+      const setting = await db.query.pointConversionSettings.findFirst({
+        where: and(
+          eq(schema.pointConversionSettings.productType, productType),
+          eq(schema.pointConversionSettings.isActive, true)
+        )
+      });
+
+      if (!setting) {
+        return res.status(404).json({ success: false, error: "Conversion not available" });
+      }
+
+      // Calculate points needed
+      let rate = parseFloat(setting.baseRate as unknown as string);
+      if (setting.carrierOverrides && carrier in setting.carrierOverrides) {
+        rate = setting.carrierOverrides[carrier as keyof typeof setting.carrierOverrides] as unknown as number;
+      }
+      const pointsNeeded = Math.ceil(nairaValue * rate);
+
+      // Check if user has sufficient points
+      const userPointsData = await db
+        .select({
+          totalPoints: sql<number>`COALESCE(SUM(${schema.userPoints.amount}), 0)`,
+        })
+        .from(schema.userPoints)
+        .where(eq(schema.userPoints.memberId, member.id));
+
+      const totalPoints = userPointsData[0]?.totalPoints || 0;
+
+      if (totalPoints < pointsNeeded) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Insufficient points" 
+        });
+      }
+
+      // Generate unique reference
+      const timestamp = Date.now();
+      const reference = `RDM-${member.id.slice(0, 8)}-${timestamp}`;
+
+      // Create redemption record
+      const [redemption] = await db.insert(schema.pointRedemptions).values({
+        memberId: member.id,
+        phoneNumber,
+        carrier,
+        productType,
+        nairaValue: nairaValue.toString(),
+        pointsDebited: pointsNeeded,
+        flutterwaveReference: reference,
+        status: "pending"
+      }).returning();
+
+      try {
+        // Call Flutterwave API
+        const flwResponse = await purchaseAirtimeViaFlutterwave(phoneNumber, nairaValue, reference);
+
+        if (flwResponse.status === "success") {
+          // Debit points
+          await db.insert(schema.userPoints).values({
+            memberId: member.id,
+            source: "redemption",
+            amount: -pointsNeeded
+          });
+
+          // Update redemption status
+          await db.update(schema.pointRedemptions)
+            .set({ 
+              status: "completed",
+              completedAt: new Date(),
+              metadata: { flwResponse }
+            })
+            .where(eq(schema.pointRedemptions.id, redemption.id));
+
+          await logAudit(
+            member.id,
+            AuditActions.REWARD_REDEEM,
+            `Redeemed ${pointsNeeded} points for ${nairaValue} NGN ${productType} to ${phoneNumber}`,
+            { redemptionId: redemption.id, reference }
+          );
+
+          res.json({ 
+            success: true, 
+            data: { 
+              redemption: { ...redemption, status: "completed" },
+              reference,
+              message: `Successfully redeemed ${pointsNeeded} points for ${nairaValue} NGN ${productType}` 
+            } 
+          });
+        } else {
+          // Update redemption with error
+          await db.update(schema.pointRedemptions)
+            .set({ 
+              status: "failed",
+              errorMessage: flwResponse.message || "Transaction failed"
+            })
+            .where(eq(schema.pointRedemptions.id, redemption.id));
+
+          res.status(400).json({ 
+            success: false, 
+            error: flwResponse.message || "Transaction failed" 
+          });
+        }
+      } catch (error: any) {
+        // Update redemption with error
+        await db.update(schema.pointRedemptions)
+          .set({ 
+            status: "failed",
+            errorMessage: error.message || "Internal error"
+          })
+          .where(eq(schema.pointRedemptions.id, redemption.id));
+
+        throw error;
+      }
+    } catch (error) {
+      console.error("Redemption error:", error);
+      res.status(500).json({ success: false, error: "Failed to process redemption" });
+    }
+  });
+
+  // Get redemption history
+  app.get("/api/rewards/redemptions", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const redemptions = await db.query.pointRedemptions.findMany({
+        where: eq(schema.pointRedemptions.memberId, member.id),
+        orderBy: [desc(schema.pointRedemptions.createdAt)]
+      });
+
+      res.json({ success: true, data: redemptions });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch redemption history" });
+    }
+  });
+
+  // Admin: Get all conversion settings
+  app.get("/api/admin/conversion-settings", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const settings = await db.query.pointConversionSettings.findMany();
+      res.json({ success: true, data: settings });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch settings" });
+    }
+  });
+
+  // Admin: Update conversion settings
+  app.post("/api/admin/conversion-settings", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { productType, baseRate, minPoints, maxPoints, carrierOverrides, isActive } = req.body;
+
+      // Check if setting exists
+      const existing = await db.query.pointConversionSettings.findFirst({
+        where: eq(schema.pointConversionSettings.productType, productType)
+      });
+
+      let result;
+      if (existing) {
+        // Update existing
+        [result] = await db.update(schema.pointConversionSettings)
+          .set({ 
+            baseRate: baseRate.toString(), 
+            minPoints, 
+            maxPoints, 
+            carrierOverrides, 
+            isActive,
+            updatedAt: new Date()
+          })
+          .where(eq(schema.pointConversionSettings.id, existing.id))
+          .returning();
+      } else {
+        // Create new
+        [result] = await db.insert(schema.pointConversionSettings).values({
+          productType,
+          baseRate: baseRate.toString(),
+          minPoints,
+          maxPoints,
+          carrierOverrides,
+          isActive
+        }).returning();
+      }
+
+      await logAudit(
+        req.user!.id,
+        AuditActions.ADMIN_UPDATE,
+        `Updated conversion settings for ${productType}`,
+        { settingId: result.id }
+      );
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Update settings error:", error);
+      res.status(500).json({ success: false, error: "Failed to update settings" });
+    }
+  });
+
+  // Flutterwave webhook (for status updates)
+  app.post("/api/webhooks/flutterwave", async (req: Request, res: Response) => {
+    try {
+      const { reference, status } = req.body;
+
+      if (reference && status) {
+        const redemption = await db.query.pointRedemptions.findFirst({
+          where: eq(schema.pointRedemptions.flutterwaveReference, reference)
+        });
+
+        if (redemption && redemption.status === "pending") {
+          await db.update(schema.pointRedemptions)
+            .set({ 
+              status: status === "successful" ? "completed" : "failed",
+              completedAt: status === "successful" ? new Date() : undefined,
+              metadata: { webhookData: req.body }
+            })
+            .where(eq(schema.pointRedemptions.id, redemption.id));
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.status(500).json({ success: false, error: "Webhook processing failed" });
+    }
+  });
+
   app.get("/api/members/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({
@@ -916,6 +1326,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: { qrCode } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to generate QR code" });
+    }
+  });
+
+  // Get ID card data for a member
+  app.get("/api/members/:id/id-card", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, req.params.id),
+        with: {
+          user: true,
+          ward: {
+            with: {
+              lga: {
+                with: {
+                  state: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // Get or create ID card record
+      let idCard = await db.query.memberIdCards.findFirst({
+        where: and(
+          eq(schema.memberIdCards.memberId, member.id),
+          sql`${schema.memberIdCards.revokedAt} IS NULL`
+        ),
+        orderBy: desc(schema.memberIdCards.lastGeneratedAt),
+      });
+
+      // Create ID card if it doesn't exist
+      if (!idCard) {
+        const nonce = crypto.randomBytes(32).toString('hex');
+        [idCard] = await db.insert(schema.memberIdCards).values({
+          memberId: member.id,
+          signatureNonce: nonce,
+          generatedByUserId: req.user!.id,
+        }).returning();
+      }
+
+      // Generate signed token
+      const token = generateIdCardToken(member.id, idCard.signatureNonce);
+
+      res.json({
+        success: true,
+        data: {
+          member,
+          token,
+          idCard
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching ID card:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch ID card" });
+    }
+  });
+
+  // Regenerate ID card with new nonce (admin only)
+  app.post("/api/members/:id/id-card/regenerate", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, req.params.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // Revoke old ID cards
+      await db.update(schema.memberIdCards)
+        .set({ revokedAt: new Date() })
+        .where(and(
+          eq(schema.memberIdCards.memberId, member.id),
+          sql`${schema.memberIdCards.revokedAt} IS NULL`
+        ));
+
+      // Create new ID card
+      const nonce = crypto.randomBytes(32).toString('hex');
+      const [idCard] = await db.insert(schema.memberIdCards).values({
+        memberId: member.id,
+        signatureNonce: nonce,
+        generatedByUserId: req.user!.id,
+      }).returning();
+
+      const token = generateIdCardToken(member.id, idCard.signatureNonce);
+
+      res.json({
+        success: true,
+        data: {
+          idCard,
+          token,
+          message: "ID card regenerated successfully"
+        }
+      });
+    } catch (error) {
+      console.error("Error regenerating ID card:", error);
+      res.status(500).json({ success: false, error: "Failed to regenerate ID card" });
+    }
+  });
+
+  // Verify ID card authenticity
+  app.get("/api/id-card/verify/:memberId", async (req: AuthRequest, res: Response) => {
+    try {
+      const { memberId } = req.params;
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ success: false, error: "Token is required" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, memberId),
+        with: {
+          user: true,
+          ward: {
+            with: {
+              lga: {
+                with: {
+                  state: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const verificationResult = await verifyIdCardToken(memberId, token);
+
+      if (!verificationResult.valid) {
+        return res.status(400).json({
+          success: false,
+          error: verificationResult.error,
+          verified: false
+        });
+      }
+
+      res.json({
+        success: true,
+        verified: true,
+        data: {
+          memberId: member.memberId,
+          name: `${member.user?.firstName} ${member.user?.lastName}`,
+          status: member.status,
+          verifiedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error("Error verifying ID card:", error);
+      res.status(500).json({ success: false, error: "Verification failed" });
     }
   });
 

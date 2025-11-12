@@ -1,19 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Award, Star, TrendingUp, Filter } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Trophy, Award, Star, TrendingUp, Filter, Smartphone, ArrowRight, History, CheckCircle, XCircle, Clock } from "lucide-react";
 import { BadgeCard } from "@/components/badge-card";
 import { AchievementCard } from "@/components/achievement-card";
 import { Leaderboard } from "@/components/leaderboard";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
+import { format } from "date-fns";
 
 const LEVELS = [
   { level: 1, minPoints: 0, maxPoints: 99, name: "Newcomer" },
@@ -35,11 +40,21 @@ function getLevelInfo(points: number) {
   return { currentLevel, nextLevel, progressToNext };
 }
 
+const CARRIERS = ["MTN", "Airtel", "Glo", "9Mobile"];
+const PREDEFINED_AMOUNTS = [50, 100, 200, 500, 1000, 2000];
+
 export default function RewardsPage() {
   const { toast } = useToast();
   const [badgeFilter, setBadgeFilter] = useState<"all" | "earned" | "locked">("all");
   const [badgeCategoryFilter, setBadgeCategoryFilter] = useState<string>("all");
   const [achievementSort, setAchievementSort] = useState<"progress" | "points" | "rarity">("progress");
+  
+  const [redemptionType, setRedemptionType] = useState<"airtime" | "data">("airtime");
+  const [selectedCarrier, setSelectedCarrier] = useState<string>("MTN");
+  const [phoneNumber, setPhoneNumber] = useState<string>("");
+  const [amount, setAmount] = useState<number>(100);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [quote, setQuote] = useState<any>(null);
 
   const { data: myPoints, isLoading: pointsLoading } = useQuery({
     queryKey: ["/api/points/my-points"]
@@ -64,6 +79,56 @@ export default function RewardsPage() {
   const { data: globalLeaderboard, isLoading: globalLeaderboardLoading } = useQuery({
     queryKey: ["/api/leaderboard/global"]
   });
+
+  const { data: conversionSettings } = useQuery({
+    queryKey: ["/api/rewards/conversion-settings"]
+  });
+
+  const { data: redemptionHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ["/api/rewards/redemptions"]
+  });
+
+  const quoteMutation = useMutation({
+    mutationFn: (data: { productType: string; carrier: string; nairaValue: number }) =>
+      apiRequest("POST", "/api/rewards/quote", data),
+    onSuccess: (data: any) => {
+      setQuote(data?.data);
+    }
+  });
+
+  const redeemMutation = useMutation({
+    mutationFn: (data: { phoneNumber: string; carrier: string; productType: string; nairaValue: number }) =>
+      apiRequest("POST", "/api/rewards/redeem", data),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Success!",
+        description: data?.data?.message || "Points redeemed successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/redemptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/my-points"] });
+      setShowConfirmDialog(false);
+      setPhoneNumber("");
+      setAmount(100);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Redemption Failed",
+        description: error.message || "Failed to redeem points",
+        variant: "destructive",
+      });
+      setShowConfirmDialog(false);
+    }
+  });
+
+  useEffect(() => {
+    if (amount > 0) {
+      quoteMutation.mutate({
+        productType: redemptionType,
+        carrier: selectedCarrier,
+        nairaValue: amount
+      });
+    }
+  }, [amount, redemptionType, selectedCarrier]);
 
   const checkBadgesMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/badges/check"),
@@ -226,6 +291,224 @@ export default function RewardsPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      <Card data-testid="redeem-points-section">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-5 w-5 text-primary" />
+            Redeem Points
+          </CardTitle>
+          <CardDescription>
+            Convert your points to airtime or data bundles
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={redemptionType} onValueChange={(v: any) => setRedemptionType(v)}>
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="airtime" data-testid="tab-redeem-airtime">
+                Airtime
+              </TabsTrigger>
+              <TabsTrigger value="data" data-testid="tab-redeem-data">
+                Data
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="carrier" data-testid="label-carrier">Carrier</Label>
+                  <Select value={selectedCarrier} onValueChange={setSelectedCarrier}>
+                    <SelectTrigger id="carrier" data-testid="select-carrier">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CARRIERS.map((carrier) => (
+                        <SelectItem key={carrier} value={carrier} data-testid={`carrier-${carrier.toLowerCase()}`}>
+                          {carrier}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone" data-testid="label-phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="080xxxxxxxx"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    data-testid="input-phone-number"
+                  />
+                  {phoneNumber && !/^0[789][01]\d{8}$/.test(phoneNumber) && (
+                    <p className="text-sm text-destructive">Invalid Nigerian phone number</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label data-testid="label-amount">Amount (NGN)</Label>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  {PREDEFINED_AMOUNTS.map((amt) => (
+                    <Button
+                      key={amt}
+                      type="button"
+                      variant={amount === amt ? "default" : "outline"}
+                      onClick={() => setAmount(amt)}
+                      data-testid={`button-amount-${amt}`}
+                    >
+                      ₦{amt}
+                    </Button>
+                  ))}
+                </div>
+                <Input
+                  type="number"
+                  placeholder="Custom amount"
+                  value={amount}
+                  onChange={(e) => setAmount(parseInt(e.target.value) || 0)}
+                  data-testid="input-custom-amount"
+                />
+              </div>
+
+              {quote && (
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Points Required</p>
+                        <p className="text-3xl font-bold text-primary" data-testid="text-points-required">
+                          {quote.pointsNeeded?.toLocaleString()}
+                        </p>
+                      </div>
+                      <ArrowRight className="h-6 w-6 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">You'll Receive</p>
+                        <p className="text-3xl font-bold">₦{quote.nairaValue}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      Rate: {quote.rate} points = 1 NGN
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={
+                  !phoneNumber ||
+                  !/^0[789][01]\d{8}$/.test(phoneNumber) ||
+                  !amount ||
+                  !quote ||
+                  (quote && totalPoints < quote.pointsNeeded)
+                }
+                onClick={() => setShowConfirmDialog(true)}
+                data-testid="button-redeem-now"
+              >
+                {quote && totalPoints < quote.pointsNeeded
+                  ? "Insufficient Points"
+                  : `Redeem ${quote?.pointsNeeded || 0} Points`}
+              </Button>
+            </div>
+          </Tabs>
+
+          <div className="mt-8">
+            <div className="flex items-center gap-2 mb-4">
+              <History className="h-5 w-5 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">Transaction History</h3>
+            </div>
+            {historyLoading ? (
+              <Skeleton className="h-64" />
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead data-testid="header-date">Date</TableHead>
+                      <TableHead data-testid="header-type">Type</TableHead>
+                      <TableHead data-testid="header-carrier">Carrier</TableHead>
+                      <TableHead data-testid="header-amount">Amount</TableHead>
+                      <TableHead data-testid="header-points">Points</TableHead>
+                      <TableHead data-testid="header-status">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(redemptionHistory as any)?.data?.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          No redemptions yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (redemptionHistory as any)?.data?.map((redemption: any) => (
+                        <TableRow key={redemption.id} data-testid={`row-redemption-${redemption.id}`}>
+                          <TableCell>{format(new Date(redemption.createdAt), "MMM dd, yyyy")}</TableCell>
+                          <TableCell className="capitalize">{redemption.productType}</TableCell>
+                          <TableCell>{redemption.carrier}</TableCell>
+                          <TableCell>₦{redemption.nairaValue}</TableCell>
+                          <TableCell>{redemption.pointsDebited}</TableCell>
+                          <TableCell>
+                            {redemption.status === "completed" && (
+                              <Badge variant="default" className="gap-1" data-testid="status-completed">
+                                <CheckCircle className="h-3 w-3" />
+                                Completed
+                              </Badge>
+                            )}
+                            {redemption.status === "pending" && (
+                              <Badge variant="secondary" className="gap-1" data-testid="status-pending">
+                                <Clock className="h-3 w-3" />
+                                Pending
+                              </Badge>
+                            )}
+                            {redemption.status === "failed" && (
+                              <Badge variant="destructive" className="gap-1" data-testid="status-failed">
+                                <XCircle className="h-3 w-3" />
+                                Failed
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Redemption</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to redeem {quote?.pointsNeeded} points for ₦{amount} {redemptionType} to {phoneNumber} ({selectedCarrier}).
+              <br /><br />
+              This action cannot be undone. Are you sure you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-redemption">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                redeemMutation.mutate({
+                  phoneNumber,
+                  carrier: selectedCarrier,
+                  productType: redemptionType,
+                  nairaValue: amount
+                });
+              }}
+              disabled={redeemMutation.isPending}
+              data-testid="button-confirm-redemption"
+            >
+              {redeemMutation.isPending ? "Processing..." : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card data-testid="badges-section">
         <CardHeader>
