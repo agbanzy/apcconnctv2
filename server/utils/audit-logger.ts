@@ -9,6 +9,7 @@ export const AuditActions = {
   PAYMENT: "payment",
   PAYMENT_FAILED: "payment_failed",
   ADMIN_ACTION: "admin_action",
+  ADMIN_SEED_BOUNDARIES: "admin_seed_boundaries",
   NIN_VERIFICATION: "nin_verification",
   MEMBER_STATUS_CHANGE: "member_status_change",
   ELECTION_CREATED: "election_created",

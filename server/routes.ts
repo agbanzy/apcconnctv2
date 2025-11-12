@@ -25,6 +25,7 @@ import { pushService, NotificationTemplates } from "./push-service";
 import { apiLimiter, authLimiter, votingLimiter } from "./middleware/rate-limit";
 import { errorHandler, createError } from "./middleware/error-handler";
 import { logAudit, AuditActions } from "./utils/audit-logger";
+import { seedAdminBoundaries } from "./seed-admin-boundaries";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -1535,6 +1536,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Check overdue dues error:", error);
       res.status(500).json({ success: false, error: "Failed to check overdue dues" });
+    }
+  });
+
+  // Seed administrative boundaries from Excel file (admin only)
+  app.post("/api/admin/seed-boundaries", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      console.log("\n🌍 Admin triggered administrative boundaries seeding");
+      
+      // Run the seed script
+      const stats = await seedAdminBoundaries();
+
+      // Audit log
+      if (req.user) {
+        await logAudit({
+          userId: req.user.id,
+          action: AuditActions.ADMIN_SEED_BOUNDARIES,
+          resourceType: "admin",
+          resourceId: "boundaries-seed",
+          details: stats,
+          status: "success",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Administrative boundaries seeded successfully",
+        data: stats,
+      });
+    } catch (error: any) {
+      console.error("Seed boundaries error:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Failed to seed administrative boundaries",
+        details: error.message 
+      });
     }
   });
 
@@ -5428,7 +5464,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
   app.post("/api/tasks/micro", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
       const taskData = schema.insertMicroTaskSchema.parse(req.body);
-      const [task] = await db.insert(schema.microTasks).values(taskData).returning();
+      const [task] = await db.insert(schema.microTasks).values([taskData as any]).returning();
       res.json({ success: true, data: task });
     } catch (error) {
       console.error("Create micro-task error:", error);
@@ -5573,7 +5609,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
         creatorId: req.user!.id,
         currentVolunteers: 0
       });
-      const [task] = await db.insert(schema.volunteerTasks).values(taskData).returning();
+      const [task] = await db.insert(schema.volunteerTasks).values([taskData as any]).returning();
       res.json({ success: true, data: task });
     } catch (error) {
       console.error("Create volunteer task error:", error);
@@ -6282,12 +6318,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
       });
 
       const updateData = {
-        elections: req.body.elections ?? preferences?.elections ?? true,
-        events: req.body.events ?? preferences?.events ?? true,
-        news: req.body.news ?? preferences?.news ?? true,
-        tasks: req.body.tasks ?? preferences?.tasks ?? true,
-        badges: req.body.badges ?? preferences?.badges ?? true,
-        messages: req.body.messages ?? preferences?.messages ?? true,
+        electionAnnouncements: req.body.electionAnnouncements ?? preferences?.electionAnnouncements ?? true,
+        eventReminders: req.body.eventReminders ?? preferences?.eventReminders ?? true,
+        newsAlerts: req.body.newsAlerts ?? preferences?.newsAlerts ?? true,
+        taskAssignments: req.body.taskAssignments ?? preferences?.taskAssignments ?? true,
+        achievementNotifications: req.body.achievementNotifications ?? preferences?.achievementNotifications ?? true,
+        systemAnnouncements: req.body.systemAnnouncements ?? preferences?.systemAnnouncements ?? true,
+        duesReminders: req.body.duesReminders ?? preferences?.duesReminders ?? true,
+        campaignUpdates: req.body.campaignUpdates ?? preferences?.campaignUpdates ?? true,
+        referralRewards: req.body.referralRewards ?? preferences?.referralRewards ?? true,
       };
 
       if (preferences) {

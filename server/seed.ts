@@ -887,9 +887,10 @@ async function seedDatabase() {
     const volunteerTasks = [];
     
     for (const taskData of volunteerTasksData) {
-      const [task] = await db.insert(schema.volunteerTasks).values({
+      const [task] = await db.insert(schema.volunteerTasks).values([{
         title: taskData.title,
         description: taskData.description,
+        category: "campaign",
         location: taskData.location,
         skills: taskData.skills,
         points: taskData.points,
@@ -897,7 +898,7 @@ async function seedDatabase() {
         difficulty: taskData.difficulty,
         maxVolunteers: Math.floor(Math.random() * 10) + 5,
         status: getRandomElement(["open", "in-progress", "completed"])
-      }).returning();
+      }]).returning();
       volunteerTasks.push(task);
     }
 
@@ -947,13 +948,14 @@ async function seedDatabase() {
       const task = getRandomElement(microTasks);
       const member = getRandomElement(members);
       
-      await db.insert(schema.taskCompletions).values({
+      await db.insert(schema.taskCompletions).values([{
         taskId: task.id,
+        taskType: "micro",
         memberId: member.id,
         proofUrl: Math.random() > 0.5 ? `https://images.unsplash.com/photo-${Date.now() + i}` : null,
         status: getRandomElement(["pending", "approved", "rejected"]),
         completedAt: getRandomDate(new Date("2024-11-01"), new Date())
-      });
+      }]);
     }
 
     console.log(`✅ Created ${microTasks.length} micro tasks with completions`);
@@ -1020,15 +1022,15 @@ async function seedDatabase() {
       
       const dueDate = getRandomDate(new Date("2024-01-01"), new Date("2025-01-01"));
       
-      await db.insert(schema.membershipDues).values({
+      await db.insert(schema.membershipDues).values([{
         memberId: member.id,
         amount: getRandomElement(amounts),
-        paymentMethod: status === "paid" ? "stripe" : "offline",
-        stripePaymentId: status === "paid" ? `pi_${Math.random().toString(36).substring(2, 15)}` : null,
+        paymentMethod: status === "paid" ? "paystack" : "offline",
+        paystackReference: status === "paid" ? `ref_${Math.random().toString(36).substring(2, 15)}` : null,
         paymentStatus: status === "paid" ? "completed" : "pending",
         dueDate,
         paidAt: status === "paid" ? getRandomDate(dueDate, new Date()) : null
-      });
+      }]);
     }
 
     console.log(`✅ Created 15 dues payments`);
