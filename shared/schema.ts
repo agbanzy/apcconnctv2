@@ -89,7 +89,7 @@ export const members = pgTable("members", {
   joinDate: timestamp("join_date").defaultNow(),
   interests: jsonb("interests").$type<string[]>(), // ["education", "jobs", "security"]
   referralCode: text("referral_code").unique(), // Unique code for this member to share
-  referredBy: varchar("referred_by").references(() => members.id), // Who referred this member
+  referredBy: varchar("referred_by").references((): any => members.id), // Who referred this member
 });
 
 export const membershipDues = pgTable("membership_dues", {
@@ -401,7 +401,7 @@ export const newsComments = pgTable("news_comments", {
   memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   likes: integer("likes").default(0),
-  parentId: varchar("parent_id").references(() => newsComments.id, { onDelete: "cascade" }), // For nested replies
+  parentId: varchar("parent_id").references((): any => newsComments.id, { onDelete: "cascade" }), // For nested replies
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -561,6 +561,49 @@ export const recurringDonations = pgTable("recurring_donations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Push Notifications System
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(), // Public key for encryption
+  auth: text("auth").notNull(), // Auth secret for encryption
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }).unique(),
+  eventReminders: boolean("event_reminders").default(true),
+  electionAnnouncements: boolean("election_announcements").default(true),
+  newsAlerts: boolean("news_alerts").default(true),
+  duesReminders: boolean("dues_reminders").default(true),
+  taskAssignments: boolean("task_assignments").default(true),
+  campaignUpdates: boolean("campaign_updates").default(true),
+  achievementNotifications: boolean("achievement_notifications").default(true),
+  referralRewards: boolean("referral_rewards").default(true),
+  systemAnnouncements: boolean("system_announcements").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Audit Logging System
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  memberId: varchar("member_id").references(() => members.id, { onDelete: "set null" }),
+  action: text("action").notNull(), // login, vote, payment, admin_action, etc.
+  resourceType: text("resource_type"), // election, member, payment, etc.
+  resourceId: varchar("resource_id"),
+  details: jsonb("details").$type<Record<string, any>>(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  status: text("status").notNull(), // success, failure
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const statesRelations = relations(states, ({ many }) => ({
   lgas: many(lgas),
@@ -681,8 +724,12 @@ export const eventRsvpsRelations = relations(eventRsvps, ({ one }) => ({
   }),
 }));
 
-export const volunteerTasksRelations = relations(volunteerTasks, ({ many }) => ({
+export const volunteerTasksRelations = relations(volunteerTasks, ({ one, many }) => ({
   applications: many(taskApplications),
+  creator: one(users, {
+    fields: [volunteerTasks.creatorId],
+    references: [users.id],
+  }),
 }));
 
 export const taskApplicationsRelations = relations(taskApplications, ({ one }) => ({
@@ -1039,6 +1086,9 @@ export const insertDonationSchema = createInsertSchema(donations).omit({ id: tru
 export const insertRecurringDonationSchema = createInsertSchema(recurringDonations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertNewsCommentSchema = createInsertSchema(newsComments).omit({ id: true, createdAt: true, likes: true });
 export const insertNewsCommentLikeSchema = createInsertSchema(newsCommentLikes).omit({ id: true, createdAt: true });
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1121,3 +1171,9 @@ export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
 export type UserAchievement = typeof userAchievements.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;

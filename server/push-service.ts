@@ -544,23 +544,25 @@ export class PushService {
    * this.initialized = true;
    * ```
    */
-  private initializeWebPush(): void {
+  private async initializeWebPush(): Promise<void> {
     if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
       console.warn("[PushService] VAPID keys not configured");
       return;
     }
 
-    // TODO: Uncomment when ready to use Web Push
-    // const webPush = require('web-push');
-    // webPush.setVapidDetails(
-    //   process.env.VAPID_SUBJECT || 'mailto:admin@apcconnect.ng',
-    //   process.env.VAPID_PUBLIC_KEY,
-    //   process.env.VAPID_PRIVATE_KEY
-    // );
-    // this.webPushClient = webPush;
-
-    console.log("[PushService] Web Push initialized successfully");
-    this.initialized = true;
+    try {
+      const webPush = await import('web-push');
+      webPush.default.setVapidDetails(
+        process.env.VAPID_SUBJECT || 'mailto:admin@apcconnect.ng',
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+      );
+      this.webPushClient = webPush.default;
+      console.log("[PushService] Web Push initialized successfully");
+      this.initialized = true;
+    } catch (error) {
+      console.error("[PushService] Web Push initialization error:", error);
+    }
   }
 
   /**
@@ -587,23 +589,64 @@ export class PushService {
       return;
     }
 
-    // TODO: Implement actual push notification based on provider
-    // For now, just log the notification
     switch (this.provider) {
-      case "fcm":
-        // await this.sendFCMNotification(userId, payload);
-        break;
-      case "onesignal":
-        // await this.sendOneSignalNotification(userId, payload);
-        break;
       case "web-push":
-        // await this.sendWebPushNotification(userId, payload);
+        await this.sendWebPushNotification(userId, payload);
         break;
       default:
         console.log("[PushService] Simulating push notification send");
     }
 
     console.log("[PushService] Notification sent successfully");
+  }
+
+  /**
+   * Send Web Push notification to a specific user
+   */
+  private async sendWebPushNotification(userId: string, payload: NotificationPayload): Promise<void> {
+    try {
+      const { db } = await import("./db");
+      const schema = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const subscriptions = await db.query.pushSubscriptions.findMany({
+        where: eq(schema.pushSubscriptions.memberId, userId),
+      });
+
+      if (subscriptions.length === 0) {
+        console.log(`[PushService] No subscriptions found for user: ${userId}`);
+        return;
+      }
+
+      const notifications = subscriptions.map(async (sub) => {
+        try {
+          if (this.webPushClient) {
+            await this.webPushClient.sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth,
+                },
+              },
+              JSON.stringify(payload)
+            );
+            console.log(`[PushService] Sent to endpoint: ${sub.endpoint.substring(0, 50)}...`);
+          }
+        } catch (error: any) {
+          if (error.statusCode === 410 || error.statusCode === 404) {
+            console.log(`[PushService] Subscription expired, removing: ${sub.id}`);
+            await db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.id, sub.id));
+          } else {
+            console.error("[PushService] Send error:", error);
+          }
+        }
+      });
+
+      await Promise.all(notifications);
+    } catch (error) {
+      console.error("[PushService] Web Push error:", error);
+    }
   }
 
   /**

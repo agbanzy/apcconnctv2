@@ -21,9 +21,10 @@ import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry, hashRefreshToken, verifyRefreshTokenHash } from "./jwt-utils";
-// PUSH NOTIFICATION INTEGRATION: Import push service
-// Uncomment the following line when ready to use push notifications:
-// import { pushService, NotificationTemplates } from "./push-service";
+import { pushService, NotificationTemplates } from "./push-service";
+import { apiLimiter, authLimiter, votingLimiter } from "./middleware/rate-limit";
+import { errorHandler, createError } from "./middleware/error-handler";
+import { logAudit, AuditActions } from "./utils/audit-logger";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -172,7 +173,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
   };
 
-  app.post("/api/auth/register", async (req: AuthRequest, res: Response) => {
+  // ============================================================================
+  // RATE LIMITING MIDDLEWARE
+  // ============================================================================
+  // Apply general API rate limiter to all /api/* routes (100 requests per 15 minutes)
+  // This provides baseline protection against request floods for all API endpoints
+  // Specific endpoints may have additional, stricter rate limiters (e.g., authLimiter, votingLimiter)
+  app.use("/api", apiLimiter);
+
+  app.post("/api/auth/register", authLimiter, async (req: AuthRequest, res: Response) => {
     try {
       const userData = schema.insertUserSchema.parse(req.body);
       const { wardId, ...memberData } = req.body;
@@ -353,10 +362,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       */
 
-      req.login(user, (err) => {
+      req.login(user, async (err) => {
         if (err) {
           return res.status(500).json({ success: false, error: "Login failed after registration" });
         }
+        
+        await logAudit({
+          userId: user.id,
+          memberId: member.id,
+          action: AuditActions.REGISTER,
+          details: { email: user.email },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          status: "success",
+        });
+        
         return res.json({ success: true, data: { user, member } });
       });
     } catch (error) {
@@ -365,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", (req: AuthRequest, res: Response, next: NextFunction) => {
+  app.post("/api/auth/login", authLimiter, (req: AuthRequest, res: Response, next: NextFunction) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) {
         return res.status(500).json({ success: false, error: "Authentication error" });
@@ -380,6 +400,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const member = await db.query.members.findFirst({
           where: eq(schema.members.userId, user.id)
+        });
+
+        await logAudit({
+          userId: user.id,
+          memberId: member?.id,
+          action: AuditActions.LOGIN,
+          details: { email: user.email },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          status: "success",
         });
 
         // SMS INTEGRATION POINT: Send OTP for two-factor authentication
@@ -1478,7 +1508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update members with overdue dues to "expired" status
       // Only update if they don't have active recurring dues
       let suspendedCount = 0;
-      for (const [memberId, member] of overdueMembers) {
+      for (const [memberId, member] of Array.from(overdueMembers)) {
         // Check if member has active recurring dues
         const recurringDues = await db.query.recurringMembershipDues.findFirst({
           where: and(
@@ -1972,7 +2002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/elections/:id/vote", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/elections/:id/vote", votingLimiter, requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { candidateId } = req.body;
       const member = await db.query.members.findFirst({
@@ -2008,6 +2038,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.update(schema.elections)
         .set({ totalVotes: sql`${schema.elections.totalVotes} + 1` })
         .where(eq(schema.elections.id, req.params.id));
+
+      await logAudit({
+        userId: req.user!.id,
+        memberId: member.id,
+        action: AuditActions.VOTE,
+        resourceType: "election",
+        resourceId: req.params.id,
+        details: { candidateId },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: "success",
+      });
 
       res.json({ success: true, data: vote });
     } catch (error) {
@@ -2532,6 +2574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [completion] = await db.insert(schema.taskCompletions).values({
         taskId: req.params.id,
+        taskType: "micro",
         memberId: member.id,
         proofUrl,
         status: "pending"
@@ -3652,11 +3695,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             progress: criteria.value
           }).returning();
 
-          if (badge.points > 0) {
+          if (badge.points && badge.points > 0) {
             await db.insert(schema.userPoints).values({
               memberId: member.id,
               source: "badge",
-              amount: badge.points
+              amount: badge.points,
+              points: badge.points
             });
           }
 
@@ -5476,10 +5520,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       let query = db.query.volunteerTasks;
       
       const tasks = await query.findMany({
-        orderBy: desc(schema.volunteerTasks.createdAt),
-        with: {
-          creator: true
-        }
+        orderBy: desc(schema.volunteerTasks.createdAt)
       });
 
       let filteredTasks = tasks;
@@ -5511,8 +5552,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
                 with: { user: true }
               }
             }
-          },
-          creator: true
+          }
         }
       });
 
@@ -6101,6 +6141,183 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.status(500).json({ success: false, error: "Email service test failed" });
     }
   });
+
+  // ============================================================================
+  // PUSH NOTIFICATION ENDPOINTS
+  // ============================================================================
+
+  app.post("/api/push/subscribe", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { endpoint, p256dh, auth } = req.body;
+      
+      if (!endpoint || !p256dh || !auth) {
+        return res.status(400).json({ success: false, error: "Missing subscription data" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const existingSubscription = await db.query.pushSubscriptions.findFirst({
+        where: and(
+          eq(schema.pushSubscriptions.memberId, member.id),
+          eq(schema.pushSubscriptions.endpoint, endpoint)
+        )
+      });
+
+      if (!existingSubscription) {
+        await db.insert(schema.pushSubscriptions).values({
+          memberId: member.id,
+          endpoint,
+          p256dh,
+          auth,
+        });
+
+        await logAudit({
+          userId: req.user!.id,
+          memberId: member.id,
+          action: AuditActions.PUSH_SUBSCRIPTION,
+          details: { action: "subscribe" },
+          status: "success",
+        });
+      }
+
+      res.json({ success: true, message: "Subscription saved" });
+    } catch (error) {
+      console.error("Push subscription error:", error);
+      res.status(500).json({ success: false, error: "Failed to save subscription" });
+    }
+  });
+
+  app.delete("/api/push/unsubscribe", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { endpoint } = req.body;
+      
+      if (!endpoint) {
+        return res.status(400).json({ success: false, error: "Missing endpoint" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db.delete(schema.pushSubscriptions).where(
+        and(
+          eq(schema.pushSubscriptions.memberId, member.id),
+          eq(schema.pushSubscriptions.endpoint, endpoint)
+        )
+      );
+
+      await logAudit({
+        userId: req.user!.id,
+        memberId: member.id,
+        action: AuditActions.PUSH_SUBSCRIPTION,
+        details: { action: "unsubscribe" },
+        status: "success",
+      });
+
+      res.json({ success: true, message: "Subscription removed" });
+    } catch (error) {
+      console.error("Push unsubscribe error:", error);
+      res.status(500).json({ success: false, error: "Failed to remove subscription" });
+    }
+  });
+
+  app.get("/api/push/preferences", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const preferences = await db.query.notificationPreferences.findFirst({
+        where: eq(schema.notificationPreferences.memberId, member.id)
+      });
+
+      if (!preferences) {
+        const defaultPreferences = {
+          memberId: member.id,
+          elections: true,
+          events: true,
+          news: true,
+          tasks: true,
+          badges: true,
+          messages: true,
+        };
+        
+        await db.insert(schema.notificationPreferences).values(defaultPreferences);
+        return res.json({ success: true, preferences: defaultPreferences });
+      }
+
+      res.json({ success: true, preferences });
+    } catch (error) {
+      console.error("Get preferences error:", error);
+      res.status(500).json({ success: false, error: "Failed to get preferences" });
+    }
+  });
+
+  app.patch("/api/push/preferences", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const preferences = await db.query.notificationPreferences.findFirst({
+        where: eq(schema.notificationPreferences.memberId, member.id)
+      });
+
+      const updateData = {
+        elections: req.body.elections ?? preferences?.elections ?? true,
+        events: req.body.events ?? preferences?.events ?? true,
+        news: req.body.news ?? preferences?.news ?? true,
+        tasks: req.body.tasks ?? preferences?.tasks ?? true,
+        badges: req.body.badges ?? preferences?.badges ?? true,
+        messages: req.body.messages ?? preferences?.messages ?? true,
+      };
+
+      if (preferences) {
+        await db.update(schema.notificationPreferences)
+          .set(updateData)
+          .where(eq(schema.notificationPreferences.id, preferences.id));
+      } else {
+        await db.insert(schema.notificationPreferences).values({
+          memberId: member.id,
+          ...updateData,
+        });
+      }
+
+      res.json({ success: true, preferences: updateData });
+    } catch (error) {
+      console.error("Update preferences error:", error);
+      res.status(500).json({ success: false, error: "Failed to update preferences" });
+    }
+  });
+
+  app.get("/api/push/vapid-key", (req: Request, res: Response) => {
+    const publicKey = pushService.getVapidPublicKey();
+    if (!publicKey) {
+      return res.status(503).json({ success: false, error: "Push notifications not configured" });
+    }
+    res.json({ success: true, publicKey });
+  });
+
+  // Apply error handler middleware (must be last)
+  app.use(errorHandler);
 
   io.on("connection", (socket) => {
     console.log("Client connected to situation room");
