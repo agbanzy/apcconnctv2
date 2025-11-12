@@ -43,6 +43,7 @@ import InviteEarn from "@/pages/invite-earn";
 import SearchPage from "@/pages/search";
 import NotFound from "@/pages/not-found";
 import { ChatbotWidget } from "@/components/chatbot-widget";
+import { Footer } from "@/components/footer";
 
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminMembers from "@/pages/admin/members";
@@ -152,8 +153,10 @@ function AppContent() {
                 <Route component={NotFound} />
               </Switch>
             </main>
+            <Footer />
           </div>
         </div>
+        <ChatbotWidget />
       </SidebarProvider>
     );
   }
@@ -209,6 +212,7 @@ function AppContent() {
               <Route component={NotFound} />
             </Switch>
           </main>
+          <Footer />
         </div>
       </div>
       <ChatbotWidget />

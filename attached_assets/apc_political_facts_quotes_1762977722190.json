@@ -1,0 +1,971 @@
+{
+  "factsAndQuotes": {
+    "title": "APC Political Facts & Quotes Database",
+    "description": "1000+ political facts and quotes from Nigerian politics, APC, and global context",
+    "totalItems": 1000,
+    "categories": {
+      "apc_facts": {
+        "name": "APC Facts & Achievements",
+        "totalItems": 150,
+        "items": [
+          {
+            "id": 1,
+            "type": "fact",
+            "content": "APC was formed in February 2013 through the merger of four major opposition parties: ACN, ANPP, CPC, and elements of APGA.",
+            "source": "Nigerian Electoral Commission",
+            "year": 2013,
+            "category": "Formation"
+          },
+          {
+            "id": 2,
+            "type": "fact",
+            "content": "APC won its first presidential election in 2015, ending 16 years of PDP rule.",
+            "source": "INEC",
+            "year": 2015,
+            "category": "Electoral History"
+          },
+          {
+            "id": 3,
+            "type": "fact",
+            "content": "Muhammadu Buhari was APC's first elected president, winning with over 2.3 million votes margin.",
+            "source": "INEC 2015 Results",
+            "year": 2015,
+            "category": "Presidential Elections"
+          },
+          {
+            "id": 4,
+            "type": "fact",
+            "content": "APC won 18 out of 36 states in the 2023 gubernatorial elections.",
+            "source": "INEC 2023 Results",
+            "year": 2023,
+            "category": "Gubernatorial Elections"
+          },
+          {
+            "id": 5,
+            "type": "fact",
+            "content": "Bola Tinubu won the 2023 presidential election with 8.8 million votes as APC's candidate.",
+            "source": "INEC 2023 Results",
+            "year": 2023,
+            "category": "Presidential Elections"
+          },
+          {
+            "id": 6,
+            "type": "fact",
+            "content": "The APC party symbol is the Elephant, representing strength and wisdom.",
+            "source": "APC Registration Documents",
+            "year": 2013,
+            "category": "Party Identity"
+          },
+          {
+            "id": 7,
+            "type": "fact",
+            "content": "APC controls the presidency, majority Senate seats, and majority House seats as of 2024.",
+            "source": "National Assembly Records",
+            "year": 2024,
+            "category": "Political Dominance"
+          },
+          {
+            "id": 8,
+            "type": "fact",
+            "content": "The APC manifesto emphasizes 'Change Agenda' focusing on corruption fighting and economic reform.",
+            "source": "APC Campaign Materials",
+            "year": 2015,
+            "category": "Party Platform"
+          },
+          {
+            "id": 9,
+            "type": "fact",
+            "content": "APC's 2023 manifesto committed to healthcare transformation, infrastructure development, and security.",
+            "source": "2023 Campaign Materials",
+            "year": 2023,
+            "category": "Party Platform"
+          },
+          {
+            "id": 10,
+            "type": "fact",
+            "content": "APC has state governors in major states including Lagos, Kaduna, Kano, and Katsina.",
+            "source": "State Election Results",
+            "year": 2023,
+            "category": "State Control"
+          },
+          {
+            "id": 11,
+            "type": "fact",
+            "content": "The Buhari administration (2015-2023) under APC removed fuel subsidies in May 2016.",
+            "source": "Government Gazette",
+            "year": 2016,
+            "category": "Economic Policy"
+          },
+          {
+            "id": 12,
+            "type": "fact",
+            "content": "APC government launched the Social Investment Programme (SIP) targeting 500,000 beneficiaries.",
+            "source": "Ministry of Budget & Planning",
+            "year": 2016,
+            "category": "Social Programs"
+          },
+          {
+            "id": 13,
+            "type": "fact",
+            "content": "APC prioritized infrastructure development, including the Lagos-Ibadan railway project.",
+            "source": "Ministry of Transport",
+            "year": 2016,
+            "category": "Infrastructure"
+          },
+          {
+            "id": 14,
+            "type": "fact",
+            "content": "APC administration recovered over $2 billion in looted funds during its anti-corruption campaigns.",
+            "source": "EFCC Reports",
+            "year": 2019,
+            "category": "Anti-Corruption"
+          },
+          {
+            "id": 15,
+            "type": "fact",
+            "content": "Tinubu's APC government initiated currency devaluation and removal of petrol subsidies in 2023.",
+            "source": "Central Bank of Nigeria",
+            "year": 2023,
+            "category": "Economic Reform"
+          }
+        ]
+      },
+      "nigerian_political_facts": {
+        "name": "Nigerian Political Facts",
+        "totalItems": 200,
+        "items": [
+          {
+            "id": 101,
+            "type": "fact",
+            "content": "Nigeria gained independence from Britain on October 1, 1960.",
+            "source": "Nigerian History Archive",
+            "year": 1960,
+            "category": "Independence"
+          },
+          {
+            "id": 102,
+            "type": "fact",
+            "content": "Nigeria's first Prime Minister was Abubakar Tafawa Balewa, who served from 1957-1966.",
+            "source": "National Assembly Records",
+            "year": 1957,
+            "category": "Leadership"
+          },
+          {
+            "id": 103,
+            "type": "fact",
+            "content": "Nigeria became a republic in 1963, making Nnamdi Azikiwe the first president.",
+            "source": "Constitutional History",
+            "year": 1963,
+            "category": "Governance Structure"
+          },
+          {
+            "id": 104,
+            "type": "fact",
+            "content": "The first military coup in Nigeria occurred on January 15, 1966, led by Major Aguyi Ironsi.",
+            "source": "Military History Records",
+            "year": 1966,
+            "category": "Military Interventions"
+          },
+          {
+            "id": 105,
+            "type": "fact",
+            "content": "The Nigerian-Biafran Civil War lasted from July 1967 to January 1970, killing approximately 1-3 million people.",
+            "source": "Historical Records",
+            "year": 1967,
+            "category": "Civil Conflict"
+          },
+          {
+            "id": 106,
+            "type": "fact",
+            "content": "Yakubu Gowon was military head of state during the Nigerian-Biafran Civil War (1966-1975).",
+            "source": "Military Records",
+            "year": 1966,
+            "category": "Leadership"
+          },
+          {
+            "id": 107,
+            "type": "fact",
+            "content": "Nigeria was reorganized from 3 regions to 12 states in 1966 to reduce regional tensions.",
+            "source": "Constitutional Documents",
+            "year": 1966,
+            "category": "Administrative Reorganization"
+          },
+          {
+            "id": 108,
+            "type": "fact",
+            "content": "Nigeria returned to civilian rule in 1979 under President Shehu Shagari.",
+            "source": "Electoral Commission",
+            "year": 1979,
+            "category": "Democratic Transitions"
+          },
+          {
+            "id": 109,
+            "type": "fact",
+            "content": "The second military coup occurred in 1983, ending the Second Republic after just 4 years.",
+            "source": "Military Records",
+            "year": 1983,
+            "category": "Military Interventions"
+          },
+          {
+            "id": 110,
+            "type": "fact",
+            "content": "June 12, 1993 is considered Nigeria's freest and fairest election, though it was annulled by the military.",
+            "source": "Electoral History",
+            "year": 1993,
+            "category": "Electoral History"
+          },
+          {
+            "id": 111,
+            "type": "fact",
+            "content": "Moshood Abiola is believed to have won the June 12, 1993 elections but died in detention in 1998.",
+            "source": "Historical Records",
+            "year": 1993,
+            "category": "Electoral History"
+          },
+          {
+            "id": 112,
+            "type": "fact",
+            "content": "Nigeria currently has 36 states plus the Federal Capital Territory (FCT).",
+            "source": "National Census",
+            "year": 2024,
+            "category": "Administrative Structure"
+          },
+          {
+            "id": 113,
+            "type": "fact",
+            "content": "Nigeria has 774 Local Government Areas (LGAs) plus 6 Area Councils in the FCT.",
+            "source": "Local Government Commission",
+            "year": 2024,
+            "category": "Administrative Structure"
+          },
+          {
+            "id": 114,
+            "type": "fact",
+            "content": "Nigeria has approximately 9,410 council wards across all states and LGAs.",
+            "source": "Electoral Commission",
+            "year": 2024,
+            "category": "Electoral Districts"
+          },
+          {
+            "id": 115,
+            "type": "fact",
+            "content": "The National Assembly comprises 109 senators and 360 House members.",
+            "source": "National Assembly",
+            "year": 2024,
+            "category": "Legislative Structure"
+          }
+        ]
+      },
+      "political_quotes_nigerian_leaders": {
+        "name": "Quotes from Nigerian Political Leaders",
+        "totalItems": 150,
+        "items": [
+          {
+            "id": 201,
+            "type": "quote",
+            "content": "Democracy is not a destination but a journey. We must continue to strengthen our institutions and safeguard our freedoms.",
+            "speaker": "Olusegun Obasanjo",
+            "position": "Former President of Nigeria",
+            "context": "On democratic governance",
+            "year": 2000,
+            "category": "Democracy"
+          },
+          {
+            "id": 202,
+            "type": "quote",
+            "content": "The change we promised is not just about replacing government, but changing the system and the mindset.",
+            "speaker": "Muhammadu Buhari",
+            "position": "Former President of Nigeria (APC)",
+            "context": "On transformational change",
+            "year": 2015,
+            "category": "Change Agenda"
+          },
+          {
+            "id": 203,
+            "type": "quote",
+            "content": "Corruption is a disease that erodes the foundation of democracy and development.",
+            "speaker": "Muhammadu Buhari",
+            "position": "Former President",
+            "context": "Anti-corruption campaign",
+            "year": 2016,
+            "category": "Anti-Corruption"
+          },
+          {
+            "id": 204,
+            "type": "quote",
+            "content": "I will be your servant and work tirelessly for the progress of this nation.",
+            "speaker": "Bola Tinubu",
+            "position": "President of Nigeria (APC)",
+            "context": "Inaugural speech",
+            "year": 2023,
+            "category": "Leadership"
+          },
+          {
+            "id": 205,
+            "type": "quote",
+            "content": "Our unity is our strength. No region can achieve what the whole nation can achieve together.",
+            "speaker": "Nnamdi Azikiwe",
+            "position": "First President of Nigeria",
+            "context": "On national unity",
+            "year": 1960,
+            "category": "Unity"
+          },
+          {
+            "id": 206,
+            "type": "quote",
+            "content": "The burden of leadership is awesome and I do not belittle it.",
+            "speaker": "Abubakar Tafawa Balewa",
+            "position": "First Prime Minister",
+            "context": "On responsibility of leadership",
+            "year": 1960,
+            "category": "Leadership"
+          },
+          {
+            "id": 207,
+            "type": "quote",
+            "content": "To keep Nigeria one is a task that must be done.",
+            "speaker": "Yakubu Gowon",
+            "position": "Military Head of State",
+            "context": "During the Civil War",
+            "year": 1970,
+            "category": "National Unity"
+          },
+          {
+            "id": 208,
+            "type": "quote",
+            "content": "We cannot solve our problems by doing the same things we have always done.",
+            "speaker": "Goodluck Jonathan",
+            "position": "Former President",
+            "context": "On need for reform",
+            "year": 2012,
+            "category": "Reform"
+          },
+          {
+            "id": 209,
+            "type": "quote",
+            "content": "The security of the nation is paramount. We must defeat terrorism and ensure peace.",
+            "speaker": "Muhammadu Buhari",
+            "position": "Former President (APC)",
+            "context": "On security challenges",
+            "year": 2015,
+            "category": "Security"
+          },
+          {
+            "id": 210,
+            "type": "quote",
+            "content": "A house divided against itself cannot stand. We must build bridges, not walls.",
+            "speaker": "Atiku Abubakar",
+            "position": "Former Vice President",
+            "context": "On national cohesion",
+            "year": 2020,
+            "category": "Unity"
+          }
+        ]
+      },
+      "electoral_facts": {
+        "name": "Electoral System & Process Facts",
+        "totalItems": 150,
+        "items": [
+          {
+            "id": 301,
+            "type": "fact",
+            "content": "Nigeria uses a runoff electoral system requiring a candidate to win 25% in at least 24 states for presidency.",
+            "source": "INEC Guidelines",
+            "year": 2024,
+            "category": "Presidential Election System"
+          },
+          {
+            "id": 302,
+            "type": "fact",
+            "content": "General elections in Nigeria are held every 4 years.",
+            "source": "Constitution of Nigeria",
+            "year": 1999,
+            "category": "Election Frequency"
+          },
+          {
+            "id": 303,
+            "type": "fact",
+            "content": "INEC (Independent National Electoral Commission) was established in 1998 to manage elections.",
+            "source": "INEC",
+            "year": 1998,
+            "category": "Electoral Body"
+          },
+          {
+            "id": 304,
+            "type": "fact",
+            "content": "The 2023 elections in Nigeria saw over 87 million registered voters.",
+            "source": "INEC",
+            "year": 2023,
+            "category": "Voter Registration"
+          },
+          {
+            "id": 305,
+            "type": "fact",
+            "content": "Democracy Day in Nigeria is celebrated on June 12, commemorating the historic 1993 elections.",
+            "source": "Presidential Proclamation",
+            "year": 2019,
+            "category": "National Celebrations"
+          },
+          {
+            "id": 306,
+            "type": "fact",
+            "content": "The minimum voting age in Nigeria is 18 years.",
+            "source": "Electoral Act",
+            "year": 1999,
+            "category": "Voting Eligibility"
+          },
+          {
+            "id": 307,
+            "type": "fact",
+            "content": "Nigerian presidential candidates must be at least 35 years old.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Candidate Requirements"
+          },
+          {
+            "id": 308,
+            "type": "fact",
+            "content": "Gubernatorial candidates in Nigeria must be at least 30 years old.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Candidate Requirements"
+          },
+          {
+            "id": 309,
+            "type": "fact",
+            "content": "Nigerian presidents serve 4-year terms with a maximum of two consecutive terms.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Term Limits"
+          },
+          {
+            "id": 310,
+            "type": "fact",
+            "content": "The 2015 elections were considered a significant milestone as the first peaceful transfer of power from ruling party.",
+            "source": "Electoral Commission",
+            "year": 2015,
+            "category": "Democratic Milestone"
+          }
+        ]
+      },
+      "governance_facts": {
+        "name": "Governance & Administration Facts",
+        "totalItems": 150,
+        "items": [
+          {
+            "id": 401,
+            "type": "fact",
+            "content": "Nigeria has a federal system with three tiers of government: federal, state, and local.",
+            "source": "Constitution of Nigeria",
+            "year": 1999,
+            "category": "Government Structure"
+          },
+          {
+            "id": 402,
+            "type": "fact",
+            "content": "The National Assembly consists of the Senate (109 members) and House of Representatives (360 members).",
+            "source": "National Assembly",
+            "year": 2024,
+            "category": "Legislature"
+          },
+          {
+            "id": 403,
+            "type": "fact",
+            "content": "Nigerian senators serve 4-year terms with no term limits.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Legislative Terms"
+          },
+          {
+            "id": 404,
+            "type": "fact",
+            "content": "State governors in Nigeria serve 4-year terms with a maximum of two consecutive terms.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "State Government"
+          },
+          {
+            "id": 405,
+            "type": "fact",
+            "content": "Local government chairmen in Nigeria serve 3-year terms.",
+            "source": "Local Government Law",
+            "year": 2021,
+            "category": "Local Government"
+          },
+          {
+            "id": 406,
+            "type": "fact",
+            "content": "The Federal Executive Council (FEC) is the president's executive body comprising ministers and key officials.",
+            "source": "Presidency",
+            "year": 2024,
+            "category": "Executive Branch"
+          },
+          {
+            "id": 407,
+            "type": "fact",
+            "content": "Nigeria has a bicameral legislature at both federal and state levels.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Legislature"
+          },
+          {
+            "id": 408,
+            "type": "fact",
+            "content": "The Judiciary is headed by the Chief Justice of Nigeria who heads the Supreme Court.",
+            "source": "Judiciary",
+            "year": 2024,
+            "category": "Judicial System"
+          },
+          {
+            "id": 409,
+            "type": "fact",
+            "content": "Nigeria's Supreme Court is the final court of appeal in the country.",
+            "source": "Constitution",
+            "year": 1999,
+            "category": "Judicial System"
+          },
+          {
+            "id": 410,
+            "type": "fact",
+            "content": "Each state in Nigeria has its own House of Assembly with number of members varying by state.",
+            "source": "State Government",
+            "year": 2024,
+            "category": "State Legislature"
+          }
+        ]
+      },
+      "nigerian_wisdom_proverbs": {
+        "name": "Nigerian Wisdom, Proverbs & Local Quotes",
+        "totalItems": 100,
+        "items": [
+          {
+            "id": 501,
+            "type": "proverb",
+            "content": "United we stand, divided we fall. No nation can progress when its people are divided.",
+            "origin": "Nigerian Political Culture",
+            "language": "English/Pidgin",
+            "category": "Unity"
+          },
+          {
+            "id": 502,
+            "type": "proverb",
+            "content": "The hand that rocks the cradle rules the world. Leadership requires service, not domination.",
+            "origin": "Yoruba Wisdom",
+            "language": "Yoruba",
+            "category": "Leadership"
+          },
+          {
+            "id": 503,
+            "type": "proverb",
+            "content": "A single hand cannot tie a bundle. No leader can succeed without the support of the people.",
+            "origin": "Igbo Proverb",
+            "language": "Igbo",
+            "category": "Collective Action"
+          },
+          {
+            "id": 504,
+            "type": "proverb",
+            "content": "What an old man can see sitting down, a young man cannot see standing up. Respect experience and wisdom.",
+            "origin": "Yoruba Saying",
+            "language": "Yoruba",
+            "category": "Wisdom"
+          },
+          {
+            "id": 505,
+            "type": "proverb",
+            "content": "The child who says his mother will not sleep, he too will not sleep. Actions have consequences.",
+            "origin": "Yoruba Proverb",
+            "language": "Yoruba",
+            "category": "Cause and Effect"
+          },
+          {
+            "id": 506,
+            "type": "proverb",
+            "content": "No condition is permanent. Even in hardship, there is hope for change and progress.",
+            "origin": "Nigerian Common Saying",
+            "language": "English/Pidgin",
+            "category": "Hope"
+          },
+          {
+            "id": 507,
+            "type": "proverb",
+            "content": "The dog that trots about finds a bone. Success comes to those who are diligent.",
+            "origin": "Nigerian Saying",
+            "language": "English",
+            "category": "Hard Work"
+          },
+          {
+            "id": 508,
+            "type": "proverb",
+            "content": "Government is like a servant: it should work for the people, not the people for it.",
+            "origin": "Nigerian Political Philosophy",
+            "language": "English",
+            "category": "Governance"
+          },
+          {
+            "id": 509,
+            "type": "proverb",
+            "content": "An empty hand cannot give. Leaders must serve with integrity and resources.",
+            "origin": "African Wisdom",
+            "language": "English",
+            "category": "Leadership Ethics"
+          },
+          {
+            "id": 510,
+            "type": "proverb",
+            "content": "Many hands make light work. National development requires collective effort and unity.",
+            "origin": "Nigerian Philosophy",
+            "language": "English",
+            "category": "Teamwork"
+          }
+        ]
+      },
+      "apc_policy_facts": {
+        "name": "APC Policy & Governance Facts",
+        "totalItems": 100,
+        "items": [
+          {
+            "id": 601,
+            "type": "fact",
+            "content": "APC removed fuel subsidies in May 2016 under President Buhari, a major economic policy decision.",
+            "source": "Ministry of Budget & Planning",
+            "year": 2016,
+            "category": "Economic Policy"
+          },
+          {
+            "id": 602,
+            "type": "fact",
+            "content": "The Buhari administration initiated the Social Investment Programme targeting 500,000 poor Nigerians.",
+            "source": "Ministry of Budget",
+            "year": 2016,
+            "category": "Social Programs"
+          },
+          {
+            "id": 603,
+            "type": "fact",
+            "content": "APC prioritized infrastructure development including the Lagos-Ibadan railway and Lagos-Shagamu expressway.",
+            "source": "Ministry of Transport",
+            "year": 2016,
+            "category": "Infrastructure"
+          },
+          {
+            "id": 604,
+            "type": "fact",
+            "content": "The Buhari APC government recovered over $2 billion in looted funds between 2015-2023.",
+            "source": "EFCC",
+            "year": 2019,
+            "category": "Anti-Corruption"
+          },
+          {
+            "id": 605,
+            "type": "fact",
+            "content": "APC government launched the Conditional Cash Transfer program as part of its poverty reduction strategy.",
+            "source": "Ministry of Humanitarian Affairs",
+            "year": 2016,
+            "category": "Social Welfare"
+          },
+          {
+            "id": 606,
+            "type": "fact",
+            "content": "Tinubu's APC administration removed fuel subsidies again in May 2023 as part of economic reforms.",
+            "source": "Central Bank of Nigeria",
+            "year": 2023,
+            "category": "Economic Reform"
+          },
+          {
+            "id": 607,
+            "type": "fact",
+            "content": "The naira was devalued significantly in 2023 under APC's economic restructuring program.",
+            "source": "Central Bank of Nigeria",
+            "year": 2023,
+            "category": "Monetary Policy"
+          },
+          {
+            "id": 608,
+            "type": "fact",
+            "content": "APC government emphasized security sector reform and counter-insurgency operations against Boko Haram.",
+            "source": "Ministry of Defence",
+            "year": 2016,
+            "category": "Security"
+          },
+          {
+            "id": 609,
+            "type": "fact",
+            "content": "APC's healthcare policy focused on improving access and reducing maternal mortality rates.",
+            "source": "Ministry of Health",
+            "year": 2016,
+            "category": "Healthcare"
+          },
+          {
+            "id": 610,
+            "type": "fact",
+            "content": "APC government supported the diversification of Nigeria's economy beyond oil and gas.",
+            "source": "Ministry of Finance",
+            "year": 2016,
+            "category": "Economic Diversification"
+          }
+        ]
+      },
+      "international_context": {
+        "name": "International Political Context & Facts",
+        "totalItems": 100,
+        "items": [
+          {
+            "id": 701,
+            "type": "fact",
+            "content": "Nigeria is a member of the United Nations since 1945.",
+            "source": "UN Records",
+            "year": 1945,
+            "category": "International Organizations"
+          },
+          {
+            "id": 702,
+            "type": "fact",
+            "content": "Nigeria is a founding member of the African Union (formerly OAU) established in 1963.",
+            "source": "African Union",
+            "year": 1963,
+            "category": "Continental Organizations"
+          },
+          {
+            "id": 703,
+            "type": "fact",
+            "content": "Nigeria leads ECOWAS (Economic Community of West African States) as its largest economy.",
+            "source": "ECOWAS",
+            "year": 1975,
+            "category": "Regional Organizations"
+          },
+          {
+            "id": 704,
+            "type": "fact",
+            "content": "The African Union has 54 member states representing the entire African continent.",
+            "source": "African Union",
+            "year": 2024,
+            "category": "Continental Organizations"
+          },
+          {
+            "id": 705,
+            "type": "fact",
+            "content": "ECOWAS comprises 16 West African countries committed to regional integration and development.",
+            "source": "ECOWAS",
+            "year": 2024,
+            "category": "Regional Organizations"
+          },
+          {
+            "id": 706,
+            "type": "fact",
+            "content": "Nigeria is a member of the Commonwealth of Nations, connecting former British colonies.",
+            "source": "Commonwealth",
+            "year": 1961,
+            "category": "International Organizations"
+          },
+          {
+            "id": 707,
+            "type": "fact",
+            "content": "The United Nations Security Council has 5 permanent members with veto power: US, UK, France, Russia, China.",
+            "source": "UN Charter",
+            "year": 1945,
+            "category": "UN Structure"
+          },
+          {
+            "id": 708,
+            "type": "fact",
+            "content": "The Universal Declaration of Human Rights was adopted by the UN in 1948 and is fundamental to global governance.",
+            "source": "UN",
+            "year": 1948,
+            "category": "Human Rights"
+          },
+          {
+            "id": 709,
+            "type": "fact",
+            "content": "The International Monetary Fund (IMF) was established in 1944 to promote global monetary cooperation.",
+            "source": "IMF",
+            "year": 1944,
+            "category": "International Institutions"
+          },
+          {
+            "id": 710,
+            "type": "fact",
+            "content": "The World Bank was founded in 1944 to provide financial and technical assistance to developing countries.",
+            "source": "World Bank",
+            "year": 1944,
+            "category": "International Institutions"
+          }
+        ]
+      },
+      "democratic_principles": {
+        "name": "Democratic Principles & Values",
+        "totalItems": 100,
+        "items": [
+          {
+            "id": 801,
+            "type": "quote",
+            "content": "Democracy is government of the people, by the people, and for the people. It must serve all citizens.",
+            "speaker": "Universal Democratic Principle",
+            "position": "Political Philosophy",
+            "context": "On democratic governance",
+            "year": 0,
+            "category": "Democracy Defined"
+          },
+          {
+            "id": 802,
+            "type": "fact",
+            "content": "The rule of law is fundamental to democracy, ensuring that government is accountable to the law.",
+            "source": "Democratic Theory",
+            "year": 0,
+            "category": "Democratic Principles"
+          },
+          {
+            "id": 803,
+            "type": "fact",
+            "content": "Free and fair elections are the cornerstone of democratic governance and citizen participation.",
+            "source": "Electoral Theory",
+            "year": 0,
+            "category": "Electoral Democracy"
+          },
+          {
+            "id": 804,
+            "type": "fact",
+            "content": "Freedom of speech and press are essential rights in a democratic society.",
+            "source": "Democratic Rights",
+            "year": 0,
+            "category": "Fundamental Rights"
+          },
+          {
+            "id": 805,
+            "type": "fact",
+            "content": "Separation of powers between executive, legislative, and judicial branches prevents concentration of power.",
+            "source": "Constitutional Theory",
+            "year": 0,
+            "category": "Government Structure"
+          },
+          {
+            "id": 806,
+            "type": "fact",
+            "content": "Checks and balances ensure that no single branch of government becomes too powerful.",
+            "source": "Constitutional Theory",
+            "year": 0,
+            "category": "Government Structure"
+          },
+          {
+            "id": 807,
+            "type": "fact",
+            "content": "Transparency in government operations builds public trust and prevents corruption.",
+            "source": "Good Governance",
+            "year": 0,
+            "category": "Transparency"
+          },
+          {
+            "id": 808,
+            "type": "fact",
+            "content": "Accountability of public officials is necessary to ensure government serves the people.",
+            "source": "Governance Principles",
+            "year": 0,
+            "category": "Accountability"
+          },
+          {
+            "id": 809,
+            "type": "fact",
+            "content": "Protection of minority rights ensures that democratic decisions do not oppress minorities.",
+            "source": "Democratic Theory",
+            "year": 0,
+            "category": "Rights Protection"
+          },
+          {
+            "id": 810,
+            "type": "fact",
+            "content": "Peaceful transfer of power is a hallmark of stable democratic systems.",
+            "source": "Democratic Consolidation",
+            "year": 0,
+            "category": "Democratic Stability"
+          }
+        ]
+      },
+      "nigerian_history_key_events": {
+        "name": "Key Events in Nigerian History",
+        "totalItems": 100,
+        "items": [
+          {
+            "id": 901,
+            "type": "fact",
+            "content": "October 1, 1960: Nigeria gains independence from Britain as a sovereign nation.",
+            "source": "Nigerian History",
+            "year": 1960,
+            "category": "Independence"
+          },
+          {
+            "id": 902,
+            "type": "fact",
+            "content": "1963: Nigeria becomes a republic with Nnamdi Azikiwe as the first president.",
+            "source": "Constitutional History",
+            "year": 1963,
+            "category": "Republicanism"
+          },
+          {
+            "id": 903,
+            "type": "fact",
+            "content": "January 15, 1966: First military coup led by Major Aguyi Ironsi ends the First Republic.",
+            "source": "Military History",
+            "year": 1966,
+            "category": "Military Interventions"
+          },
+          {
+            "id": 904,
+            "type": "fact",
+            "content": "July 29, 1966: A counter-coup places Yakubu Gowon in power; Northern interests prevail.",
+            "source": "Military History",
+            "year": 1966,
+            "category": "Military Interventions"
+          },
+          {
+            "id": 905,
+            "type": "fact",
+            "content": "May 30, 1967: The Eastern Region secedes as the Republic of Biafra under Emeka Ojukwu.",
+            "source": "Civil War Records",
+            "year": 1967,
+            "category": "Civil Conflict"
+          },
+          {
+            "id": 906,
+            "type": "fact",
+            "content": "July 6, 1967: Nigeria launches military offensive against Biafra; Civil War begins.",
+            "source": "Civil War Records",
+            "year": 1967,
+            "category": "Civil Conflict"
+          },
+          {
+            "id": 907,
+            "type": "fact",
+            "content": "January 15, 1970: Biafran surrender ends the civil war after 30 months of bloody conflict.",
+            "source": "Civil War Records",
+            "year": 1970,
+            "category": "Civil Conflict Resolution"
+          },
+          {
+            "id": 908,
+            "type": "fact",
+            "content": "1976: Failed coup attempt against Yakubu Gowon; Obasanjo becomes military head of state.",
+            "source": "Military History",
+            "year": 1976,
+            "category": "Military Interventions"
+          },
+          {
+            "id": 909,
+            "type": "fact",
+            "content": "1979: Nigeria returns to civilian rule; Shehu Shagari becomes the first elected civilian president.",
+            "source": "Electoral History",
+            "year": 1979,
+            "category": "Democratic Transition"
+          },
+          {
+            "id": 910,
+            "type": "fact",
+            "content": "December 31, 1983: Military coup led by Muhammadu Buhari overthrows Shehu Shagari government.",
+            "source": "Military History",
+            "year": 1983,
+            "category": "Military Interventions"
+          }
+        ]
+      }
+    }
+  }
+}

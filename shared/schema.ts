@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -34,7 +34,10 @@ export const lgas = pgTable("lgas", {
   name: text("name").notNull(),
   code: text("code").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Add unique constraint on stateId + name combination
+  uniqueLGAPerState: unique().on(table.stateId, table.name),
+}));
 
 export const wards = pgTable("wards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -43,7 +46,10 @@ export const wards = pgTable("wards", {
   code: text("code").notNull().unique(),
   wardNumber: integer("ward_number"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Add unique constraint on lgaId + name combination
+  uniqueWardPerLGA: unique().on(table.lgaId, table.name),
+}));
 
 // Users & Authentication
 export const users = pgTable("users", {

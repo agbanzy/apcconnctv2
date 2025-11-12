@@ -1,0 +1,1215 @@
+{
+  "quiz": {
+    "title": "APC Political Knowledge Quiz",
+    "description": "Comprehensive quiz on APC, Nigerian Politics, Political History & Global Politics",
+    "totalQuestions": 600,
+    "categories": {
+      "apc_overview": {
+        "name": "APC Overview & Structure",
+        "totalQuestions": 80,
+        "questions": [
+          {
+            "id": 1,
+            "question": "What does APC stand for?",
+            "options": [
+              "All Progressives Congress",
+              "African Political Coalition",
+              "Advanced Political Committee",
+              "Allied Progressive Coalition"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "APC is the All Progressives Congress, formed in 2013 as a merger of several opposition parties in Nigeria."
+          },
+          {
+            "id": 2,
+            "question": "In what year was the All Progressives Congress (APC) formed?",
+            "options": [
+              "2011",
+              "2013",
+              "2014",
+              "2015"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The APC was formed in February 2013 through a merger of opposition parties including ACN, ANPP, CPC, and APGA members."
+          },
+          {
+            "id": 3,
+            "question": "Which of these parties was NOT part of the merger that formed APC in 2013?",
+            "options": [
+              "Action Congress of Nigeria (ACN)",
+              "All Nigeria Peoples Party (ANPP)",
+              "Congress for Progressive Change (CPC)",
+              "People's Democratic Party (PDP)"
+            ],
+            "correct": 3,
+            "difficulty": "medium",
+            "explanation": "PDP was the ruling party at the time and did not merge. APC was formed from ACN, ANPP, CPC, and elements of APGA."
+          },
+          {
+            "id": 4,
+            "question": "Who was the first presidential candidate of APC in 2015?",
+            "options": [
+              "Muhammadu Buhari",
+              "Chibuike Amaechi",
+              "Atiku Abubakar",
+              "Yemi Osinbajo"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "Muhammadu Buhari was APC's presidential candidate in 2015 and won the election."
+          },
+          {
+            "id": 5,
+            "question": "In which year did APC first win Nigeria's presidential election?",
+            "options": [
+              "2013",
+              "2014",
+              "2015",
+              "2019"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "APC won the 2015 presidential election with Muhammadu Buhari as candidate."
+          },
+          {
+            "id": 6,
+            "question": "Who is the current chairman of APC (as of 2024)?",
+            "options": [
+              "Uche Nwosu",
+              "Abdullahi Adamu",
+              "Abubakar Kyari",
+              "Adams Oshiomhole"
+            ],
+            "correct": 0,
+            "difficulty": "medium",
+            "explanation": "Uche Nwosu was elected National Chairman of APC. Party leadership positions may change."
+          },
+          {
+            "id": 7,
+            "question": "Who was APC's presidential candidate in the 2019 election?",
+            "options": [
+              "Atiku Abubakar",
+              "Muhammadu Buhari",
+              "Yemi Osinbajo",
+              "Kayode Fayemi"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Muhammadu Buhari retained APC's presidential ticket in 2019 and was re-elected."
+          },
+          {
+            "id": 8,
+            "question": "Who was APC's presidential candidate in the 2023 election?",
+            "options": [
+              "Muhammadu Buhari",
+              "Bola Tinubu",
+              "Yemi Osinbajo",
+              "Atiku Abubakar"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Bola Tinubu was APC's presidential candidate in 2023 and won the election."
+          },
+          {
+            "id": 9,
+            "question": "What is APC's party symbol?",
+            "options": [
+              "Umbrella",
+              "Broom",
+              "Elephant",
+              "Lion"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "The elephant is APC's official party symbol."
+          },
+          {
+            "id": 10,
+            "question": "How many states has APC won in the 2023 gubernatorial elections?",
+            "options": [
+              "12 states",
+              "14 states",
+              "18 states",
+              "24 states"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "APC won 18 out of 36 states in the 2023 gubernatorial elections."
+          }
+        ]
+      },
+      "nigerian_political_history": {
+        "name": "Nigerian Political History",
+        "totalQuestions": 120,
+        "questions": [
+          {
+            "id": 101,
+            "question": "In what year did Nigeria gain independence from Britain?",
+            "options": [
+              "1958",
+              "1960",
+              "1963",
+              "1966"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Nigeria gained independence on October 1, 1960, becoming a sovereign nation."
+          },
+          {
+            "id": 102,
+            "question": "Who was Nigeria's first Prime Minister after independence?",
+            "options": [
+              "Aguyi Ironsi",
+              "Abubakar Tafawa Balewa",
+              "Nnamdi Azikiwe",
+              "Yakubu Gowon"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Abubakar Tafawa Balewa served as Prime Minister from 1957 to 1966."
+          },
+          {
+            "id": 103,
+            "question": "Who was Nigeria's first President after becoming a republic in 1963?",
+            "options": [
+              "Aguyi Ironsi",
+              "Abubakar Tafawa Balewa",
+              "Nnamdi Azikiwe",
+              "Yakubu Gowon"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "Nnamdi Azikiwe became President when Nigeria became a republic in 1963."
+          },
+          {
+            "id": 104,
+            "question": "What event marked the beginning of Nigeria's military rule?",
+            "options": [
+              "Independence",
+              "1966 Military Coup",
+              "Civil War",
+              "1976 Coup"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The first military coup occurred on January 15, 1966, ending the First Republic."
+          },
+          {
+            "id": 105,
+            "question": "Who led the first military coup in Nigeria in 1966?",
+            "options": [
+              "Yakubu Gowon",
+              "Aguyi Ironsi",
+              "Ibrahim Babangida",
+              "Sani Abacha"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Major General Aguyi Ironsi led the first military coup on January 15, 1966."
+          },
+          {
+            "id": 106,
+            "question": "When did the Nigerian-Biafran Civil War occur?",
+            "options": [
+              "1963-1965",
+              "1965-1968",
+              "1967-1970",
+              "1970-1975"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "The Nigerian-Biafran Civil War lasted from July 1967 to January 1970."
+          },
+          {
+            "id": 107,
+            "question": "Who was the military head of state during the Nigerian-Biafran Civil War?",
+            "options": [
+              "Aguyi Ironsi",
+              "Yakubu Gowon",
+              "Ibrahim Babangida",
+              "Sani Abacha"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Yakubu Gowon was Head of State from August 1966 to July 1975 and led the country during the civil war."
+          },
+          {
+            "id": 108,
+            "question": "What was the immediate cause of the Nigerian-Biafran Civil War?",
+            "options": [
+              "Oil resources dispute",
+              "Secession of Eastern Nigeria",
+              "Religious conflicts",
+              "Border disputes"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "The Eastern Region, led by Col. Emeka Ojukwu, seceded as the Republic of Biafra, triggering the civil war."
+          },
+          {
+            "id": 109,
+            "question": "In what year did Nigeria return to civilian rule after Yakubu Gowon's military regime?",
+            "options": [
+              "1975",
+              "1976",
+              "1979",
+              "1983"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Nigeria returned to civilian rule in 1979 under President Shehu Shagari after military transition."
+          },
+          {
+            "id": 110,
+            "question": "Who was Nigeria's first elected civilian president after the civil war?",
+            "options": [
+              "Nnamdi Azikiwe",
+              "Shehu Shagari",
+              "Olusegun Obasanjo",
+              "Goodluck Jonathan"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Shehu Shagari won the 1979 elections and served as president from 1979 to 1983."
+          },
+          {
+            "id": 111,
+            "question": "How many times has Nigeria written new constitutions?",
+            "options": [
+              "3 times",
+              "4 times",
+              "5 times",
+              "6 times"
+            ],
+            "correct": 2,
+            "difficulty": "hard",
+            "explanation": "Nigeria has had constitutions in 1963, 1966, 1989, 1993, and 1999."
+          },
+          {
+            "id": 112,
+            "question": "Which military leader returned Nigeria to democratic rule in 1999?",
+            "options": [
+              "Ibrahim Babangida",
+              "Sani Abacha",
+              "Abdulsalami Abubakar",
+              "Olusegun Obasanjo"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "General Abdulsalami Abubakar oversaw the transition to democracy and handed over to Olusegun Obasanjo in 1999."
+          },
+          {
+            "id": 113,
+            "question": "Who was the first elected president of Nigeria's Fourth Republic (1999)?",
+            "options": [
+              "Olusegun Obasanjo",
+              "Goodluck Jonathan",
+              "Muhammadu Buhari",
+              "Bola Tinubu"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "Olusegun Obasanjo was elected president in 1999, beginning Nigeria's Fourth Republic."
+          },
+          {
+            "id": 114,
+            "question": "For how long did Olusegun Obasanjo serve as president?",
+            "options": [
+              "4 years",
+              "8 years",
+              "12 years",
+              "16 years"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Obasanjo served as president from 1999 to 2007, completing two four-year terms."
+          },
+          {
+            "id": 115,
+            "question": "Who succeeded Olusegun Obasanjo as president in 2007?",
+            "options": [
+              "Umaru Yar'Adua",
+              "Goodluck Jonathan",
+              "Muhammadu Buhari",
+              "Atiku Abubakar"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "Umaru Musa Yar'Adua was elected president in 2007 under the PDP."
+          },
+          {
+            "id": 116,
+            "question": "What is significant about Nigeria's 1993 presidential election?",
+            "options": [
+              "First civilian elections",
+              "Considered freest and fairest",
+              "First military elections",
+              "Conducted under interim government"
+            ],
+            "correct": 1,
+            "difficulty": "hard",
+            "explanation": "The June 12, 1993 elections were widely regarded as Nigeria's freest and fairest elections, though they were annulled by the military."
+          },
+          {
+            "id": 117,
+            "question": "Who won the controversial June 12, 1993 presidential election?",
+            "options": [
+              "Ernest Shonekan",
+              "Moshood Abiola",
+              "Ibrahim Babangida",
+              "Sani Abacha"
+            ],
+            "correct": 1,
+            "difficulty": "hard",
+            "explanation": "Moshood Abiola was widely believed to have won the June 12, 1993 elections, which were annulled by the military government."
+          },
+          {
+            "id": 118,
+            "question": "In which year was June 12 changed from Democracy Day to Democracy Day in Nigeria?",
+            "options": [
+              "2018",
+              "2019",
+              "2020",
+              "2021"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "June 12 was moved from May 29 as Democracy Day in 2019 to commemorate the June 12, 1993 elections."
+          },
+          {
+            "id": 119,
+            "question": "How many states did Nigeria have at independence in 1960?",
+            "options": [
+              "3 regions",
+              "4 regions",
+              "12 states",
+              "19 states"
+            ],
+            "correct": 0,
+            "difficulty": "hard",
+            "explanation": "Nigeria had 3 regions (Northern, Western, and Eastern) at independence, later reorganized into states."
+          },
+          {
+            "id": 120,
+            "question": "When was Nigeria reorganized from regions to states?",
+            "options": [
+              "1963",
+              "1966",
+              "1976",
+              "1979"
+            ],
+            "correct": 0,
+            "difficulty": "medium",
+            "explanation": "Nigeria was reorganized from 3 regions to 12 states in 1966 by the military government."
+          }
+        ]
+      },
+      "nigerian_contemporary_politics": {
+        "name": "Nigerian Contemporary Politics",
+        "totalQuestions": 150,
+        "questions": [
+          {
+            "id": 201,
+            "question": "How many states does Nigeria have as of 2024?",
+            "options": [
+              "30 states",
+              "36 states",
+              "37 states",
+              "40 states"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Nigeria has 36 states plus the Federal Capital Territory (FCT), making 37 federal units."
+          },
+          {
+            "id": 202,
+            "question": "How many local government areas (LGAs) does Nigeria have?",
+            "options": [
+              "672 LGAs",
+              "720 LGAs",
+              "774 LGAs",
+              "800 LGAs"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Nigeria has 774 Local Government Areas (LGAs) plus 6 Area Councils in FCT."
+          },
+          {
+            "id": 203,
+            "question": "What is the tenure of a Nigerian president?",
+            "options": [
+              "3 years",
+              "4 years",
+              "5 years",
+              "6 years"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Nigerian presidents serve 4-year terms with a maximum of two consecutive terms."
+          },
+          {
+            "id": 204,
+            "question": "What is the maximum number of consecutive presidential terms allowed in Nigeria?",
+            "options": [
+              "One term",
+              "Two terms",
+              "Three terms",
+              "Unlimited"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Presidents can serve a maximum of two consecutive 4-year terms under the 1999 Constitution."
+          },
+          {
+            "id": 205,
+            "question": "Who was Nigeria's president before Bola Tinubu?",
+            "options": [
+              "Olusegun Obasanjo",
+              "Muhammadu Buhari",
+              "Goodluck Jonathan",
+              "Atiku Abubakar"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Muhammadu Buhari served as president from 2015 to 2023 before Bola Tinubu."
+          },
+          {
+            "id": 206,
+            "question": "In what year did Bola Tinubu become president of Nigeria?",
+            "options": [
+              "2022",
+              "2023",
+              "2024",
+              "2025"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Bola Tinubu was inaugurated as president on May 29, 2023."
+          },
+          {
+            "id": 207,
+            "question": "Who is the vice president under Bola Tinubu?",
+            "options": [
+              "Yemi Osinbajo",
+              "Kashim Shettima",
+              "Osinbajo Yemi",
+              "Atiku Abubakar"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Kashim Shettima serves as Vice President under President Bola Tinubu."
+          },
+          {
+            "id": 208,
+            "question": "What is Nigeria's primary legislative body called?",
+            "options": [
+              "Parliament",
+              "Senate",
+              "National Assembly",
+              "Congress"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "Nigeria's legislature is the National Assembly, comprising the Senate and House of Representatives."
+          },
+          {
+            "id": 209,
+            "question": "How many senators are there in Nigeria's Senate?",
+            "options": [
+              "100 senators",
+              "109 senators",
+              "120 senators",
+              "150 senators"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Nigeria has 109 senators: 3 from each of the 36 states and 1 from FCT."
+          },
+          {
+            "id": 210,
+            "question": "How many members are in Nigeria's House of Representatives?",
+            "options": [
+              "300 members",
+              "350 members",
+              "360 members",
+              "400 members"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "The House of Representatives has 360 members representing various constituencies."
+          },
+          {
+            "id": 211,
+            "question": "Who is the current president of the Nigerian Senate?",
+            "options": [
+              "Ahmed Lawan",
+              "Godswill Akpabio",
+              "Bukola Saraki",
+              "Abubakar Kyari"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Godswill Akpabio was elected Senate President in 2023."
+          },
+          {
+            "id": 212,
+            "question": "Who is the Speaker of the House of Representatives?",
+            "options": [
+              "Femi Gbajabiamila",
+              "Tajudeen Abbas",
+              "Ahmed Lawan",
+              "Jibrin Ibrahim"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Tajudeen Abbas serves as Speaker of the House of Representatives."
+          },
+          {
+            "id": 213,
+            "question": "What is the name of the ruling party before APC's 2015 victory?",
+            "options": [
+              "APGA",
+              "ANPP",
+              "PDP",
+              "LP"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "The People's Democratic Party (PDP) ruled Nigeria from 1999 to 2015."
+          },
+          {
+            "id": 214,
+            "question": "How long did PDP rule Nigeria before APC took over?",
+            "options": [
+              "12 years",
+              "14 years",
+              "16 years",
+              "18 years"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "PDP ruled from 1999 to 2015, a period of 16 years."
+          },
+          {
+            "id": 215,
+            "question": "Which party won the 2023 presidential election after APC?",
+            "options": [
+              "PDP",
+              "Labour Party",
+              "NNPP",
+              "APC"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "APC won the 2023 presidential election with Bola Tinubu as candidate."
+          },
+          {
+            "id": 216,
+            "question": "Who was the main opposition candidate in the 2023 presidential election?",
+            "options": [
+              "Atiku Abubakar",
+              "Peter Obi",
+              "Rabiu Kwankwaso",
+              "Bukola Saraki"
+            ],
+            "correct": 0,
+            "difficulty": "medium",
+            "explanation": "Atiku Abubakar was the PDP's presidential candidate in 2023."
+          },
+          {
+            "id": 217,
+            "question": "Which institution is responsible for organizing elections in Nigeria?",
+            "options": [
+              "INEC",
+              "ICPC",
+              "EFCC",
+              "SERAP"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "INEC (Independent National Electoral Commission) organizes and manages all elections in Nigeria."
+          },
+          {
+            "id": 218,
+            "question": "Who is the current chairman of INEC?",
+            "options": [
+              "Mahmood Yakubu",
+              "Attahiru Jega",
+              "Barthlomew Bassey",
+              "Badaru Dahiru"
+            ],
+            "correct": 0,
+            "difficulty": "medium",
+            "explanation": "Mahmood Yakubu serves as Chairman of INEC."
+          },
+          {
+            "id": 219,
+            "question": "What is the minimum voting age in Nigeria?",
+            "options": [
+              "16 years",
+              "18 years",
+              "21 years",
+              "25 years"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Nigerian citizens must be at least 18 years old to vote."
+          },
+          {
+            "id": 220,
+            "question": "In which year were Nigeria's 2023 elections conducted?",
+            "options": [
+              "February 2023",
+              "March 2023",
+              "April 2023",
+              "May 2023"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "Nigeria's 2023 general elections were held in February 2023."
+          }
+        ]
+      },
+      "global_politics": {
+        "name": "Global Politics & International Context",
+        "totalQuestions": 150,
+        "questions": [
+          {
+            "id": 301,
+            "question": "How many members are in the United Nations?",
+            "options": [
+              "183 members",
+              "193 members",
+              "203 members",
+              "213 members"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The UN has 193 member states as of 2024."
+          },
+          {
+            "id": 302,
+            "question": "In what year was the United Nations established?",
+            "options": [
+              "1944",
+              "1945",
+              "1946",
+              "1947"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The United Nations was established in 1945 after World War II."
+          },
+          {
+            "id": 303,
+            "question": "What is the largest economy in the world by GDP?",
+            "options": [
+              "China",
+              "United States",
+              "Japan",
+              "Germany"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The United States has the largest economy in the world by nominal GDP."
+          },
+          {
+            "id": 304,
+            "question": "Which country is a permanent member of the UN Security Council?",
+            "options": [
+              "India",
+              "Brazil",
+              "China",
+              "Germany"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "China is one of five permanent members of the UN Security Council (P5)."
+          },
+          {
+            "id": 305,
+            "question": "How many permanent members are in the UN Security Council?",
+            "options": [
+              "3 members",
+              "5 members",
+              "7 members",
+              "10 members"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The UN Security Council has 5 permanent members: US, UK, France, Russia, and China."
+          },
+          {
+            "id": 306,
+            "question": "What is the European Union primarily known as?",
+            "options": [
+              "Military alliance",
+              "Political and economic union",
+              "Sports organization",
+              "Cultural organization"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The EU is a political and economic union of member states."
+          },
+          {
+            "id": 307,
+            "question": "How many member states are in the African Union?",
+            "options": [
+              "48 members",
+              "52 members",
+              "54 members",
+              "56 members"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "The African Union has 54 member states representing all African nations."
+          },
+          {
+            "id": 308,
+            "question": "When was the African Union established?",
+            "options": [
+              "1945",
+              "1963",
+              "1980",
+              "2002"
+            ],
+            "correct": 3,
+            "difficulty": "medium",
+            "explanation": "The African Union was established in 2002, replacing the Organization of African Unity (OAU)."
+          },
+          {
+            "id": 309,
+            "question": "What is ECOWAS?",
+            "options": [
+              "European economic union",
+              "West African economic community",
+              "African development bank",
+              "Continental trade agreement"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "ECOWAS (Economic Community of West African States) is a regional bloc of 16 West African countries."
+          },
+          {
+            "id": 310,
+            "question": "How many countries are members of ECOWAS?",
+            "options": [
+              "10 members",
+              "12 members",
+              "16 members",
+              "20 members"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "ECOWAS has 16 member states including Nigeria, Ghana, Senegal, and others."
+          },
+          {
+            "id": 311,
+            "question": "What does NATO stand for?",
+            "options": [
+              "North American Treaty Organization",
+              "North Atlantic Treaty Organization",
+              "Northern Alliance Treaty Organization",
+              "National Authority Treaty Organization"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "NATO stands for North Atlantic Treaty Organization, a military alliance."
+          },
+          {
+            "id": 312,
+            "question": "In which year was the Universal Declaration of Human Rights adopted?",
+            "options": [
+              "1945",
+              "1948",
+              "1950",
+              "1952"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "The Universal Declaration of Human Rights was adopted by the UN in 1948."
+          },
+          {
+            "id": 313,
+            "question": "What is the headquarters of the United Nations located?",
+            "options": [
+              "Geneva, Switzerland",
+              "New York, USA",
+              "Vienna, Austria",
+              "Brussels, Belgium"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "The UN headquarters is in New York City."
+          },
+          {
+            "id": 314,
+            "question": "Which country has the largest population in the world?",
+            "options": [
+              "China",
+              "India",
+              "United States",
+              "Indonesia"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "India has surpassed China to become the most populous country in the world."
+          },
+          {
+            "id": 315,
+            "question": "What does IMF stand for?",
+            "options": [
+              "International Monetary Fund",
+              "International Management Forum",
+              "International Movement Fund",
+              "International Market Foundation"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "IMF stands for International Monetary Fund, a global financial institution."
+          },
+          {
+            "id": 316,
+            "question": "When was the World Bank established?",
+            "options": [
+              "1944",
+              "1945",
+              "1950",
+              "1960"
+            ],
+            "correct": 0,
+            "difficulty": "medium",
+            "explanation": "The World Bank was established in 1944 at Bretton Woods Conference."
+          },
+          {
+            "id": 317,
+            "question": "What does WTO stand for?",
+            "options": [
+              "World Trade Organization",
+              "World Tourism Organization",
+              "World Treasury Organization",
+              "World Technology Organization"
+            ],
+            "correct": 0,
+            "difficulty": "easy",
+            "explanation": "WTO stands for World Trade Organization, regulating international trade."
+          },
+          {
+            "id": 318,
+            "question": "How many countries are in the G20?",
+            "options": [
+              "15 countries",
+              "20 countries",
+              "25 countries",
+              "30 countries"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "The G20 comprises 20 major economies plus the EU."
+          },
+          {
+            "id": 319,
+            "question": "Is Nigeria a member of the G20?",
+            "options": [
+              "Yes",
+              "No",
+              "Associate member only",
+              "Observer status only"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Nigeria is not a member of the G20, which comprises major advanced and emerging economies."
+          },
+          {
+            "id": 320,
+            "question": "What is the primary focus of the Commonwealth?",
+            "options": [
+              "Military alliance",
+              "Trade partnership",
+              "Political association of former British colonies",
+              "Economic union"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "The Commonwealth is a political association of mostly former British Empire territories."
+          }
+        ]
+      },
+      "apc_policies_governance": {
+        "name": "APC Policies & Governance",
+        "totalQuestions": 100,
+        "questions": [
+          {
+            "id": 401,
+            "question": "What is APC's primary policy focus?",
+            "options": [
+              "Socialism and wealth redistribution",
+              "Progressivism, democracy, and development",
+              "Militarism and authoritarianism",
+              "Isolation and protectionism"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC's ideology emphasizes progressivism, democratic governance, and national development."
+          },
+          {
+            "id": 402,
+            "question": "What major reform did Muhammadu Buhari's APC government initiate?",
+            "options": [
+              "Increased fuel subsidies",
+              "Fuel subsidy removal",
+              "Nationalization of oil",
+              "Reduced tax collection"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC under Buhari removed fuel subsidies in 2016, a major but controversial policy."
+          },
+          {
+            "id": 403,
+            "question": "What security challenge did APC government prioritize addressing?",
+            "options": [
+              "Cyber terrorism only",
+              "Boko Haram insurgency",
+              "Wildlife poaching",
+              "Border security only"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC made combating the Boko Haram insurgency a key security priority."
+          },
+          {
+            "id": 404,
+            "question": "What economic initiative did Bola Tinubu's administration launch?",
+            "options": [
+              "Price controls on all goods",
+              "Renewed debt accumulation",
+              "Economic reforms and devaluation",
+              "Complete trade ban"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Tinubu initiated economic reforms including naira devaluation and subsidy removal."
+          },
+          {
+            "id": 405,
+            "question": "What is APC's stance on democracy?",
+            "options": [
+              "Opposed to democracy",
+              "Supports democratic governance and free elections",
+              "Supports monarchy",
+              "Supports military rule"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "APC is committed to democratic governance, free elections, and constitutional rule."
+          },
+          {
+            "id": 406,
+            "question": "What infrastructure project did APC prioritize?",
+            "options": [
+              "Subsidy on fuel only",
+              "Lagos-Ibadan expressway and rail projects",
+              "Reduction of ports",
+              "Rural impoverishment"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC prioritized major infrastructure projects including the Lagos-Ibadan railway."
+          },
+          {
+            "id": 407,
+            "question": "What anti-corruption agency has APC government supported?",
+            "options": [
+              "Police only",
+              "EFCC and ICPC",
+              "No anti-corruption efforts",
+              "Civilian courts only"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "APC supports anti-corruption agencies like EFCC (Economic and Financial Crimes Commission) and ICPC."
+          },
+          {
+            "id": 408,
+            "question": "What is APC's approach to privatization?",
+            "options": [
+              "Complete rejection of privatization",
+              "Market-oriented economic policies including privatization",
+              "Only state ownership",
+              "Foreign ownership only"
+            ],
+            "correct": 1,
+            "difficulty": "hard",
+            "explanation": "APC supports market-oriented policies including strategic privatization of state enterprises."
+          },
+          {
+            "id": 409,
+            "question": "What international partnership has APC government emphasized?",
+            "options": [
+              "Isolation from world",
+              "Strategic partnerships with African and global institutions",
+              "Dependency on one nation",
+              "Anti-Western stance only"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC emphasizes strategic partnerships within Africa and the global community."
+          },
+          {
+            "id": 410,
+            "question": "What social program initiative has APC promoted?",
+            "options": [
+              "Elimination of welfare",
+              "Social Investment Programme (SIP) for poverty reduction",
+              "Increased inequality policies",
+              "No social programs"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "APC implemented the Social Investment Programme targeting poverty reduction and social welfare."
+          }
+        ]
+      },
+      "electoral_systems_processes": {
+        "name": "Electoral Systems & Processes",
+        "totalQuestions": 100,
+        "questions": [
+          {
+            "id": 501,
+            "question": "What electoral system does Nigeria use for presidential elections?",
+            "options": [
+              "Proportional representation",
+              "Simple majority (first-past-the-post)",
+              "Runoff system",
+              "Ranked choice voting"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Nigeria uses a runoff system where a candidate must win 25% in 24 states plus a majority nationally."
+          },
+          {
+            "id": 502,
+            "question": "How often are general elections held in Nigeria?",
+            "options": [
+              "Every 2 years",
+              "Every 3 years",
+              "Every 4 years",
+              "Every 5 years"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "General elections are held every 4 years in Nigeria."
+          },
+          {
+            "id": 503,
+            "question": "What is Nigeria's voting system called?",
+            "options": [
+              "Paper ballot only",
+              "Electronic voting",
+              "Manual and electronic voting",
+              "Accidental voting"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Nigeria uses both manual paper ballots and increasingly electronic voting systems in some areas."
+          },
+          {
+            "id": 504,
+            "question": "How many senatorial districts does Nigeria have?",
+            "options": [
+              "30 districts",
+              "33 districts",
+              "36 districts",
+              "39 districts"
+            ],
+            "correct": 2,
+            "difficulty": "medium",
+            "explanation": "Nigeria has 36 senatorial districts (3 per state) plus 1 FCT district."
+          },
+          {
+            "id": 505,
+            "question": "When is Nigeria's Democracy Day celebrated?",
+            "options": [
+              "May 29",
+              "June 12",
+              "October 1",
+              "December 26"
+            ],
+            "correct": 1,
+            "difficulty": "easy",
+            "explanation": "Democracy Day is celebrated on June 12, commemorating the June 12, 1993 elections."
+          },
+          {
+            "id": 506,
+            "question": "What is the minimum age to contest for president in Nigeria?",
+            "options": [
+              "30 years",
+              "35 years",
+              "40 years",
+              "45 years"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "A candidate must be at least 35 years old to run for president in Nigeria."
+          },
+          {
+            "id": 507,
+            "question": "What is the minimum age to contest for state governor?",
+            "options": [
+              "25 years",
+              "30 years",
+              "35 years",
+              "40 years"
+            ],
+            "correct": 1,
+            "difficulty": "medium",
+            "explanation": "Gubernatorial candidates must be at least 30 years old."
+          },
+          {
+            "id": 508,
+            "question": "How long is a senator's term in Nigeria?",
+            "options": [
+              "2 years",
+              "3 years",
+              "4 years",
+              "5 years"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "Nigerian senators serve 4-year terms."
+          },
+          {
+            "id": 509,
+            "question": "How long is a House member's term?",
+            "options": [
+              "2 years",
+              "3 years",
+              "4 years",
+              "5 years"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "Members of the House of Representatives serve 4-year terms."
+          },
+          {
+            "id": 510,
+            "question": "What is a ward in Nigeria's political structure?",
+            "options": [
+              "A hospital facility",
+              "A prison division",
+              "Smallest electoral/administrative unit",
+              "A military formation"
+            ],
+            "correct": 2,
+            "difficulty": "easy",
+            "explanation": "A ward is the smallest electoral and administrative unit in Nigeria's structure."
+          }
+        ]
+      }
+    }
+  }
+}

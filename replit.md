@@ -30,6 +30,25 @@ Preferred communication style: Simple, everyday language.
 - **Database Schema**: Hierarchical administrative structure (states, LGAs, wards), users/members (NIN verification), elections (voting, blockchain audit), engagement (gamification, tasks), content (news, events), governance (dues, incident reports).
 - **Migrations**: Drizzle Kit.
 
+#### Administrative Boundaries Data
+The platform uses Nigeria's administrative structure (states, LGAs, wards) for member registration, event organization, and election management.
+
+**Data Source**: `attached_assets/nga_admin_boundaries_1762975238593.xlsx`
+- **States**: 38 entries (all 36 states + FCT)
+- **LGAs**: 775 Local Government Areas
+- **Wards**: 715 wards (administrative capitals and major wards only)
+
+**Important Note**: The ward data represents a curated subset of administrative capitals and major wards, not Nigeria's full ~8,809 ward list. This subset is sufficient for administrative operations while keeping the database manageable.
+
+**Seeding Script**: `server/seed-admin-boundaries.ts`
+- Uses transaction wrapping for atomicity (all-or-nothing)
+- Configurable file path via parameter or `ADMIN_BOUNDARIES_FILE` environment variable
+- Validates Excel structure and data counts before seeding
+- Automatically generates unique codes for states, LGAs, and wards
+- Skips existing entries to support incremental updates
+
+**Production Deployment**: Set `ADMIN_BOUNDARIES_FILE` environment variable to the Excel file path in production environments.
+
 ### Security & Data Privacy
 - **Anonymous Reporting**: Supports anonymous incident submissions.
 - **NIN Verification**: Integration framework for National Identification Number verification.
