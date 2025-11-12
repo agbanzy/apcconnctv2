@@ -38,3 +38,42 @@ export const votingLimiter = rateLimit({
   max: 5,
   message: 'Too many voting requests, please wait a moment.',
 });
+
+// Quiz attempts limiter (3 per hour per user)
+export const quizLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3,
+  message: 'Too many quiz attempts, please try again later.',
+  keyGenerator: (req) => {
+    if ((req.user as any)?.id) {
+      return (req.user as any).id;
+    }
+    return ipKeyGenerator(req.ip || '');
+  },
+});
+
+// Task completion limiter (10 per hour per user)
+export const taskLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: 'Too many task submissions, please try again later.',
+  keyGenerator: (req) => {
+    if ((req.user as any)?.id) {
+      return (req.user as any).id;
+    }
+    return ipKeyGenerator(req.ip || '');
+  },
+});
+
+// Event check-in limiter (3 per day per user)
+export const eventCheckInLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 3,
+  message: 'Too many event check-ins, please try again tomorrow.',
+  keyGenerator: (req) => {
+    if ((req.user as any)?.id) {
+      return (req.user as any).id;
+    }
+    return ipKeyGenerator(req.ip || '');
+  },
+});

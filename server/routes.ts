@@ -22,9 +22,12 @@ import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry, hashRefreshToken, verifyRefreshTokenHash } from "./jwt-utils";
 import { pushService, NotificationTemplates } from "./push-service";
-import { apiLimiter, authLimiter, votingLimiter } from "./middleware/rate-limit";
+import { apiLimiter, authLimiter, votingLimiter, quizLimiter, taskLimiter, eventCheckInLimiter } from "./middleware/rate-limit";
 import { errorHandler, createError } from "./middleware/error-handler";
 import { logAudit, AuditActions } from "./utils/audit-logger";
+import { quizAntiCheat, taskAntiCheat, voteAntiCheat, eventAntiCheat } from "./middleware/anti-cheat";
+import { antiCheatService } from "./security/anti-cheat";
+import { generateQuizToken, verifyQuizToken } from "./security/crypto-tokens";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
@@ -2632,6 +2635,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Event Attendance Check-in (for awarding points)
+  app.post("/api/events/:id/attend", requireAuth, eventCheckInLimiter, eventAntiCheat, async (req: AuthRequest, res: Response) => {
+    try {
+      const { coordinates } = req.body;
+      const antiCheatData = (req as any).antiCheat;
+      
+      if (!antiCheatData) {
+        return res.status(403).json({ success: false, error: "Security validation failed" });
+      }
+
+      const { memberId, ipAddress, userAgent, fingerprint } = antiCheatData;
+
+      // Fetch event details
+      const event = await db.query.events.findFirst({
+        where: eq(schema.events.id, req.params.id)
+      });
+
+      if (!event) {
+        return res.status(404).json({ success: false, error: "Event not found" });
+      }
+
+      // Verify unique attendance
+      const uniqueCheck = await antiCheatService.verifyUniqueEventAttendance(memberId, req.params.id);
+      if (!uniqueCheck.valid) {
+        return res.status(400).json({ success: false, error: uniqueCheck.error });
+      }
+
+      // Validate event timing
+      const timingCheck = await antiCheatService.validateEventTiming(req.params.id);
+      if (!timingCheck.valid) {
+        return res.status(400).json({ success: false, error: timingCheck.error });
+      }
+
+      // Validate location if coordinates provided
+      const eventCoordinates = event.coordinates as { lat: number; lng: number } | null;
+      if (eventCoordinates && coordinates) {
+        const locationCheck = antiCheatService.validateEventLocation(
+          eventCoordinates,
+          coordinates
+        );
+        if (!locationCheck.valid) {
+          await antiCheatService.logFraudDetection(
+            memberId,
+            "event",
+            locationCheck.error || "Location verification failed",
+            "high",
+            true,
+            { eventId: req.params.id, userCoordinates: coordinates, eventCoordinates },
+            ipAddress,
+            userAgent
+          );
+          return res.status(403).json({ success: false, error: locationCheck.error });
+        }
+      }
+
+      // Award points for attendance (configurable per event)
+      const pointsEarned = event.points || 10; // Default 10 points
+
+      // Record attendance with fraud detection metadata
+      const [attendance] = await db.insert(schema.eventAttendance).values({
+        eventId: req.params.id,
+        memberId,
+        coordinates: coordinates || null,
+        pointsEarned,
+        ipAddress,
+        userAgent,
+        fingerprint
+      }).returning();
+
+      // Award points
+      await db.insert(schema.userPoints).values({
+        memberId,
+        source: "event",
+        amount: pointsEarned,
+        points: pointsEarned
+      });
+
+      // Log audit trail
+      await logAudit({
+        memberId,
+        action: AuditActions.ADMIN_ACTION,
+        resourceType: "event",
+        resourceId: req.params.id,
+        details: { attendanceId: attendance.id, pointsEarned, coordinates },
+        ipAddress,
+        userAgent,
+        fingerprint,
+        status: "success",
+      });
+
+      res.json({ 
+        success: true, 
+        data: { 
+          attendance, 
+          pointsEarned,
+          message: `Successfully checked in! Earned ${pointsEarned} points.`
+        } 
+      });
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error?.code === '23505') {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Already checked in to this event" 
+        });
+      }
+      console.error("Event check-in error:", error);
+      res.status(500).json({ success: false, error: "Failed to check in to event" });
+    }
+  });
+
   app.get("/api/elections", async (req: Request, res: Response) => {
     try {
       const { status } = req.query;
@@ -2901,7 +3015,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/quizzes/:id", async (req: Request, res: Response) => {
+  app.get("/api/quizzes/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const quiz = await db.query.quizzes.findFirst({
         where: eq(schema.quizzes.id, req.params.id)
@@ -2911,7 +3025,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Quiz not found" });
       }
 
-      res.json({ success: true, data: quiz });
+      // Get member to generate token
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // SECURITY: Never expose correct answer to client
+      const { correctAnswer, ...safeQuizData } = quiz;
+
+      // Generate secure token for this quiz attempt
+      const quizToken = generateQuizToken(quiz.id, member.id);
+
+      res.json({ 
+        success: true, 
+        data: {
+          ...safeQuizData,
+          quizToken  // Client must submit this with their answer
+        }
+      });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch quiz" });
     }
@@ -2927,15 +3062,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/quizzes/:id/attempt", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/quizzes/:id/attempt", requireAuth, quizLimiter, quizAntiCheat, async (req: AuthRequest, res: Response) => {
     try {
-      const { selectedAnswer } = req.body;
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id)
-      });
+      const { selectedAnswer, quizToken, completionTime } = req.body;
+      const antiCheatData = (req as any).antiCheat;
+      
+      if (!antiCheatData) {
+        return res.status(403).json({ success: false, error: "Security validation failed" });
+      }
 
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member not found" });
+      const { memberId, ipAddress, userAgent, fingerprint } = antiCheatData;
+
+      // Verify quiz token
+      const tokenVerification = verifyQuizToken(quizToken);
+      if (!tokenVerification.valid) {
+        await antiCheatService.logFraudDetection(
+          memberId,
+          "quiz",
+          `Invalid token: ${tokenVerification.error}`,
+          "high",
+          true,
+          { quizId: req.params.id },
+          ipAddress,
+          userAgent
+        );
+        return res.status(403).json({ 
+          success: false, 
+          error: "Invalid or expired quiz token" 
+        });
+      }
+
+      // Verify token is for the correct quiz and member
+      if (tokenVerification.quizId !== req.params.id || tokenVerification.memberId !== memberId) {
+        await antiCheatService.logFraudDetection(
+          memberId,
+          "quiz",
+          "Token mismatch - possible tampering",
+          "critical",
+          true,
+          { expectedQuizId: req.params.id, tokenQuizId: tokenVerification.quizId },
+          ipAddress,
+          userAgent
+        );
+        return res.status(403).json({ 
+          success: false, 
+          error: "Token validation failed" 
+        });
+      }
+
+      // Check for duplicate attempt
+      const uniqueCheck = await antiCheatService.verifyUniqueQuizAttempt(memberId, req.params.id);
+      if (!uniqueCheck.valid) {
+        return res.status(400).json({ success: false, error: uniqueCheck.error });
+      }
+
+      // Validate completion time
+      const timingCheck = antiCheatService.validateQuizTiming(completionTime || 0);
+      if (!timingCheck.valid) {
+        await antiCheatService.logFraudDetection(
+          memberId,
+          "quiz",
+          timingCheck.error || "Suspicious completion time",
+          "high",
+          true,
+          { completionTime },
+          ipAddress,
+          userAgent
+        );
+        return res.status(403).json({ 
+          success: false, 
+          error: timingCheck.error 
+        });
       }
 
       const quiz = await db.query.quizzes.findFirst({
@@ -2946,28 +3143,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Quiz not found" });
       }
 
+      // SERVER-SIDE ONLY: Determine correctness
       const isCorrect = selectedAnswer === quiz.correctAnswer;
       const pointsEarned = isCorrect ? quiz.points : 0;
 
+      // Record attempt with fraud detection metadata
       const [attempt] = await db.insert(schema.quizAttempts).values({
         quizId: req.params.id,
-        memberId: member.id,
+        memberId,
         selectedAnswer,
         isCorrect,
-        pointsEarned
+        pointsEarned,
+        ipAddress,
+        userAgent,
+        fingerprint,
+        completionTime
       }).returning();
 
+      // Award points if correct
       if (isCorrect) {
         await db.insert(schema.userPoints).values({
-          memberId: member.id,
+          memberId,
           source: "quiz",
           amount: pointsEarned,
           points: pointsEarned
         });
       }
 
+      // Log audit trail
+      await logAudit({
+        memberId,
+        action: AuditActions.ADMIN_ACTION,
+        resourceType: "quiz",
+        resourceId: req.params.id,
+        details: { isCorrect, pointsEarned, completionTime },
+        ipAddress,
+        userAgent,
+        fingerprint,
+        status: "success",
+      });
+
       res.json({ success: true, data: { attempt, isCorrect, pointsEarned } });
-    } catch (error) {
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error?.code === '23505') {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Quiz already attempted" 
+        });
+      }
+      console.error("Quiz attempt error:", error);
       res.status(500).json({ success: false, error: "Failed to submit quiz attempt" });
     }
   });
@@ -3200,38 +3425,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/campaigns/:id/vote", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/campaigns/:id/vote", requireAuth, votingLimiter, voteAntiCheat, async (req: AuthRequest, res: Response) => {
     try {
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id)
-      });
-
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member not found" });
+      const antiCheatData = (req as any).antiCheat;
+      
+      if (!antiCheatData) {
+        return res.status(403).json({ success: false, error: "Security validation failed" });
       }
 
-      const existing = await db.query.campaignVotes.findFirst({
-        where: and(
-          eq(schema.campaignVotes.campaignId, req.params.id),
-          eq(schema.campaignVotes.memberId, member.id)
-        )
-      });
+      const { memberId, ipAddress, userAgent, fingerprint } = antiCheatData;
 
-      if (existing) {
-        return res.status(400).json({ success: false, error: "You have already voted on this campaign" });
+      // Verify unique vote (check for duplicate)
+      const uniqueCheck = await antiCheatService.verifyUniqueCampaignVote(memberId, req.params.id);
+      if (!uniqueCheck.valid) {
+        return res.status(400).json({ success: false, error: uniqueCheck.error });
       }
 
+      // Record vote with fraud detection metadata
       const [vote] = await db.insert(schema.campaignVotes).values({
         campaignId: req.params.id,
-        memberId: member.id
+        memberId,
+        ipAddress,
+        userAgent,
+        fingerprint
       }).returning();
 
+      // Increment campaign votes
       await db.update(schema.issueCampaigns)
         .set({ currentVotes: sql`${schema.issueCampaigns.currentVotes} + 1` })
         .where(eq(schema.issueCampaigns.id, req.params.id));
 
+      // Log audit trail
+      await logAudit({
+        memberId,
+        action: AuditActions.VOTE,
+        resourceType: "campaign",
+        resourceId: req.params.id,
+        details: { voteId: vote.id },
+        ipAddress,
+        userAgent,
+        fingerprint,
+        status: "success",
+      });
+
       res.json({ success: true, data: vote });
-    } catch (error) {
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error?.code === '23505') {
+        return res.status(400).json({ 
+          success: false, 
+          error: "You have already voted on this campaign" 
+        });
+      }
+      console.error("Campaign vote error:", error);
       res.status(500).json({ success: false, error: "Failed to vote on campaign" });
     }
   });
@@ -6358,15 +6604,39 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.post("/api/tasks/micro/:id/complete", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/tasks/micro/:id/complete", requireAuth, taskLimiter, taskAntiCheat, async (req: AuthRequest, res: Response) => {
     try {
-      const { selectedAnswers } = req.body;
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id)
-      });
+      const { selectedAnswers, proofUrl } = req.body;
+      const antiCheatData = (req as any).antiCheat;
+      
+      if (!antiCheatData) {
+        return res.status(403).json({ success: false, error: "Security validation failed" });
+      }
 
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member not found" });
+      const { memberId, ipAddress, userAgent, fingerprint } = antiCheatData;
+
+      // Verify unique task completion
+      const uniqueCheck = await antiCheatService.verifyUniqueTaskCompletion(memberId, req.params.id, "micro");
+      if (!uniqueCheck.valid) {
+        return res.status(400).json({ success: false, error: uniqueCheck.error });
+      }
+
+      // Verify proof URL uniqueness if provided
+      if (proofUrl) {
+        const proofCheck = await antiCheatService.verifyUniqueProof(proofUrl);
+        if (!proofCheck.valid) {
+          await antiCheatService.logFraudDetection(
+            memberId,
+            "task",
+            "Duplicate proof submission",
+            "high",
+            true,
+            { proofUrl, taskId: req.params.id },
+            ipAddress,
+            userAgent
+          );
+          return res.status(400).json({ success: false, error: proofCheck.error });
+        }
       }
 
       const task = await db.query.microTasks.findFirst({
@@ -6377,39 +6647,47 @@ Be friendly, informative, and politically neutral when discussing governance. En
         return res.status(404).json({ success: false, error: "Task not found" });
       }
 
-      const existingCompletion = await db.query.taskCompletions.findFirst({
-        where: and(
-          eq(schema.taskCompletions.taskId, req.params.id),
-          eq(schema.taskCompletions.memberId, member.id),
-          eq(schema.taskCompletions.taskType, "micro")
-        )
-      });
-
-      if (existingCompletion) {
-        return res.status(400).json({ success: false, error: "Task already completed" });
-      }
-
+      // SERVER-SIDE ONLY: Verify correctness
       const correctAnswers = task.correctAnswers as number[] || [];
-      const isCorrect = JSON.stringify(selectedAnswers.sort()) === JSON.stringify(correctAnswers.sort());
+      const isCorrect = JSON.stringify(selectedAnswers?.sort()) === JSON.stringify(correctAnswers.sort());
       const pointsEarned = isCorrect ? task.points : 0;
 
+      // Record completion with fraud detection metadata
       const [completion] = await db.insert(schema.taskCompletions).values({
         taskId: req.params.id,
         taskType: "micro",
-        memberId: member.id,
+        memberId,
+        proofUrl,
         pointsEarned,
         verified: true,
-        status: isCorrect ? "approved" : "rejected"
+        status: isCorrect ? "approved" : "rejected",
+        ipAddress,
+        userAgent,
+        fingerprint
       }).returning();
 
+      // Award points if correct
       if (isCorrect) {
         await db.insert(schema.userPoints).values({
-          memberId: member.id,
+          memberId,
           source: "micro-task",
           amount: pointsEarned,
           points: pointsEarned
         });
       }
+
+      // Log audit trail
+      await logAudit({
+        memberId,
+        action: AuditActions.ADMIN_ACTION,
+        resourceType: "task",
+        resourceId: req.params.id,
+        details: { taskType: "micro", isCorrect, pointsEarned },
+        ipAddress,
+        userAgent,
+        fingerprint,
+        status: "success",
+      });
 
       res.json({ 
         success: true, 
@@ -6420,7 +6698,14 @@ Be friendly, informative, and politically neutral when discussing governance. En
           correctAnswers: isCorrect ? undefined : correctAnswers
         } 
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error?.code === '23505') {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Task already completed" 
+        });
+      }
       console.error("Complete micro-task error:", error);
       res.status(500).json({ success: false, error: "Failed to complete micro-task" });
     }

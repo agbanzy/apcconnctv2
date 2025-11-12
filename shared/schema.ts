@@ -224,6 +224,22 @@ export const eventRsvps = pgTable("event_rsvps", {
   rsvpedAt: timestamp("rsvped_at").defaultNow(),
 });
 
+// Event Attendance (actual check-ins for points)
+export const eventAttendance = pgTable("event_attendance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  checkedInAt: timestamp("checked_in_at").defaultNow(),
+  coordinates: jsonb("coordinates").$type<{ lat: number; lng: number }>(),
+  pointsEarned: integer("points_earned").default(0),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+}, (table) => ({
+  // Unique constraint: one check-in per member per event
+  uniqueEventAttendance: unique().on(table.memberId, table.eventId),
+}));
+
 // Volunteer Marketplace
 export const volunteerTasks = pgTable("volunteer_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -273,7 +289,14 @@ export const quizAttempts = pgTable("quiz_attempts", {
   isCorrect: boolean("is_correct").notNull(),
   pointsEarned: integer("points_earned").default(0),
   attemptedAt: timestamp("attempted_at").defaultNow(),
-});
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+  completionTime: integer("completion_time"), // Time in seconds to complete quiz
+}, (table) => ({
+  // Unique constraint: one attempt per member per quiz
+  uniqueQuizAttempt: unique().on(table.memberId, table.quizId),
+}));
 
 // Issue Campaigns
 export const issueCampaigns = pgTable("issue_campaigns", {
@@ -293,7 +316,13 @@ export const campaignVotes = pgTable("campaign_votes", {
   campaignId: varchar("campaign_id").notNull().references(() => issueCampaigns.id),
   memberId: varchar("member_id").notNull().references(() => members.id),
   votedAt: timestamp("voted_at").defaultNow(),
-});
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+}, (table) => ({
+  // Unique constraint: one vote per member per campaign
+  uniqueCampaignVote: unique().on(table.memberId, table.campaignId),
+}));
 
 export const campaignComments = pgTable("campaign_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -418,7 +447,13 @@ export const taskCompletions = pgTable("task_completions", {
   pointsEarned: integer("points_earned").default(0),
   verified: boolean("verified").default(false),
   completedAt: timestamp("completed_at").defaultNow(),
-});
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+}, (table) => ({
+  // Unique constraint: one completion per member per task
+  uniqueTaskCompletion: unique().on(table.memberId, table.taskId, table.taskType),
+}));
 
 // Election Day Monitoring
 export const pollingUnits = pgTable("polling_units", {
@@ -704,8 +739,40 @@ export const auditLogs = pgTable("audit_logs", {
   details: jsonb("details").$type<Record<string, any>>(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
   status: text("status").notNull(), // success, failure
+  suspiciousActivity: boolean("suspicious_activity").default(false),
+  fraudScore: integer("fraud_score").default(0),
+  requestPayload: jsonb("request_payload"),
+  responsePayload: jsonb("response_payload"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Fraud Detection & Rate Limiting
+export const fraudDetectionLogs = pgTable("fraud_detection_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  actionType: text("action_type").notNull(), // quiz, task, vote, event
+  detectionReason: text("detection_reason").notNull(), // duplicate_action, rate_limit_exceeded, suspicious_timing, etc.
+  severity: text("severity").notNull(), // low, medium, high, critical
+  blocked: boolean("blocked").default(true),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Account suspension tracking
+export const accountSuspensions = pgTable("account_suspensions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  reason: text("reason").notNull(),
+  suspendedBy: varchar("suspended_by").references(() => users.id),
+  suspendedAt: timestamp("suspended_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"),
 });
 
 // Relations
@@ -776,6 +843,9 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   referralsReceived: many(referrals, { relationName: "referred" }),
   idCards: many(memberIdCards),
   pointRedemptions: many(pointRedemptions),
+  eventAttendance: many(eventAttendance),
+  fraudDetectionLogs: many(fraudDetectionLogs),
+  accountSuspensions: many(accountSuspensions),
 }));
 
 export const memberIdCardsRelations = relations(memberIdCards, ({ one }) => ({
@@ -828,6 +898,7 @@ export const votesRelations = relations(votes, ({ one }) => ({
 
 export const eventsRelations = relations(events, ({ many }) => ({
   rsvps: many(eventRsvps),
+  attendance: many(eventAttendance),
 }));
 
 export const eventRsvpsRelations = relations(eventRsvps, ({ one }) => ({
@@ -837,6 +908,17 @@ export const eventRsvpsRelations = relations(eventRsvps, ({ one }) => ({
   }),
   member: one(members, {
     fields: [eventRsvps.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const eventAttendanceRelations = relations(eventAttendance, ({ one }) => ({
+  event: one(events, {
+    fields: [eventAttendance.eventId],
+    references: [events.id],
+  }),
+  member: one(members, {
+    fields: [eventAttendance.memberId],
     references: [members.id],
   }),
 }));
@@ -1185,6 +1267,7 @@ export const insertCandidateSchema = createInsertSchema(candidates).omit({ id: t
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true, castedAt: true });
 export const insertEventSchema = createInsertSchema(events).omit({ id: true, createdAt: true });
 export const insertEventRsvpSchema = createInsertSchema(eventRsvps).omit({ id: true, rsvpedAt: true });
+export const insertEventAttendanceSchema = createInsertSchema(eventAttendance).omit({ id: true, checkedInAt: true });
 export const insertVolunteerTaskSchema = createInsertSchema(volunteerTasks).omit({ id: true, createdAt: true });
 export const insertTaskApplicationSchema = createInsertSchema(taskApplications).omit({ id: true, appliedAt: true });
 export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true });
@@ -1221,6 +1304,8 @@ export const insertNotificationPreferenceSchema = createInsertSchema(notificatio
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export const insertPointConversionSettingSchema = createInsertSchema(pointConversionSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPointRedemptionSchema = createInsertSchema(pointRedemptions).omit({ id: true, createdAt: true, completedAt: true });
+export const insertFraudDetectionLogSchema = createInsertSchema(fraudDetectionLogs).omit({ id: true, createdAt: true });
+export const insertAccountSuspensionSchema = createInsertSchema(accountSuspensions).omit({ id: true, suspendedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1325,3 +1410,9 @@ export type InsertPointConversionSetting = z.infer<typeof insertPointConversionS
 export type PointConversionSetting = typeof pointConversionSettings.$inferSelect;
 export type InsertPointRedemption = z.infer<typeof insertPointRedemptionSchema>;
 export type PointRedemption = typeof pointRedemptions.$inferSelect;
+export type InsertEventAttendance = z.infer<typeof insertEventAttendanceSchema>;
+export type EventAttendance = typeof eventAttendance.$inferSelect;
+export type InsertFraudDetectionLog = z.infer<typeof insertFraudDetectionLogSchema>;
+export type FraudDetectionLog = typeof fraudDetectionLogs.$inferSelect;
+export type InsertAccountSuspension = z.infer<typeof insertAccountSuspensionSchema>;
+export type AccountSuspension = typeof accountSuspensions.$inferSelect;
