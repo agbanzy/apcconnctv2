@@ -30,6 +30,8 @@ import { antiCheatService } from "./security/anti-cheat";
 import { generateQuizToken, verifyQuizToken } from "./security/crypto-tokens";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { storage } from "./storage";
+import { FilterDTO } from "@shared/admin-types";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -7527,6 +7529,334 @@ Be friendly, informative, and politically neutral when discussing governance. En
       return res.status(503).json({ success: false, error: "Push notifications not configured" });
     }
     res.json({ success: true, publicKey });
+  });
+
+  // ============================================================================
+  // ADMIN API ENDPOINTS
+  // ============================================================================
+
+  // Helper function to generate CSV from data
+  const generateCSV = (data: any[], fields: string[]): string => {
+    const header = fields.join(',');
+    const rows = data.map(row => {
+      return fields.map(field => {
+        const value = field.split('.').reduce((obj, key) => obj?.[key], row);
+        const stringValue = value === null || value === undefined ? '' : String(value);
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }).join(',');
+    });
+    return [header, ...rows].join('\n');
+  };
+
+  // Audit Logs Endpoints
+  app.get("/api/admin/audit-logs", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listAuditLogs(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get audit logs error:", error);
+      res.status(500).json({ success: false, error: "Failed to get audit logs" });
+    }
+  });
+
+  app.get("/api/admin/audit-logs/export", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const search = req.query.search as string || '';
+      const action = req.query.action as string || '';
+      const status = req.query.status as string || '';
+
+      let whereConditions: any[] = [];
+
+      if (search) {
+        whereConditions.push(
+          sql`(${schema.auditLogs.action} ILIKE ${`%${search}%`} OR 
+               ${schema.auditLogs.resourceType} ILIKE ${`%${search}%`} OR
+               ${schema.auditLogs.ipAddress} ILIKE ${`%${search}%`})`
+        );
+      }
+
+      if (action) {
+        whereConditions.push(eq(schema.auditLogs.action, action));
+      }
+
+      if (status) {
+        whereConditions.push(eq(schema.auditLogs.status, status));
+      }
+
+      const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+      const logs = await db.query.auditLogs.findMany({
+        where: whereClause,
+        orderBy: desc(schema.auditLogs.createdAt),
+        limit: 10000, // Limit to 10k records for export
+        with: {
+          user: {
+            columns: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            }
+          }
+        }
+      });
+
+      const exportData = logs.map(log => ({
+        createdAt: log.createdAt?.toISOString() || '',
+        action: log.action || '',
+        user: log.user ? `${log.user.firstName} ${log.user.lastName}` : '',
+        email: log.user?.email || '',
+        resourceType: log.resourceType || '',
+        resourceId: log.resourceId || '',
+        status: log.status || '',
+        ipAddress: log.ipAddress || '',
+        fraudScore: log.fraudScore || 0,
+        suspiciousActivity: log.suspiciousActivity ? 'Yes' : 'No',
+      }));
+
+      const csv = generateCSV(exportData, [
+        'createdAt',
+        'action',
+        'user',
+        'email',
+        'resourceType',
+        'resourceId',
+        'status',
+        'ipAddress',
+        'fraudScore',
+        'suspiciousActivity'
+      ]);
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="audit_logs_${Date.now()}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Export audit logs error:", error);
+      res.status(500).json({ success: false, error: "Failed to export audit logs" });
+    }
+  });
+
+  // Members Bulk Operations
+  app.post("/api/admin/members/bulk", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { ids, action } = req.body;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, error: "Invalid member IDs" });
+      }
+
+      await storage.bulkUpdateMembers(ids, action);
+
+      await logAudit({
+        userId: req.user!.id,
+        action: `bulk_${action}_members`,
+        resourceType: 'member',
+        details: { memberIds: ids, count: ids.length },
+        status: 'success',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, message: `Bulk action "${action}" completed on ${ids.length} member(s)` });
+    } catch (error) {
+      console.error("Members bulk operation error:", error);
+      res.status(500).json({ success: false, error: "Failed to complete bulk operation" });
+    }
+  });
+
+  // Quiz Management Endpoints
+  app.get("/api/admin/quizzes", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listQuizzes(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get quizzes error:", error);
+      res.status(500).json({ success: false, error: "Failed to get quizzes" });
+    }
+  });
+
+  app.post("/api/admin/quizzes", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { question, options, correctAnswer, category, difficulty, explanation, points } = req.body;
+
+      if (!question || !options || correctAnswer === undefined || !category || !difficulty || !points) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      if (!Array.isArray(options) || options.length < 2) {
+        return res.status(400).json({ success: false, error: "Options must be an array with at least 2 items" });
+      }
+
+      if (correctAnswer < 0 || correctAnswer >= options.length) {
+        return res.status(400).json({ success: false, error: "Invalid correct answer index" });
+      }
+
+      const [quiz] = await db.insert(schema.quizzes).values({
+        question,
+        options,
+        correctAnswer,
+        category,
+        difficulty: difficulty as any,
+        explanation: explanation || null,
+        points,
+      }).returning();
+
+      await logAudit({
+        userId: req.user!.id,
+        action: 'create_quiz',
+        resourceType: 'quiz',
+        resourceId: quiz.id,
+        details: { question, category, difficulty },
+        status: 'success',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, data: quiz });
+    } catch (error) {
+      console.error("Create quiz error:", error);
+      res.status(500).json({ success: false, error: "Failed to create quiz" });
+    }
+  });
+
+  app.patch("/api/admin/quizzes/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { question, options, correctAnswer, category, difficulty, explanation, points } = req.body;
+
+      const existingQuiz = await db.query.quizzes.findFirst({
+        where: eq(schema.quizzes.id, id)
+      });
+
+      if (!existingQuiz) {
+        return res.status(404).json({ success: false, error: "Quiz not found" });
+      }
+
+      if (options && (!Array.isArray(options) || options.length < 2)) {
+        return res.status(400).json({ success: false, error: "Options must be an array with at least 2 items" });
+      }
+
+      if (correctAnswer !== undefined && options) {
+        if (correctAnswer < 0 || correctAnswer >= options.length) {
+          return res.status(400).json({ success: false, error: "Invalid correct answer index" });
+        }
+      }
+
+      const updateData: any = {};
+      if (question !== undefined) updateData.question = question;
+      if (options !== undefined) updateData.options = options;
+      if (correctAnswer !== undefined) updateData.correctAnswer = correctAnswer;
+      if (category !== undefined) updateData.category = category;
+      if (difficulty !== undefined) updateData.difficulty = difficulty;
+      if (explanation !== undefined) updateData.explanation = explanation;
+      if (points !== undefined) updateData.points = points;
+
+      const [quiz] = await db.update(schema.quizzes)
+        .set(updateData)
+        .where(eq(schema.quizzes.id, id))
+        .returning();
+
+      await logAudit({
+        userId: req.user!.id,
+        action: 'update_quiz',
+        resourceType: 'quiz',
+        resourceId: id,
+        details: updateData,
+        status: 'success',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, data: quiz });
+    } catch (error) {
+      console.error("Update quiz error:", error);
+      res.status(500).json({ success: false, error: "Failed to update quiz" });
+    }
+  });
+
+  app.delete("/api/admin/quizzes/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const existingQuiz = await db.query.quizzes.findFirst({
+        where: eq(schema.quizzes.id, id)
+      });
+
+      if (!existingQuiz) {
+        return res.status(404).json({ success: false, error: "Quiz not found" });
+      }
+
+      await db.delete(schema.quizzes).where(eq(schema.quizzes.id, id));
+
+      await logAudit({
+        userId: req.user!.id,
+        action: 'delete_quiz',
+        resourceType: 'quiz',
+        resourceId: id,
+        details: { question: existingQuiz.question },
+        status: 'success',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, message: "Quiz deleted successfully" });
+    } catch (error) {
+      console.error("Delete quiz error:", error);
+      res.status(500).json({ success: false, error: "Failed to delete quiz" });
+    }
+  });
+
+  app.get("/api/admin/quizzes/export", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const category = req.query.category as string || '';
+      const difficulty = req.query.difficulty as string || '';
+
+      let whereConditions: any[] = [];
+
+      if (category) {
+        whereConditions.push(eq(schema.quizzes.category, category));
+      }
+
+      if (difficulty) {
+        whereConditions.push(eq(schema.quizzes.difficulty, difficulty as any));
+      }
+
+      const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+      const quizzes = await db.query.quizzes.findMany({
+        where: whereClause,
+        orderBy: desc(schema.quizzes.createdAt),
+        limit: 10000,
+      });
+
+      const exportData = quizzes.map(quiz => ({
+        question: quiz.question || '',
+        category: quiz.category || '',
+        difficulty: quiz.difficulty || '',
+        points: quiz.points || 0,
+        options: (quiz.options as string[]).join(' | '),
+        correctAnswer: quiz.correctAnswer,
+        explanation: quiz.explanation || '',
+        createdAt: quiz.createdAt?.toISOString() || '',
+      }));
+
+      const csv = generateCSV(exportData, [
+        'question',
+        'category',
+        'difficulty',
+        'points',
+        'options',
+        'correctAnswer',
+        'explanation',
+        'createdAt'
+      ]);
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="quizzes_${Date.now()}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Export quizzes error:", error);
+      res.status(500).json({ success: false, error: "Failed to export quizzes" });
+    }
   });
 
   // Apply error handler middleware (must be last)

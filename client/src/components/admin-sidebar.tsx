@@ -16,6 +16,8 @@ import {
   Award,
   DollarSign,
   Coins,
+  FileSearch,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -102,6 +104,16 @@ const adminMenuItems = [
     title: "Badges",
     url: "/admin/badges",
     icon: Award,
+  },
+  {
+    title: "Quizzes",
+    url: "/admin/quizzes",
+    icon: HelpCircle,
+  },
+  {
+    title: "Audit Logs",
+    url: "/admin/audit-logs",
+    icon: FileSearch,
   },
   {
     title: "Rewards Settings",
