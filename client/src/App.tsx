@@ -60,6 +60,7 @@ import AdminTasks from "@/pages/admin/tasks";
 import AdminBadges from "@/pages/admin/badges";
 import AdminDues from "@/pages/admin/dues";
 import Rewards from "@/pages/rewards";
+import NotificationSettings from "@/pages/notification-settings";
 import { AdminSidebar } from "@/components/admin-sidebar";
 
 function AppContent() {
@@ -204,6 +205,7 @@ function AppContent() {
               <Route path="/rewards" component={() => <ProtectedRoute component={Rewards} />} />
               <Route path="/invite-earn" component={() => <ProtectedRoute component={InviteEarn} />} />
               <Route path="/search" component={() => <ProtectedRoute component={SearchPage} />} />
+              <Route path="/settings/notifications" component={() => <ProtectedRoute component={NotificationSettings} />} />
               <Route component={NotFound} />
             </Switch>
           </main>

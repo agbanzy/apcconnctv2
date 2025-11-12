@@ -24,6 +24,7 @@ import {
   GraduationCap,
   UserPlus,
   Search,
+  Bell,
 } from "lucide-react";
 import {
   Sidebar,
@@ -173,6 +174,14 @@ const adminItems = [
   },
 ];
 
+const settingsItems = [
+  {
+    title: "Notification Settings",
+    url: "/settings/notifications",
+    icon: Bell,
+  },
+];
+
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
@@ -288,6 +297,24 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {monitoringItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Settings</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {settingsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
                     <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
