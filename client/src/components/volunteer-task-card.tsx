@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Award } from "lucide-react";
 
 interface VolunteerTaskCardProps {
+  id: string;
   title: string;
   description: string;
   location: string;
@@ -11,9 +12,11 @@ interface VolunteerTaskCardProps {
   points: number;
   deadline?: string;
   difficulty: "Easy" | "Medium" | "Hard";
+  onApply?: () => void;
 }
 
 export function VolunteerTaskCard({
+  id,
   title,
   description,
   location,
@@ -21,6 +24,7 @@ export function VolunteerTaskCard({
   points,
   deadline,
   difficulty,
+  onApply,
 }: VolunteerTaskCardProps) {
   const difficultyColors = {
     Easy: "bg-chart-1 text-white",
@@ -65,9 +69,11 @@ export function VolunteerTaskCard({
         </div>
       </CardContent>
       <CardFooter>
-        <Button variant="default" className="w-full" data-testid="button-apply-task">
-          Apply for Task
-        </Button>
+        {onApply && (
+          <Button variant="default" className="w-full" onClick={onApply} data-testid="button-apply-task">
+            Apply for Task
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

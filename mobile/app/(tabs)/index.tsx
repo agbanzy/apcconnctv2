@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NigeriaMap } from '@/components/NigeriaMap';
 import { api } from '@/lib/api';
 import { storage } from '@/lib/storage';
 
@@ -100,6 +101,15 @@ export default function DashboardScreen() {
         </Card>
       </View>
 
+      <View style={styles.mapSection}>
+        <Text variant="h3" style={styles.sectionTitle}>
+          APC Nationwide
+        </Text>
+        <Card>
+          <NigeriaMap mode="members" />
+        </Card>
+      </View>
+
       <View style={styles.quickActions}>
         <Text variant="h3" style={styles.sectionTitle}>
           Quick Actions
@@ -180,6 +190,10 @@ const styles = StyleSheet.create({
   statLabel: {
     color: '#6B7280',
     marginTop: 4,
+  },
+  mapSection: {
+    marginTop: 12,
+    marginBottom: 12,
   },
   quickActions: {
     marginTop: 12,

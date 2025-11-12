@@ -3,6 +3,7 @@ import { StatsCard } from "@/components/stats-card";
 import { NewsCard } from "@/components/news-card";
 import { EventCard } from "@/components/event-card";
 import { MicroTaskCard } from "@/components/micro-task-card";
+import { NigeriaMap } from "@/components/nigeria-map";
 import { 
   Users, 
   Vote, 
@@ -41,12 +42,18 @@ export default function Home() {
     retry: false,
   });
 
-  const { data: memberProfile } = useQuery({
+  const { data: memberProfile } = useQuery<{
+    success: boolean;
+    data: any;
+  }>({
     queryKey: ["/api/members/me"],
     retry: false,
   });
 
-  const { data: userPoints } = useQuery({
+  const { data: userPoints } = useQuery<{
+    success: boolean;
+    data: { totalPoints: number };
+  }>({
     queryKey: ["/api/members/points"],
     retry: false,
   });
@@ -102,7 +109,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="font-display text-2xl md:text-3xl font-bold" data-testid="text-welcome-message">
-                  {getGreeting()}, {user?.username || 'Member'}!
+                  {getGreeting()}, {user?.firstName || 'Member'}!
                 </h1>
                 <p className="text-muted-foreground mt-1">
                   Welcome to APC Connect - Your political engagement hub
@@ -263,6 +270,17 @@ export default function Home() {
         )}
       </div>
 
+      {/* National Overview Map */}
+      <Card>
+        <CardHeader>
+          <CardTitle>APC Presence Nationwide</CardTitle>
+          <CardDescription>Interactive map showing party presence across Nigeria</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NigeriaMap mode="members" showLegend={true} />
+        </CardContent>
+      </Card>
+
       {/* Quick Tasks Section */}
       {tasks.length > 0 && (
         <div>
@@ -350,7 +368,7 @@ export default function Home() {
                   date={new Date(event.date)}
                   location={event.location}
                   category={event.category}
-                  maxAttendees={event.maxAttendees}
+                  maxAttendees={event.maxAttendees ?? undefined}
                   attendees={0}
                 />
               ))}

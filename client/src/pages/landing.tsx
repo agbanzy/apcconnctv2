@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { motion, useInView, useScroll, useTransform } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
@@ -157,10 +157,6 @@ function FloatingBadge({ icon: Icon, text, delay, style }: {
 
 export default function Landing() {
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const heroRef = useRef(null);
-  const { scrollY } = useScroll();
-  const y = useTransform(scrollY, [0, 500], [0, 150]);
-  const opacity = useTransform(scrollY, [0, 300], [1, 0]);
 
   // Testimonial carousel setup
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true }, [
@@ -367,41 +363,21 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen">
-      {/* Enhanced Hero Section with Parallax */}
+      {/* Hero Section */}
       <section 
-        ref={heroRef}
         className="relative min-h-screen flex items-center justify-center overflow-hidden"
       >
-        {/* Parallax Background */}
-        <motion.div
+        {/* Static Background */}
+        <div 
           className="absolute inset-0 z-0"
-          style={{ y }}
-        >
-          <div 
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `url(${heroImage})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center"
-            }}
-          />
-          {/* Animated Gradient Overlay */}
-          <motion.div
-            className="absolute inset-0"
-            style={{
-              background: "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(20,83,45,0.6) 50%, rgba(0,0,0,0.7) 100%)",
-              opacity
-            }}
-            animate={{
-              background: [
-                "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(20,83,45,0.6) 50%, rgba(0,0,0,0.7) 100%)",
-                "linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(20,83,45,0.7) 50%, rgba(0,0,0,0.8) 100%)",
-                "linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(20,83,45,0.6) 50%, rgba(0,0,0,0.7) 100%)"
-              ]
-            }}
-            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          />
-        </motion.div>
+          style={{
+            backgroundImage: `url(${heroImage})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center"
+          }}
+        />
+        {/* Static Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-primary/20 to-black/70" />
 
         {/* Floating Badges */}
         <FloatingBadge 

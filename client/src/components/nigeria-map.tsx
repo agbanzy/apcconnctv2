@@ -78,6 +78,9 @@ export function NigeriaMap({
   const [selectedMode, setSelectedMode] = useState<MapMode>(mode);
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [touchedState, setTouchedState] = useState<string | null>(null);
+  const [focusedState, setFocusedState] = useState<string | null>(null);
+  const [selectedState, setSelectedState] = useState<StateData | null>(null);
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const { data, isLoading } = useQuery<{ states: StateData[] }>({
     queryKey: ['/api/analytics/map-data'],
@@ -132,6 +135,8 @@ export function NigeriaMap({
   const handleStateTouchStart = (stateName: string) => {
     setTouchedState(stateName);
     setHoveredState(stateName);
+    const stateData = getStateData(stateName);
+    setSelectedState(stateData || null);
   };
 
   const handleStateTouchEnd = () => {
@@ -139,6 +144,12 @@ export function NigeriaMap({
       setTouchedState(null);
       setHoveredState(null);
     }, 2000);
+  };
+
+  const handleStateInteraction = (stateName: string) => {
+    const stateData = getStateData(stateName);
+    handleStateClick(stateName);
+    setSelectedState(stateData || null);
   };
 
   if (isLoading) {
@@ -210,21 +221,10 @@ export function NigeriaMap({
             >
               <defs>
                 <filter id="shadow-hover" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-                  <feOffset dx="0" dy="2" result="offsetblur"/>
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="1"/>
+                  <feOffset dx="0" dy="1" result="offsetblur"/>
                   <feComponentTransfer>
-                    <feFuncA type="linear" slope="0.3"/>
-                  </feComponentTransfer>
-                  <feMerge> 
-                    <feMergeNode/>
-                    <feMergeNode in="SourceGraphic"/> 
-                  </feMerge>
-                </filter>
-                <filter id="shadow-selected" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
-                  <feOffset dx="0" dy="3" result="offsetblur"/>
-                  <feComponentTransfer>
-                    <feFuncA type="linear" slope="0.5"/>
+                    <feFuncA type="linear" slope="0.2"/>
                   </feComponentTransfer>
                   <feMerge> 
                     <feMergeNode/>
@@ -240,45 +240,61 @@ export function NigeriaMap({
                   const isHighlighted = highlightStates.includes(stateName);
                   const isHovered = hoveredState === stateName;
                   const isTouched = touchedState === stateName;
+                  const isFocused = focusedState === stateName;
+                  const isInteractive = isFocused || isHovered || isTouched;
 
                   return (
                     <Tooltip key={stateName}>
                       <TooltipTrigger asChild>
-                        <motion.g
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.3 }}
+                        <g
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`${stateName}: ${stateData?.memberCount || 0} members`}
+                          onFocus={() => {
+                            setFocusedState(stateName);
+                            const state = getStateData(stateName);
+                            setSelectedState(state || null);
+                          }}
+                          onBlur={() => setFocusedState(null)}
                           onMouseEnter={() => setHoveredState(stateName)}
                           onMouseLeave={() => setHoveredState(null)}
                           onTouchStart={() => handleStateTouchStart(stateName)}
                           onTouchEnd={handleStateTouchEnd}
-                          onClick={() => handleStateClick(stateName)}
-                          className="cursor-pointer select-none"
+                          onClick={() => handleStateInteraction(stateName)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleStateInteraction(stateName);
+                            }
+                          }}
+                          className="cursor-pointer transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                           data-testid={`state-${stateName.toLowerCase().replace(/\s+/g, '-')}`}
                           style={{
-                            filter: (isHovered || isTouched) ? 'url(#shadow-hover)' : 
-                                   isHighlighted ? 'url(#shadow-selected)' : 'none'
+                            filter: isInteractive ? 'url(#shadow-hover)' : 'none'
                           }}
                         >
-                          <motion.rect
+                          <rect
                             x={pos.x}
                             y={pos.y}
                             width={pos.width}
                             height={pos.height}
                             fill={fillColor}
-                            stroke={isHighlighted ? 'hsl(355 75% 48%)' : 'hsl(220 10% 28%)'}
-                            strokeWidth={isHighlighted ? 3 : isHovered || isTouched ? 2 : 1}
+                            stroke={
+                              isHighlighted ? 'hsl(355 75% 48%)' : 
+                              isFocused ? 'hsl(142 65% 35%)' :
+                              isHovered ? 'hsl(142 65% 45%)' :
+                              'hsl(220 10% 28%)'
+                            }
+                            strokeWidth={
+                              isHighlighted ? 3 : 
+                              (isFocused || isHovered) ? 2.5 : 
+                              1
+                            }
                             rx={6}
-                            initial={{ scale: 1 }}
-                            animate={{ 
-                              scale: (isHovered || isTouched) ? 1.05 : 1,
-                              opacity: (isHovered || isTouched) ? 0.9 : 1
-                            }}
-                            transition={{ 
-                              type: "spring", 
-                              stiffness: 400, 
-                              damping: 25 
+                            className="transition-all duration-200"
+                            style={{
+                              transform: isInteractive && !prefersReducedMotion ? 'scale(1.02)' : 'scale(1)',
+                              opacity: isInteractive ? 0.9 : 1
                             }}
                           />
                           <text
@@ -286,16 +302,15 @@ export function NigeriaMap({
                             y={pos.y + pos.height / 2}
                             textAnchor="middle"
                             dominantBaseline="middle"
-                            className="text-xs font-semibold pointer-events-none select-none"
-                            fill={(isHovered || isTouched) ? 'hsl(0 0% 0%)' : 'hsl(220 15% 12%)'}
+                            className="text-xs font-semibold pointer-events-none select-none transition-all duration-200"
+                            fill={isInteractive ? 'hsl(0 0% 0%)' : 'hsl(220 15% 12%)'}
                             style={{
-                              fontSize: (isHovered || isTouched) ? '13px' : '11px',
-                              transition: 'all 0.2s ease'
+                              fontSize: isInteractive ? '13px' : '11px'
                             }}
                           >
                             {stateName}
                           </text>
-                        </motion.g>
+                        </g>
                       </TooltipTrigger>
                       <TooltipContent 
                         className="max-w-sm border-2 p-4 bg-background/95 backdrop-blur-md"
@@ -370,6 +385,59 @@ export function NigeriaMap({
           </TooltipProvider>
         </Card>
       </motion.div>
+
+      {/* Selected State Card - Accessible Alternative to Tooltips */}
+      {selectedState && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3 }}
+        >
+          <Card className="p-4" data-testid="card-selected-state">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                {selectedState.name} State
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedState(null)}
+                data-testid="button-close-selected-state"
+              >
+                Close
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Total Members</div>
+                <div className="text-2xl font-bold text-primary">{selectedState.memberCount.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Active Members</div>
+                <div className="text-2xl font-bold text-accent">{selectedState.activeMembers.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Events</div>
+                <div className="text-2xl font-bold">{selectedState.upcomingEvents}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Campaigns</div>
+                <div className="text-2xl font-bold">{selectedState.activeCampaigns}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">LGAs</div>
+                <div className="text-2xl font-bold">{selectedState.lgasCovered}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Wards</div>
+                <div className="text-2xl font-bold">{selectedState.wardsCovered}</div>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Enhanced Legend */}
       {showLegend && (

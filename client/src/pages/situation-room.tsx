@@ -3,18 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { SituationRoomDashboard } from "@/components/situation-room-dashboard";
 import { IncidentReportForm } from "@/components/incident-report-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { NigeriaMap } from "@/components/nigeria-map";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient } from "@/lib/queryClient";
-import { AlertTriangle, MapPin } from "lucide-react";
+import { AlertTriangle, MapPin, X } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
 export default function SituationRoom() {
   const { member } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [selectedState, setSelectedState] = useState<string | null>(null);
 
   const { data: dashboardData, isLoading: isLoadingDashboard } = useQuery<{
     success: boolean;
@@ -106,6 +108,20 @@ export default function SituationRoom() {
     timestamp: new Date(unit.lastUpdate).toLocaleTimeString(),
   }));
 
+  const filteredIncidents = selectedState
+    ? incidents.filter((incident) => 
+        incident.location?.toLowerCase().includes(selectedState.toLowerCase())
+      )
+    : incidents;
+
+  const handleStateClick = (stateId: string, stateName: string) => {
+    setSelectedState(stateName);
+  };
+
+  const clearStateFilter = () => {
+    setSelectedState(null);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -162,11 +178,41 @@ export default function SituationRoom() {
         </div>
       )}
 
+      {/* Incident Map */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle>Real-Time Incident Distribution</CardTitle>
+              <CardDescription>Click on a state to filter incidents by location</CardDescription>
+            </div>
+            {selectedState && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearStateFilter}
+                data-testid="button-clear-filter"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filter: {selectedState}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <NigeriaMap 
+            mode="activity" 
+            showLegend={true}
+            onStateClick={handleStateClick}
+          />
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="dashboard" className="w-full">
         <TabsList data-testid="tabs-situation-room">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="incidents" data-testid="tab-incidents">
-            Incidents ({incidents.length})
+            Incidents ({selectedState ? filteredIncidents.length : incidents.length})
           </TabsTrigger>
           <TabsTrigger value="report" data-testid="tab-report">Report Incident</TabsTrigger>
         </TabsList>
@@ -180,10 +226,27 @@ export default function SituationRoom() {
 
         <TabsContent value="incidents" className="mt-6">
           <div className="space-y-4">
-            {incidents.length === 0 ? (
-              <p className="text-center py-12 text-muted-foreground">No incidents reported</p>
+            {selectedState && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" />
+                <span>Showing incidents in {selectedState}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearStateFilter}
+                  className="h-auto p-1"
+                  data-testid="button-clear-incident-filter"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+            {filteredIncidents.length === 0 ? (
+              <p className="text-center py-12 text-muted-foreground">
+                {selectedState ? `No incidents reported in ${selectedState}` : "No incidents reported"}
+              </p>
             ) : (
-              incidents.map((incident) => (
+              filteredIncidents.map((incident) => (
                 <Card key={incident.id} className={
                   incident.severity === "high"
                     ? "border-red-200 bg-red-50 dark:bg-red-950/20"

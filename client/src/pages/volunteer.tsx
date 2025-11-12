@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { VolunteerTaskCard } from "@/components/volunteer-task-card";
+import { NigeriaMap } from "@/components/nigeria-map";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Search } from "lucide-react";
+import { Search, MapPin, X } from "lucide-react";
 import type { VolunteerTask } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -16,6 +18,7 @@ export default function Volunteer() {
   const { member } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedState, setSelectedState] = useState<string | null>(null);
 
   const { data: tasksData, isLoading } = useQuery<{
     success: boolean;
@@ -48,12 +51,26 @@ export default function Volunteer() {
   const availableTasks = tasksData?.data?.filter(t => t.status === "open") || [];
   const myTasks = tasksData?.data?.filter(t => t.status === "in-progress") || [];
   
-  const filteredAvailableTasks = availableTasks.filter(
+  let filteredAvailableTasks = availableTasks.filter(
     task =>
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (selectedState) {
+    filteredAvailableTasks = filteredAvailableTasks.filter(
+      task => task.location.toLowerCase().includes(selectedState.toLowerCase())
+    );
+  }
+
+  const handleStateClick = (stateId: string, stateName: string) => {
+    setSelectedState(stateName);
+  };
+
+  const clearStateFilter = () => {
+    setSelectedState(null);
+  };
 
   if (isLoading) {
     return (
@@ -76,6 +93,36 @@ export default function Volunteer() {
         </p>
       </div>
 
+      {/* Volunteer Opportunities Map */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle>Opportunities by State</CardTitle>
+              <CardDescription>Click on a state to find volunteer opportunities in that location</CardDescription>
+            </div>
+            {selectedState && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearStateFilter}
+                data-testid="button-clear-state-filter"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filter: {selectedState}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <NigeriaMap 
+            mode="events" 
+            showLegend={true}
+            onStateClick={handleStateClick}
+          />
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="available" className="w-full">
         <TabsList className="grid w-full grid-cols-2" data-testid="tabs-volunteer">
           <TabsTrigger value="available" data-testid="tab-available">Available Tasks</TabsTrigger>
@@ -83,15 +130,33 @@ export default function Volunteer() {
         </TabsList>
 
         <TabsContent value="available" className="space-y-6 mt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search tasks by skill, location, or keyword..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-              data-testid="input-search-tasks"
-            />
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks by skill, location, or keyword..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-tasks"
+              />
+            </div>
+
+            {selectedState && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" />
+                <span>Showing opportunities in {selectedState}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearStateFilter}
+                  className="h-auto p-1"
+                  data-testid="button-clear-location-filter"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </div>
 
           {filteredAvailableTasks.length === 0 ? (
