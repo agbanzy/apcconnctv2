@@ -1,20 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -22,366 +13,485 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Download, Copy, Trash2, BarChart3, UserPlus } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ResourceToolbar } from "@/components/admin/ResourceToolbar";
+import { ResourceTable, Column } from "@/components/admin/ResourceTable";
+import { ResourceDrawer } from "@/components/admin/ResourceDrawer";
+import { useResourceController } from "@/hooks/use-resource-controller";
+import { useResourceList } from "@/hooks/use-resource-list";
+import { useResourceMutations } from "@/hooks/use-resource-mutations";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Plus, Edit, Trash2, Vote } from "lucide-react";
+import { format } from "date-fns";
+
+interface Election {
+  id: string;
+  title: string;
+  position: string;
+  startDate: string;
+  endDate: string;
+  status: "upcoming" | "active" | "completed";
+  totalVotes: number;
+  isActive: boolean;
+  requiresVerification: boolean;
+  candidates?: any[];
+  createdAt: string;
+}
 
 const electionSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  position: z.string().min(3, "Position is required"),
-  startDate: z.string(),
-  endDate: z.string(),
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  position: z.string().min(2, "Position is required"),
+  description: z.string().optional(),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  requiresVerification: z.boolean().default(false),
 });
 
-const candidateSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters"),
-  manifesto: z.string().min(10, "Manifesto must be at least 10 characters"),
-  experience: z.string().min(10, "Experience must be at least 10 characters"),
-});
+type ElectionFormData = z.infer<typeof electionSchema>;
 
 export default function AdminElections() {
   const { toast } = useToast();
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
-  const [selectedElection, setSelectedElection] = useState<any>(null);
-
-  const { data: electionsData, isLoading } = useQuery({
-    queryKey: ["/api/elections"],
+  const { filters, updateFilter, setFilters } = useResourceController({
+    pageSize: 20,
+    sortBy: "createdAt",
+    sortOrder: "desc",
   });
 
-  const form = useForm({
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingElection, setEditingElection] = useState<Election | null>(null);
+  const [deleteElectionId, setDeleteElectionId] = useState<string | null>(null);
+
+  const { data, isLoading } = useResourceList<Election>("/api/admin/elections", filters);
+  const { create, update, remove } = useResourceMutations<Election>("/api/admin/elections");
+
+  const form = useForm<ElectionFormData>({
     resolver: zodResolver(electionSchema),
     defaultValues: {
       title: "",
-      description: "",
       position: "",
+      description: "",
       startDate: "",
       endDate: "",
+      requiresVerification: false,
     },
   });
 
-  const candidateForm = useForm({
-    resolver: zodResolver(candidateSchema),
-    defaultValues: {
-      name: "",
-      manifesto: "",
-      experience: "",
+  const columns: Column<Election>[] = [
+    {
+      key: "title",
+      header: "Election",
+      render: (election) => (
+        <div className="max-w-md" data-testid={`text-title-${election.id}`}>
+          <p className="font-medium">{election.title}</p>
+          <p className="text-xs text-muted-foreground mt-1">{election.position}</p>
+        </div>
+      ),
     },
-  });
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      render: (election) => (
+        <Badge
+          variant={
+            election.status === "active"
+              ? "default"
+              : election.status === "completed"
+              ? "secondary"
+              : "outline"
+          }
+          data-testid={`badge-status-${election.id}`}
+        >
+          {election.status}
+        </Badge>
+      ),
+    },
+    {
+      key: "dates",
+      header: "Date Range",
+      render: (election) => (
+        <div className="text-sm" data-testid={`text-dates-${election.id}`}>
+          <p>{format(new Date(election.startDate), "MMM d, yyyy")}</p>
+          <p className="text-muted-foreground">to {format(new Date(election.endDate), "MMM d, yyyy")}</p>
+        </div>
+      ),
+    },
+    {
+      key: "totalVotes",
+      header: "Total Votes",
+      sortable: true,
+      render: (election) => (
+        <div className="flex items-center gap-2" data-testid={`text-votes-${election.id}`}>
+          <Vote className="h-4 w-4 text-muted-foreground" />
+          <span className="font-mono">{election.totalVotes || 0}</span>
+        </div>
+      ),
+    },
+    {
+      key: "candidates",
+      header: "Candidates",
+      render: (election) => (
+        <span className="font-mono" data-testid={`text-candidates-${election.id}`}>
+          {election.candidates?.length || 0}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (election) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setEditingElection(election);
+              form.reset({
+                title: election.title,
+                position: election.position,
+                description: "",
+                startDate: election.startDate.split('T')[0],
+                endDate: election.endDate.split('T')[0],
+                requiresVerification: election.requiresVerification,
+              });
+              setDrawerOpen(true);
+            }}
+            data-testid={`button-edit-${election.id}`}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteElectionId(election.id)}
+            data-testid={`button-delete-${election.id}`}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
-  const createElectionMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/elections", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elections"] });
-      toast({ title: "Success", description: "Election created successfully" });
-      setCreateDialogOpen(false);
+  const onSubmit = async (data: ElectionFormData) => {
+    try {
+      if (editingElection) {
+        await update.mutateAsync({ id: editingElection.id, data });
+        toast({ title: "Success", description: "Election updated successfully" });
+      } else {
+        await create.mutateAsync(data);
+        toast({ title: "Success", description: "Election created successfully" });
+      }
+
+      setDrawerOpen(false);
+      setEditingElection(null);
       form.reset();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create election", variant: "destructive" });
-    },
-  });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save election",
+        variant: "destructive",
+      });
+    }
+  };
 
-  const addCandidateMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", `/api/elections/${selectedElection?.id}/candidates`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elections"] });
-      toast({ title: "Success", description: "Candidate added successfully" });
-      setCandidateDialogOpen(false);
-      candidateForm.reset();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to add candidate", variant: "destructive" });
-    },
-  });
+  const handleDelete = async () => {
+    if (!deleteElectionId) return;
 
-  const deleteElectionMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/elections/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elections"] });
+    try {
+      await remove.mutateAsync(deleteElectionId);
       toast({ title: "Success", description: "Election deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete election", variant: "destructive" });
-    },
-  });
-
-  const elections = electionsData?.data || [];
-  const filteredElections = elections.filter((e: any) => 
-    statusFilter === "all" || e.status === statusFilter
-  );
-
-  const exportResults = (election: any) => {
-    toast({ title: "Info", description: "Exporting election results..." });
+      setDeleteElectionId(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete election",
+        variant: "destructive",
+      });
+    }
   };
 
-  const cloneElection = (election: any) => {
-    form.setValue("title", `${election.title} (Copy)`);
-    form.setValue("description", election.description);
-    form.setValue("position", election.position);
-    setCreateDialogOpen(true);
+  const handleSort = (column: string) => {
+    const newSortOrder =
+      filters.sortBy === column && filters.sortOrder === "desc" ? "asc" : "desc";
+    setFilters({ ...filters, sortBy: column, sortOrder: newSortOrder });
   };
-
-  if (isLoading) {
-    return <div className="p-6">Loading elections...</div>;
-  }
 
   return (
     <div className="space-y-6">
-      <BreadcrumbNav items={[{ label: 'Admin', href: '/admin/dashboard' }, { label: 'Elections' }]} />
-      
+      <BreadcrumbNav
+        items={[
+          { label: "Admin", href: "/admin/dashboard" },
+          { label: "Elections" },
+        ]}
+      />
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-3xl font-bold" data-testid="text-elections-title">Elections Management</h1>
-          <p className="text-muted-foreground mt-1">Create and manage elections</p>
+          <h1 className="font-display text-3xl font-bold" data-testid="text-page-title">
+            Elections Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage voting elections and monitor results
+          </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-election">
+        <Button
+          onClick={() => {
+            setEditingElection(null);
+            form.reset();
+            setDrawerOpen(true);
+          }}
+          data-testid="button-create-election">
           <Plus className="h-4 w-4 mr-2" />
           Create Election
         </Button>
       </div>
 
-      <div className="flex gap-4">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[200px]" data-testid="select-status-filter">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Elections</SelectItem>
-            <SelectItem value="upcoming">Upcoming</SelectItem>
-            <SelectItem value="ongoing">Ongoing</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Card className="p-6">
+        <ResourceToolbar
+          searchValue={filters.search || ""}
+          onSearchChange={(value) => updateFilter("search", value)}
+          filterSlot={
+            <Select
+              value={filters.status || "all"}
+              onValueChange={(value) =>
+                updateFilter("status", value === "all" ? "" : value)
+              }
+            >
+              <SelectTrigger className="w-[180px]" data-testid="select-filter-status">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          }
+        />
 
-      <div className="grid gap-4">
-        {filteredElections.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              No elections found
-            </CardContent>
-          </Card>
-        ) : (
-          filteredElections.map((election: any) => (
-            <Card key={election.id} data-testid={`election-card-${election.id}`}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle>{election.title}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">{election.position}</p>
-                  </div>
-                  <Badge 
-                    variant={election.status === 'ongoing' ? 'default' : election.status === 'upcoming' ? 'secondary' : 'outline'}
-                  >
-                    {election.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm">{election.description}</p>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>Start: {new Date(election.startDate).toLocaleDateString()}</span>
-                    <span>End: {new Date(election.endDate).toLocaleDateString()}</span>
-                    <span>Votes: {election.totalVotes || 0}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedElection(election);
-                        setCandidateDialogOpen(true);
-                      }}
-                      data-testid={`button-add-candidate-${election.id}`}
-                    >
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Add Candidate
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => exportResults(election)}
-                      data-testid={`button-export-${election.id}`}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Export Results
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => cloneElection(election)}
-                      data-testid={`button-clone-${election.id}`}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Clone
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => deleteElectionMutation.mutate(election.id)}
-                      data-testid={`button-delete-${election.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+        <div className="mt-6">
+          <ResourceTable
+            columns={columns}
+            data={data?.data || []}
+            isLoading={isLoading}
+            currentPage={filters.page}
+            totalPages={data?.totalPages || 1}
+            onPageChange={(page) => updateFilter("page", page)}
+            onSort={handleSort}
+            sortBy={filters.sortBy}
+            sortOrder={filters.sortOrder as "asc" | "desc"}
+          />
+        </div>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-create-election">
-          <DialogHeader>
-            <DialogTitle>Create New Election</DialogTitle>
-            <DialogDescription>Set up a new election for members to vote</DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit((data) => createElectionMutation.mutate(data))} className="space-y-4">
+        <div className="mt-4 flex justify-end">
+          <ExportButton
+            endpoint="/api/admin/elections/export"
+            filters={filters}
+            filename={`elections_${Date.now()}.csv`}
+            label="Export to CSV"
+          />
+        </div>
+      </Card>
+
+      <ResourceDrawer
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditingElection(null);
+          form.reset();
+        }}
+        title={editingElection ? "Edit Election" : "Create Election"}
+        description={editingElection ? "Update election details" : "Create a new election"}
+      >
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Election Title</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., 2024 Presidential Election"
+                      {...field}
+                      data-testid="input-title"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="position"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Position</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., President"
+                      {...field}
+                      data-testid="input-position"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Election description..."
+                      {...field}
+                      data-testid="input-description"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="title"
+                name="startDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Title</FormLabel>
+                    <FormLabel>Start Date</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Election title" data-testid="input-election-title" />
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-start-date"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="position"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Position</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="e.g., State Chairman" data-testid="input-election-position" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="Election description" rows={3} data-testid="input-election-description" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Start Date</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="datetime-local" data-testid="input-election-start" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>End Date</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="datetime-local" data-testid="input-election-end" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)} data-testid="button-cancel-election">
-                  Cancel
-                </Button>
-                <Button type="submit" data-testid="button-submit-election">Create Election</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={candidateDialogOpen} onOpenChange={setCandidateDialogOpen}>
-        <DialogContent data-testid="dialog-add-candidate">
-          <DialogHeader>
-            <DialogTitle>Add Candidate</DialogTitle>
-            <DialogDescription>Add a new candidate to {selectedElection?.title}</DialogDescription>
-          </DialogHeader>
-          <Form {...candidateForm}>
-            <form onSubmit={candidateForm.handleSubmit((data) => addCandidateMutation.mutate(data))} className="space-y-4">
               <FormField
-                control={candidateForm.control}
-                name="name"
+                control={form.control}
+                name="endDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Candidate Name</FormLabel>
+                    <FormLabel>End Date</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Full name" data-testid="input-candidate-name" />
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-end-date"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={candidateForm.control}
-                name="manifesto"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Manifesto</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="Campaign manifesto" rows={3} data-testid="input-candidate-manifesto" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={candidateForm.control}
-                name="experience"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Experience</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="Political experience" rows={3} data-testid="input-candidate-experience" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCandidateDialogOpen(false)} data-testid="button-cancel-candidate">
-                  Cancel
-                </Button>
-                <Button type="submit" data-testid="button-submit-candidate">Add Candidate</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="requiresVerification"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Require Verification</FormLabel>
+                    <p className="text-sm text-muted-foreground">
+                      Only verified members can vote
+                    </p>
+                  </div>
+                  <FormControl>
+                    <input
+                      type="checkbox"
+                      checked={field.value}
+                      onChange={field.onChange}
+                      className="h-4 w-4"
+                      data-testid="checkbox-require-verification"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setEditingElection(null);
+                  form.reset();
+                }}
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={create.isPending || update.isPending}
+                data-testid="button-save"
+              >
+                {create.isPending || update.isPending
+                  ? "Saving..."
+                  : editingElection
+                  ? "Update Election"
+                  : "Create Election"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </ResourceDrawer>
+
+      <AlertDialog open={!!deleteElectionId} onOpenChange={() => setDeleteElectionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Election</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this election? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

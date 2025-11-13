@@ -50,6 +50,13 @@ type UserType = typeof schema.users.$inferSelect;
 
 interface AuthRequest extends Request {
   user?: UserType;
+  antiCheat?: {
+    ipAddress: string;
+    userAgent: string;
+    fingerprint?: string;
+    coordinates?: { lat: number; lng: number };
+    memberId?: string;
+  };
 }
 
 declare global {
@@ -1078,12 +1085,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             })
             .where(eq(schema.pointRedemptions.id, redemption.id));
 
-          await logAudit(
-            member.id,
-            AuditActions.REWARD_REDEEM,
-            `Redeemed ${pointsNeeded} points for ${nairaValue} NGN ${productType} to ${phoneNumber}`,
-            { redemptionId: redemption.id, reference }
-          );
+          await logAudit({
+            memberId: member.id,
+            action: AuditActions.REWARD_REDEEM,
+            details: { description: `Redeemed ${pointsNeeded} points for ${nairaValue} NGN ${productType} to ${phoneNumber}`, redemptionId: redemption.id, reference },
+            status: "success"
+          });
 
           res.json({ 
             success: true, 
@@ -1192,12 +1199,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).returning();
       }
 
-      await logAudit(
-        req.user!.id,
-        AuditActions.ADMIN_UPDATE,
-        `Updated conversion settings for ${productType}`,
-        { settingId: result.id }
-      );
+      await logAudit({
+        userId: req.user!.id,
+        action: AuditActions.ADMIN_UPDATE,
+        details: { description: `Updated conversion settings for ${productType}`, settingId: result.id },
+        status: "success"
+      });
 
       res.json({ success: true, data: result });
     } catch (error) {
@@ -7600,18 +7607,21 @@ Be friendly, informative, and politically neutral when discussing governance. En
         }
       });
 
-      const exportData = logs.map(log => ({
-        createdAt: log.createdAt?.toISOString() || '',
-        action: log.action || '',
-        user: log.user ? `${log.user.firstName} ${log.user.lastName}` : '',
-        email: log.user?.email || '',
-        resourceType: log.resourceType || '',
-        resourceId: log.resourceId || '',
-        status: log.status || '',
-        ipAddress: log.ipAddress || '',
-        fraudScore: log.fraudScore || 0,
-        suspiciousActivity: log.suspiciousActivity ? 'Yes' : 'No',
-      }));
+      const exportData = logs.map(log => {
+        const user = log.user as (typeof schema.users.$inferSelect) | undefined;
+        return {
+          createdAt: log.createdAt?.toISOString() || '',
+          action: log.action || '',
+          user: user ? `${user.firstName} ${user.lastName}` : '',
+          email: user?.email || '',
+          resourceType: log.resourceType || '',
+          resourceId: log.resourceId || '',
+          status: log.status || '',
+          ipAddress: log.ipAddress || '',
+          fraudScore: log.fraudScore || 0,
+          suspiciousActivity: log.suspiciousActivity ? 'Yes' : 'No',
+        };
+      });
 
       const csv = generateCSV(exportData, [
         'createdAt',
@@ -7856,6 +7866,121 @@ Be friendly, informative, and politically neutral when discussing governance. En
     } catch (error) {
       console.error("Export quizzes error:", error);
       res.status(500).json({ success: false, error: "Failed to export quizzes" });
+    }
+  });
+
+  // Elections Admin Routes
+  app.get("/api/admin/elections", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listElections(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get elections error:", error);
+      res.status(500).json({ success: false, error: "Failed to get elections" });
+    }
+  });
+
+  // Events Admin Routes
+  app.get("/api/admin/events", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listEvents(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get events error:", error);
+      res.status(500).json({ success: false, error: "Failed to get events" });
+    }
+  });
+
+  // Content/News Admin Routes
+  app.get("/api/admin/content", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listNews(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get news error:", error);
+      res.status(500).json({ success: false, error: "Failed to get news" });
+    }
+  });
+
+  // Campaigns Admin Routes
+  app.get("/api/admin/campaigns", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listCampaigns(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get campaigns error:", error);
+      res.status(500).json({ success: false, error: "Failed to get campaigns" });
+    }
+  });
+
+  app.post("/api/admin/campaigns/bulk", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { ids, action } = req.body;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, error: "Invalid campaign IDs" });
+      }
+
+      await storage.bulkUpdateCampaigns(ids, action);
+
+      await logAudit({
+        userId: req.user!.id,
+        action: `bulk_${action}_campaigns`,
+        resourceType: 'campaign',
+        details: { campaignIds: ids, count: ids.length },
+        status: 'success',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, message: `Bulk action "${action}" completed on ${ids.length} campaign(s)` });
+    } catch (error) {
+      console.error("Campaigns bulk operation error:", error);
+      res.status(500).json({ success: false, error: "Failed to complete bulk operation" });
+    }
+  });
+
+  // Incidents Admin Routes
+  app.get("/api/admin/incidents", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listIncidents(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get incidents error:", error);
+      res.status(500).json({ success: false, error: "Failed to get incidents" });
+    }
+  });
+
+  // Knowledge Base Admin Routes
+  app.get("/api/admin/knowledge-base", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listKnowledgeArticles(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get knowledge articles error:", error);
+      res.status(500).json({ success: false, error: "Failed to get knowledge articles" });
+    }
+  });
+
+  // Tasks Admin Routes
+  app.get("/api/admin/tasks", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listTasks(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get tasks error:", error);
+      res.status(500).json({ success: false, error: "Failed to get tasks" });
+    }
+  });
+
+  // Donations Admin Routes (updated to use storage pattern)
+  app.get("/api/admin/donations-list", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await storage.listDonations(req.query as FilterDTO);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Get donations error:", error);
+      res.status(500).json({ success: false, error: "Failed to get donations" });
     }
   });
 

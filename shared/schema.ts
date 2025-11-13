@@ -210,6 +210,8 @@ export const events = pgTable("events", {
   category: text("category").notNull(), // "Town Hall", "Rally", "Summit", etc.
   date: timestamp("date").notNull(),
   location: text("location").notNull(),
+  coordinates: jsonb("coordinates"), // { lat: number; lng: number } for location validation
+  points: integer("points").default(10), // Points awarded for attendance
   stateId: varchar("state_id").references(() => states.id), // Optional - for state-level events
   maxAttendees: integer("max_attendees"),
   imageUrl: text("image_url"),

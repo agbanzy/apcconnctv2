@@ -82,7 +82,7 @@ const adminMenuItems = [
   },
   {
     title: "Knowledge Base",
-    url: "/admin/knowledge",
+    url: "/admin/knowledge-base",
     icon: BookOpen,
   },
   {

@@ -20,9 +20,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,34 +43,33 @@ import { useResourceList } from "@/hooks/use-resource-list";
 import { useResourceMutations } from "@/hooks/use-resource-mutations";
 import { ExportButton } from "@/components/admin/ExportButton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, CheckCircle, XCircle, MessageSquare } from "lucide-react";
+import { Plus, Edit, Trash2, BookOpen, Eye } from "lucide-react";
 import { format } from "date-fns";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 
-interface Campaign {
+interface KnowledgeBase {
   id: string;
   title: string;
-  description: string;
+  content: string;
   category: string;
-  targetDate: string | null;
-  status: "active" | "approved" | "rejected";
-  votes: number;
-  creator?: { firstName: string; lastName: string };
+  type: "article" | "faq";
+  tags: string[];
+  published: boolean;
+  views: number;
   createdAt: string;
 }
 
-const campaignSchema = z.object({
+const knowledgeBaseSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().min(20, "Description must be at least 20 characters"),
+  content: z.string().min(20, "Content must be at least 20 characters"),
   category: z.string().min(1, "Category is required"),
-  targetDate: z.string().optional(),
-  status: z.enum(["active", "approved", "rejected"]),
+  type: z.enum(["article", "faq"]),
+  tags: z.string().optional(),
+  published: z.boolean(),
 });
 
-type CampaignFormData = z.infer<typeof campaignSchema>;
+type KnowledgeBaseFormData = z.infer<typeof knowledgeBaseSchema>;
 
-export default function AdminCampaigns() {
+export default function AdminKnowledgeBase() {
   const { toast } = useToast();
   const { filters, updateFilter, setFilters } = useResourceController({
     pageSize: 20,
@@ -77,137 +78,111 @@ export default function AdminCampaigns() {
   });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
-  const [deleteCampaignId, setDeleteCampaignId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingKB, setEditingKB] = useState<KnowledgeBase | null>(null);
+  const [deleteKBId, setDeleteKBId] = useState<string | null>(null);
 
-  const { data, isLoading } = useResourceList<Campaign>("/api/admin/campaigns", filters);
-  const { create, update, remove } = useResourceMutations<Campaign>("/api/admin/campaigns");
+  const { data, isLoading } = useResourceList<KnowledgeBase>("/api/admin/knowledge-base", filters);
+  const { create, update, remove } = useResourceMutations<KnowledgeBase>("/api/admin/knowledge-base");
 
-  const bulkApproveMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      return await apiRequest("POST", "/api/admin/campaigns/bulk-approve", { ids });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/campaigns"] });
-      toast({ title: "Success", description: "Campaigns approved successfully" });
-      setSelectedIds([]);
-    },
-  });
-
-  const bulkRejectMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      return await apiRequest("POST", "/api/admin/campaigns/bulk-reject", { ids });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/campaigns"] });
-      toast({ title: "Success", description: "Campaigns rejected successfully" });
-      setSelectedIds([]);
-    },
-  });
-
-  const form = useForm<CampaignFormData>({
-    resolver: zodResolver(campaignSchema),
+  const form = useForm<KnowledgeBaseFormData>({
+    resolver: zodResolver(knowledgeBaseSchema),
     defaultValues: {
       title: "",
-      description: "",
+      content: "",
       category: "",
-      targetDate: "",
-      status: "active",
+      type: "article",
+      tags: "",
+      published: false,
     },
   });
 
-  const columns: Column<Campaign>[] = [
+  const columns: Column<KnowledgeBase>[] = [
     {
       key: "title",
       header: "Title",
-      render: (campaign) => (
-        <div className="max-w-md" data-testid={`text-title-${campaign.id}`}>
-          <p className="font-medium">{campaign.title}</p>
-          <p className="text-xs text-muted-foreground mt-1">{campaign.category}</p>
+      render: (kb) => (
+        <div className="max-w-md" data-testid={`text-title-${kb.id}`}>
+          <p className="font-medium">{kb.title}</p>
+          <p className="text-xs text-muted-foreground mt-1">{kb.category}</p>
         </div>
       ),
     },
     {
-      key: "creator",
-      header: "Creator",
-      render: (campaign) => (
-        <span className="text-sm" data-testid={`text-creator-${campaign.id}`}>
-          {campaign.creator
-            ? `${campaign.creator.firstName} ${campaign.creator.lastName}`
-            : "System"}
-        </span>
-      ),
-    },
-    {
-      key: "votes",
-      header: "Votes",
+      key: "type",
+      header: "Type",
       sortable: true,
-      render: (campaign) => (
-        <span className="text-sm font-mono" data-testid={`text-votes-${campaign.id}`}>
-          {campaign.votes || 0}
-        </span>
+      render: (kb) => (
+        <Badge
+          variant={kb.type === "article" ? "default" : "outline"}
+          data-testid={`badge-type-${kb.id}`}
+        >
+          {kb.type}
+        </Badge>
       ),
     },
     {
-      key: "status",
+      key: "published",
       header: "Status",
       sortable: true,
-      render: (campaign) => (
+      render: (kb) => (
         <Badge
-          variant={
-            campaign.status === "approved"
-              ? "default"
-              : campaign.status === "active"
-              ? "outline"
-              : "destructive"
-          }
-          data-testid={`badge-status-${campaign.id}`}
+          variant={kb.published ? "default" : "outline"}
+          data-testid={`badge-published-${kb.id}`}
         >
-          {campaign.status}
+          {kb.published ? "Published" : "Draft"}
         </Badge>
+      ),
+    },
+    {
+      key: "views",
+      header: "Views",
+      sortable: true,
+      render: (kb) => (
+        <div className="flex items-center gap-2" data-testid={`text-views-${kb.id}`}>
+          <Eye className="h-3 w-3 text-muted-foreground" />
+          <span className="text-sm font-mono">{kb.views || 0}</span>
+        </div>
       ),
     },
     {
       key: "createdAt",
       header: "Created",
       sortable: true,
-      render: (campaign) => (
-        <span className="text-sm" data-testid={`text-created-${campaign.id}`}>
-          {format(new Date(campaign.createdAt), "MMM d, yyyy")}
+      render: (kb) => (
+        <span className="text-sm" data-testid={`text-created-${kb.id}`}>
+          {format(new Date(kb.createdAt), "MMM d, yyyy")}
         </span>
       ),
     },
     {
       key: "actions",
       header: "Actions",
-      render: (campaign) => (
+      render: (kb) => (
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              setEditingCampaign(campaign);
+              setEditingKB(kb);
               form.reset({
-                title: campaign.title,
-                description: campaign.description,
-                category: campaign.category,
-                targetDate: campaign.targetDate
-                  ? format(new Date(campaign.targetDate), "yyyy-MM-dd")
-                  : "",
-                status: campaign.status,
+                title: kb.title,
+                content: kb.content,
+                category: kb.category,
+                type: kb.type,
+                tags: kb.tags?.join(", ") || "",
+                published: kb.published,
               });
               setDrawerOpen(true);
             }}
-            data-testid={`button-edit-${campaign.id}`}
+            data-testid={`button-edit-${kb.id}`}
           >
             <Edit className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setDeleteCampaignId(campaign.id)}
-            data-testid={`button-delete-${campaign.id}`}
+            onClick={() => setDeleteKBId(kb.id)}
+            data-testid={`button-delete-${kb.id}`}
           >
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
@@ -216,47 +191,48 @@ export default function AdminCampaigns() {
     },
   ];
 
-  const onSubmit = async (data: CampaignFormData) => {
+  const onSubmit = async (data: KnowledgeBaseFormData) => {
     try {
-      const campaignData = {
+      const kbData = {
         title: data.title,
-        description: data.description,
+        content: data.content,
         category: data.category,
-        targetDate: data.targetDate ? new Date(data.targetDate).toISOString() : null,
-        status: data.status,
+        type: data.type,
+        tags: data.tags ? data.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : [],
+        published: data.published,
       };
 
-      if (editingCampaign) {
-        await update.mutateAsync({ id: editingCampaign.id, data: campaignData });
-        toast({ title: "Success", description: "Campaign updated successfully" });
+      if (editingKB) {
+        await update.mutateAsync({ id: editingKB.id, data: kbData });
+        toast({ title: "Success", description: "Knowledge base article updated successfully" });
       } else {
-        await create.mutateAsync(campaignData);
-        toast({ title: "Success", description: "Campaign created successfully" });
+        await create.mutateAsync(kbData);
+        toast({ title: "Success", description: "Knowledge base article created successfully" });
       }
 
       setDrawerOpen(false);
-      setEditingCampaign(null);
+      setEditingKB(null);
       form.reset();
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save campaign",
+        description: error instanceof Error ? error.message : "Failed to save knowledge base article",
         variant: "destructive",
       });
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteCampaignId) return;
+    if (!deleteKBId) return;
 
     try {
-      await remove.mutateAsync(deleteCampaignId);
-      toast({ title: "Success", description: "Campaign deleted successfully" });
-      setDeleteCampaignId(null);
+      await remove.mutateAsync(deleteKBId);
+      toast({ title: "Success", description: "Knowledge base article deleted successfully" });
+      setDeleteKBId(null);
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete campaign",
+        description: error instanceof Error ? error.message : "Failed to delete knowledge base article",
         variant: "destructive",
       });
     }
@@ -273,29 +249,29 @@ export default function AdminCampaigns() {
       <BreadcrumbNav
         items={[
           { label: "Admin", href: "/admin/dashboard" },
-          { label: "Campaign Management" },
+          { label: "Knowledge Base" },
         ]}
       />
 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold" data-testid="text-page-title">
-            Campaign Management
+            Knowledge Base
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage community campaigns and initiatives
+            Manage articles and FAQs for the community
           </p>
         </div>
         <Button
           onClick={() => {
-            setEditingCampaign(null);
+            setEditingKB(null);
             form.reset();
             setDrawerOpen(true);
           }}
-          data-testid="button-create-campaign"
+          data-testid="button-create-article"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Create Campaign
+          Create Article
         </Button>
       </div>
 
@@ -305,23 +281,6 @@ export default function AdminCampaigns() {
           onSearchChange={(value) => updateFilter("search", value)}
           filterSlot={
             <div className="flex gap-2">
-              <Select
-                value={filters.status || "all"}
-                onValueChange={(value) =>
-                  updateFilter("status", value === "all" ? "" : value)
-                }
-              >
-                <SelectTrigger className="w-[150px]" data-testid="select-filter-status">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-
               <Select
                 value={filters.category || "all"}
                 onValueChange={(value) =>
@@ -333,45 +292,47 @@ export default function AdminCampaigns() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Infrastructure">Infrastructure</SelectItem>
-                  <SelectItem value="Education">Education</SelectItem>
-                  <SelectItem value="Healthcare">Healthcare</SelectItem>
-                  <SelectItem value="Environment">Environment</SelectItem>
+                  <SelectItem value="Getting Started">Getting Started</SelectItem>
+                  <SelectItem value="Voting">Voting</SelectItem>
+                  <SelectItem value="Events">Events</SelectItem>
+                  <SelectItem value="Rewards">Rewards</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters.type || "all"}
+                onValueChange={(value) =>
+                  updateFilter("type", value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger className="w-[150px]" data-testid="select-filter-type">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="article">Article</SelectItem>
+                  <SelectItem value="faq">FAQ</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters.published !== undefined ? String(filters.published) : "all"}
+                onValueChange={(value) =>
+                  updateFilter("published", value === "all" ? undefined : value === "true")
+                }
+              >
+                <SelectTrigger className="w-[150px]" data-testid="select-filter-published">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="true">Published</SelectItem>
+                  <SelectItem value="false">Draft</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           }
         />
-
-        {selectedIds.length > 0 && (
-          <div className="mt-4 p-4 bg-muted rounded-lg flex items-center justify-between">
-            <span className="text-sm font-medium">
-              {selectedIds.length} campaign(s) selected
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => bulkApproveMutation.mutate(selectedIds)}
-                disabled={bulkApproveMutation.isPending}
-                data-testid="button-bulk-approve"
-              >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Approve Selected
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => bulkRejectMutation.mutate(selectedIds)}
-                disabled={bulkRejectMutation.isPending}
-                data-testid="button-bulk-reject"
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Reject Selected
-              </Button>
-            </div>
-          </div>
-        )}
 
         <div className="mt-6">
           <ResourceTable
@@ -389,9 +350,9 @@ export default function AdminCampaigns() {
 
         <div className="mt-4 flex justify-end">
           <ExportButton
-            endpoint="/api/admin/campaigns/export"
+            endpoint="/api/admin/knowledge-base/export"
             filters={filters}
-            filename={`campaigns_${Date.now()}.csv`}
+            filename={`knowledge_base_${Date.now()}.csv`}
             label="Export to CSV"
           />
         </div>
@@ -401,11 +362,11 @@ export default function AdminCampaigns() {
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);
-          setEditingCampaign(null);
+          setEditingKB(null);
           form.reset();
         }}
-        title={editingCampaign ? "Edit Campaign" : "Create Campaign"}
-        description={editingCampaign ? "Update campaign details" : "Add a new campaign"}
+        title={editingKB ? "Edit Article" : "Create Article"}
+        description={editingKB ? "Update article details" : "Add a new knowledge base article"}
       >
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -417,7 +378,7 @@ export default function AdminCampaigns() {
                   <FormLabel>Title</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Campaign title"
+                      placeholder="Article title"
                       {...field}
                       data-testid="input-title"
                     />
@@ -429,16 +390,16 @@ export default function AdminCampaigns() {
 
             <FormField
               control={form.control}
-              name="description"
+              name="content"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Content</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Campaign description..."
-                      rows={6}
+                      placeholder="Article content..."
+                      rows={10}
                       {...field}
-                      data-testid="input-description"
+                      data-testid="input-content"
                     />
                   </FormControl>
                   <FormMessage />
@@ -460,10 +421,10 @@ export default function AdminCampaigns() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Infrastructure">Infrastructure</SelectItem>
-                        <SelectItem value="Education">Education</SelectItem>
-                        <SelectItem value="Healthcare">Healthcare</SelectItem>
-                        <SelectItem value="Environment">Environment</SelectItem>
+                        <SelectItem value="Getting Started">Getting Started</SelectItem>
+                        <SelectItem value="Voting">Voting</SelectItem>
+                        <SelectItem value="Events">Events</SelectItem>
+                        <SelectItem value="Rewards">Rewards</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -473,20 +434,19 @@ export default function AdminCampaigns() {
 
               <FormField
                 control={form.control}
-                name="status"
+                name="type"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
+                    <FormLabel>Type</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-status">
-                          <SelectValue placeholder="Select status" />
+                        <SelectTrigger data-testid="select-type">
+                          <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="article">Article</SelectItem>
+                        <SelectItem value="faq">FAQ</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -497,18 +457,43 @@ export default function AdminCampaigns() {
 
             <FormField
               control={form.control}
-              name="targetDate"
+              name="tags"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Target Date (Optional)</FormLabel>
+                  <FormLabel>Tags (Optional)</FormLabel>
                   <FormControl>
                     <Input
-                      type="date"
+                      placeholder="voting, rewards, events (comma-separated)"
                       {...field}
-                      data-testid="input-target-date"
+                      data-testid="input-tags"
                     />
                   </FormControl>
+                  <FormDescription>
+                    Enter tags separated by commas
+                  </FormDescription>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="published"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Published</FormLabel>
+                    <FormDescription>
+                      Make this article visible to users
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      data-testid="switch-published"
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />
@@ -519,7 +504,7 @@ export default function AdminCampaigns() {
                 variant="outline"
                 onClick={() => {
                   setDrawerOpen(false);
-                  setEditingCampaign(null);
+                  setEditingKB(null);
                   form.reset();
                 }}
                 data-testid="button-cancel"
@@ -533,21 +518,21 @@ export default function AdminCampaigns() {
               >
                 {create.isPending || update.isPending
                   ? "Saving..."
-                  : editingCampaign
-                  ? "Update Campaign"
-                  : "Create Campaign"}
+                  : editingKB
+                  ? "Update Article"
+                  : "Create Article"}
               </Button>
             </div>
           </form>
         </Form>
       </ResourceDrawer>
 
-      <AlertDialog open={!!deleteCampaignId} onOpenChange={() => setDeleteCampaignId(null)}>
+      <AlertDialog open={!!deleteKBId} onOpenChange={() => setDeleteKBId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+            <AlertDialogTitle>Delete Article</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this campaign? This action cannot be undone.
+              Are you sure you want to delete this knowledge base article? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

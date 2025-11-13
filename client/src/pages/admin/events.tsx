@@ -1,27 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Calendar as CalendarIcon, List, Plus, Download, Send, XCircle, BarChart } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -29,28 +13,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ResourceToolbar } from "@/components/admin/ResourceToolbar";
+import { ResourceTable, Column } from "@/components/admin/ResourceTable";
+import { ResourceDrawer } from "@/components/admin/ResourceDrawer";
+import { useResourceController } from "@/hooks/use-resource-controller";
+import { useResourceList } from "@/hooks/use-resource-list";
+import { useResourceMutations } from "@/hooks/use-resource-mutations";
+import { ExportButton } from "@/components/admin/ExportButton";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, Edit, Trash2, Users } from "lucide-react";
+import { format } from "date-fns";
+
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  date: string;
+  location: string;
+  maxAttendees: number | null;
+  attendeeCount?: number;
+  points: number;
+  coordinates?: { lat: number; lng: number } | null;
+  createdAt: string;
+}
 
 const eventSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  category: z.string().min(3, "Category is required"),
-  date: z.string(),
+  category: z.string().min(1, "Category is required"),
+  date: z.string().min(1, "Date is required"),
   location: z.string().min(3, "Location is required"),
-  maxAttendees: z.string().optional(),
+  maxAttendees: z.coerce.number().nullable().optional(),
+  points: z.coerce.number().min(0, "Points must be at least 0"),
+  lat: z.string().optional(),
+  lng: z.string().optional(),
 });
+
+type EventFormData = z.infer<typeof eventSchema>;
 
 export default function AdminEvents() {
   const { toast } = useToast();
-  const [view, setView] = useState<"calendar" | "list">("list");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [rsvpsDialogOpen, setRsvpsDialogOpen] = useState(false);
-
-  const { data: eventsData, isLoading } = useQuery({
-    queryKey: ["/api/events"],
+  const { filters, updateFilter, setFilters } = useResourceController({
+    pageSize: 20,
+    sortBy: "date",
+    sortOrder: "desc",
   });
 
-  const form = useForm({
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
+
+  const { data, isLoading } = useResourceList<Event>("/api/admin/events", filters);
+  const { create, update, remove } = useResourceMutations<Event>("/api/admin/events");
+
+  const form = useForm<EventFormData>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
       title: "",
@@ -58,303 +95,474 @@ export default function AdminEvents() {
       category: "",
       date: "",
       location: "",
-      maxAttendees: "",
+      maxAttendees: null,
+      points: 50,
+      lat: "",
+      lng: "",
     },
   });
 
-  const createEventMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/events", {
-      ...data,
-      maxAttendees: data.maxAttendees ? parseInt(data.maxAttendees) : undefined,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
-      toast({ title: "Success", description: "Event created successfully" });
-      setCreateDialogOpen(false);
+  const columns: Column<Event>[] = [
+    {
+      key: "title",
+      header: "Event",
+      render: (event) => (
+        <div className="max-w-md" data-testid={`text-title-${event.id}`}>
+          <p className="font-medium">{event.title}</p>
+          <p className="text-xs text-muted-foreground mt-1">{event.category}</p>
+        </div>
+      ),
+    },
+    {
+      key: "date",
+      header: "Date",
+      sortable: true,
+      render: (event) => (
+        <span className="text-sm" data-testid={`text-date-${event.id}`}>
+          {format(new Date(event.date), "MMM d, yyyy h:mm a")}
+        </span>
+      ),
+    },
+    {
+      key: "location",
+      header: "Location",
+      render: (event) => (
+        <span className="text-sm" data-testid={`text-location-${event.id}`}>
+          {event.location}
+        </span>
+      ),
+    },
+    {
+      key: "attendees",
+      header: "Attendees",
+      render: (event) => (
+        <span className="text-sm font-mono" data-testid={`text-attendees-${event.id}`}>
+          {event.attendeeCount || 0}
+          {event.maxAttendees ? ` / ${event.maxAttendees}` : ""}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (event) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setEditingEvent(event);
+              form.reset({
+                title: event.title,
+                description: event.description,
+                category: event.category,
+                date: format(new Date(event.date), "yyyy-MM-dd'T'HH:mm"),
+                location: event.location,
+                maxAttendees: event.maxAttendees,
+                points: event.points,
+                lat: event.coordinates?.lat?.toString() || "",
+                lng: event.coordinates?.lng?.toString() || "",
+              });
+              setDrawerOpen(true);
+            }}
+            data-testid={`button-edit-${event.id}`}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteEventId(event.id)}
+            data-testid={`button-delete-${event.id}`}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const onSubmit = async (data: EventFormData) => {
+    try {
+      const eventData: any = {
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        date: new Date(data.date).toISOString(),
+        location: data.location,
+        maxAttendees: data.maxAttendees || null,
+        points: data.points,
+      };
+
+      if (data.lat && data.lng) {
+        eventData.coordinates = {
+          lat: parseFloat(data.lat),
+          lng: parseFloat(data.lng),
+        };
+      }
+
+      if (editingEvent) {
+        await update.mutateAsync({ id: editingEvent.id, data: eventData });
+        toast({ title: "Success", description: "Event updated successfully" });
+      } else {
+        await create.mutateAsync(eventData);
+        toast({ title: "Success", description: "Event created successfully" });
+      }
+
+      setDrawerOpen(false);
+      setEditingEvent(null);
       form.reset();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create event", variant: "destructive" });
-    },
-  });
-
-  const cancelEventMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/events/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
-      toast({ title: "Success", description: "Event cancelled successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to cancel event", variant: "destructive" });
-    },
-  });
-
-  const events = eventsData?.data || [];
-
-  const viewRSVPs = (event: any) => {
-    setSelectedEvent(event);
-    setRsvpsDialogOpen(true);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save event",
+        variant: "destructive",
+      });
+    }
   };
 
-  const exportRSVPs = (event: any) => {
-    toast({ title: "Info", description: "Exporting RSVPs..." });
+  const handleDelete = async () => {
+    if (!deleteEventId) return;
+
+    try {
+      await remove.mutateAsync(deleteEventId);
+      toast({ title: "Success", description: "Event deleted successfully" });
+      setDeleteEventId(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete event",
+        variant: "destructive",
+      });
+    }
   };
 
-  const sendNotification = (event: any) => {
-    toast({ title: "Info", description: "Sending notification to attendees..." });
+  const handleSort = (column: string) => {
+    const newSortOrder =
+      filters.sortBy === column && filters.sortOrder === "desc" ? "asc" : "desc";
+    setFilters({ ...filters, sortBy: column, sortOrder: newSortOrder });
   };
-
-  if (isLoading) {
-    return <div className="p-6">Loading events...</div>;
-  }
 
   return (
     <div className="space-y-6">
-      <BreadcrumbNav items={[{ label: 'Admin', href: '/admin/dashboard' }, { label: 'Events' }]} />
-      
+      <BreadcrumbNav
+        items={[
+          { label: "Admin", href: "/admin/dashboard" },
+          { label: "Event Management" },
+        ]}
+      />
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-3xl font-bold" data-testid="text-events-title">Events Management</h1>
-          <p className="text-muted-foreground mt-1">Create and manage events</p>
+          <h1 className="font-display text-3xl font-bold" data-testid="text-page-title">
+            Event Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage party events and activities
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as "calendar" | "list")}>
-            <TabsList>
-              <TabsTrigger value="list" data-testid="tab-list-view">
-                <List className="h-4 w-4 mr-2" />
-                List
-              </TabsTrigger>
-              <TabsTrigger value="calendar" data-testid="tab-calendar-view">
-                <CalendarIcon className="h-4 w-4 mr-2" />
-                Calendar
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-event">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Event
-          </Button>
-        </div>
+        <Button
+          onClick={() => {
+            setEditingEvent(null);
+            form.reset();
+            setDrawerOpen(true);
+          }}
+          data-testid="button-create-event"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Create Event
+        </Button>
       </div>
 
-      {view === "list" ? (
-        <div className="grid gap-4">
-          {events.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                No events found
-              </CardContent>
-            </Card>
-          ) : (
-            events.map((event: any) => (
-              <Card key={event.id} data-testid={`event-card-${event.id}`}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle>{event.title}</CardTitle>
-                      <p className="text-sm text-muted-foreground mt-1">{event.category}</p>
-                    </div>
-                    <Badge variant="secondary">{new Date(event.date).toLocaleDateString()}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <p className="text-sm">{event.description}</p>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>📍 {event.location}</span>
-                      <span>👥 {event.rsvpCount || 0} RSVPs</span>
-                      {event.maxAttendees && <span>Max: {event.maxAttendees}</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => viewRSVPs(event)}
-                        data-testid={`button-view-rsvps-${event.id}`}
-                      >
-                        <BarChart className="h-4 w-4 mr-2" />
-                        View RSVPs
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => exportRSVPs(event)}
-                        data-testid={`button-export-rsvps-${event.id}`}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Export
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => sendNotification(event)}
-                        data-testid={`button-notify-${event.id}`}
-                      >
-                        <Send className="h-4 w-4 mr-2" />
-                        Notify
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => cancelEventMutation.mutate(event.id)}
-                        data-testid={`button-cancel-${event.id}`}
-                      >
-                        <XCircle className="h-4 w-4 mr-2" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <CalendarIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Calendar view - Coming soon</p>
-          </CardContent>
-        </Card>
-      )}
+      <Card className="p-6">
+        <ResourceToolbar
+          searchValue={filters.search || ""}
+          onSearchChange={(value) => updateFilter("search", value)}
+          filterSlot={
+            <Select
+              value={filters.category || "all"}
+              onValueChange={(value) =>
+                updateFilter("category", value === "all" ? "" : value)
+              }
+            >
+              <SelectTrigger className="w-[180px]" data-testid="select-filter-category">
+                <SelectValue placeholder="Filter by category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="Town Hall">Town Hall</SelectItem>
+                <SelectItem value="Rally">Rally</SelectItem>
+                <SelectItem value="Meeting">Meeting</SelectItem>
+                <SelectItem value="Training">Training</SelectItem>
+                <SelectItem value="Community">Community</SelectItem>
+              </SelectContent>
+            </Select>
+          }
+        />
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-create-event">
-          <DialogHeader>
-            <DialogTitle>Create New Event</DialogTitle>
-            <DialogDescription>Set up a new event for members</DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit((data) => createEventMutation.mutate(data))} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Event title" data-testid="input-event-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <div className="mt-6">
+          <ResourceTable
+            columns={columns}
+            data={data?.data || []}
+            isLoading={isLoading}
+            currentPage={filters.page}
+            totalPages={data?.totalPages || 1}
+            onPageChange={(page) => updateFilter("page", page)}
+            onSort={handleSort}
+            sortBy={filters.sortBy}
+            sortOrder={filters.sortOrder as "asc" | "desc"}
+          />
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <ExportButton
+            endpoint="/api/admin/events/export"
+            filters={filters}
+            filename={`events_${Date.now()}.csv`}
+            label="Export to CSV"
+          />
+        </div>
+      </Card>
+
+      <ResourceDrawer
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditingEvent(null);
+          form.reset();
+        }}
+        title={editingEvent ? "Edit Event" : "Create Event"}
+        description={editingEvent ? "Update event details" : "Add a new event"}
+      >
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Title</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Event title"
+                      {...field}
+                      data-testid="input-title"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Event description..."
+                      {...field}
+                      data-testid="input-description"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="category"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-event-category">
+                        <SelectTrigger data-testid="select-category">
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="Town Hall">Town Hall</SelectItem>
                         <SelectItem value="Rally">Rally</SelectItem>
-                        <SelectItem value="Summit">Summit</SelectItem>
                         <SelectItem value="Meeting">Meeting</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
+                        <SelectItem value="Training">Training</SelectItem>
+                        <SelectItem value="Community">Community</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="Event description" rows={3} data-testid="input-event-description" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Date & Time</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="datetime-local" data-testid="input-event-date" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="maxAttendees"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Attendees (Optional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="number" placeholder="No limit" data-testid="input-event-max" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Event location" data-testid="input-event-location" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)} data-testid="button-cancel-event">
-                  Cancel
-                </Button>
-                <Button type="submit" data-testid="button-submit-event">Create Event</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={rsvpsDialogOpen} onOpenChange={setRsvpsDialogOpen}>
-        <DialogContent data-testid="dialog-rsvps">
-          <DialogHeader>
-            <DialogTitle>Event RSVPs</DialogTitle>
-            <DialogDescription>{selectedEvent?.title}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 border rounded-md">
-                <p className="text-2xl font-bold">{selectedEvent?.rsvpCount || 0}</p>
-                <p className="text-sm text-muted-foreground">Total RSVPs</p>
-              </div>
-              <div className="p-4 border rounded-md">
-                <p className="text-2xl font-bold">{selectedEvent?.attendedCount || 0}</p>
-                <p className="text-sm text-muted-foreground">Attended</p>
-              </div>
-              <div className="p-4 border rounded-md">
-                <p className="text-2xl font-bold">
-                  {selectedEvent?.rsvpCount ? Math.round((selectedEvent?.attendedCount || 0) / selectedEvent.rsvpCount * 100) : 0}%
-                </p>
-                <p className="text-sm text-muted-foreground">Attendance Rate</p>
-              </div>
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date & Time</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        {...field}
+                        data-testid="input-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <p className="text-sm text-muted-foreground">RSVP list will be displayed here</p>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+            <FormField
+              control={form.control}
+              name="location"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Location</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Event location"
+                      {...field}
+                      data-testid="input-location"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="maxAttendees"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Attendees (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Unlimited"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-max-attendees"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="points"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Points</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Points for attendance"
+                        {...field}
+                        data-testid="input-points"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="lat"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Latitude (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., 6.5244"
+                        {...field}
+                        data-testid="input-lat"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="lng"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Longitude (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., 3.3792"
+                        {...field}
+                        data-testid="input-lng"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setEditingEvent(null);
+                  form.reset();
+                }}
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={create.isPending || update.isPending}
+                data-testid="button-save"
+              >
+                {create.isPending || update.isPending
+                  ? "Saving..."
+                  : editingEvent
+                  ? "Update Event"
+                  : "Create Event"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </ResourceDrawer>
+
+      <AlertDialog open={!!deleteEventId} onOpenChange={() => setDeleteEventId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Event</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this event? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

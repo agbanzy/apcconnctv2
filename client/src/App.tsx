@@ -54,7 +54,7 @@ import AdminCampaigns from "@/pages/admin/campaigns";
 import AdminIncidents from "@/pages/admin/incidents";
 import AdminSettings from "@/pages/admin/settings";
 import AdminIdeas from "@/pages/admin/ideas";
-import AdminKnowledge from "@/pages/admin/knowledge";
+import AdminKnowledgeBase from "@/pages/admin/knowledge-base";
 import AdminDonations from "@/pages/admin/donations";
 import AdminChatbotAnalytics from "@/pages/admin/chatbot-analytics";
 import AdminTasks from "@/pages/admin/tasks";
@@ -148,7 +148,7 @@ function AppContent() {
                 <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
                 <Route path="/admin/incidents" component={() => <AdminRoute component={AdminIncidents} />} />
                 <Route path="/admin/ideas" component={() => <AdminRoute component={AdminIdeas} />} />
-                <Route path="/admin/knowledge" component={() => <AdminRoute component={AdminKnowledge} />} />
+                <Route path="/admin/knowledge-base" component={() => <AdminRoute component={AdminKnowledgeBase} />} />
                 <Route path="/admin/donations" component={() => <AdminRoute component={AdminDonations} />} />
                 <Route path="/admin/chatbot-analytics" component={() => <AdminRoute component={AdminChatbotAnalytics} />} />
                 <Route path="/admin/tasks" component={() => <AdminRoute component={AdminTasks} />} />

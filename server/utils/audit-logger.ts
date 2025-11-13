@@ -9,6 +9,7 @@ export const AuditActions = {
   PAYMENT: "payment",
   PAYMENT_FAILED: "payment_failed",
   ADMIN_ACTION: "admin_action",
+  ADMIN_UPDATE: "admin_update",
   ADMIN_SEED_BOUNDARIES: "admin_seed_boundaries",
   NIN_VERIFICATION: "nin_verification",
   MEMBER_STATUS_CHANGE: "member_status_change",
@@ -17,6 +18,7 @@ export const AuditActions = {
   TASK_COMPLETED: "task_completed",
   BADGE_EARNED: "badge_earned",
   POINTS_AWARDED: "points_awarded",
+  REWARD_REDEEM: "reward_redeem",
   DONATION: "donation",
   INCIDENT_REPORTED: "incident_reported",
   CAMPAIGN_VOTE: "campaign_vote",
@@ -33,6 +35,7 @@ export interface AuditLogData {
   details?: Record<string, any>;
   ipAddress?: string;
   userAgent?: string;
+  fingerprint?: string;
   status: "success" | "failure";
 }
 
@@ -47,6 +50,7 @@ export async function logAudit(data: AuditLogData): Promise<void> {
       details: data.details || null,
       ipAddress: data.ipAddress || null,
       userAgent: data.userAgent || null,
+      fingerprint: data.fingerprint || null,
       status: data.status,
     });
   } catch (error) {

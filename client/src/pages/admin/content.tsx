@@ -1,21 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -23,481 +13,538 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Eye, Edit, CheckCircle, XCircle } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ResourceToolbar } from "@/components/admin/ResourceToolbar";
+import { ResourceTable, Column } from "@/components/admin/ResourceTable";
+import { ResourceDrawer } from "@/components/admin/ResourceDrawer";
+import { useResourceController } from "@/hooks/use-resource-controller";
+import { useResourceList } from "@/hooks/use-resource-list";
+import { useResourceMutations } from "@/hooks/use-resource-mutations";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Plus, Edit, Trash2, FileText } from "lucide-react";
+import { format } from "date-fns";
 
-const newsSchema = z.object({
-  title: z.string().min(3, "Title required"),
-  content: z.string().min(10, "Content required"),
-  category: z.string().min(3, "Category required"),
+interface Content {
+  id: string;
+  title: string;
+  content: string;
+  excerpt: string | null;
+  category: string;
+  imageUrl: string | null;
+  status: "draft" | "published" | "archived";
+  publishedAt: string | null;
+  author?: { firstName: string; lastName: string };
+  createdAt: string;
+}
+
+const contentSchema = z.object({
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  content: z.string().min(20, "Content must be at least 20 characters"),
+  excerpt: z.string().optional(),
+  category: z.string().min(1, "Category is required"),
+  imageUrl: z.string().url().optional().or(z.literal("")),
+  status: z.enum(["draft", "published", "archived"]),
+  publishedAt: z.string().optional(),
 });
 
-const quizSchema = z.object({
-  question: z.string().min(10, "Question required"),
-  category: z.string().min(3, "Category required"),
-  points: z.string().min(1, "Points required"),
-});
-
-const taskSchema = z.object({
-  title: z.string().min(3, "Title required"),
-  description: z.string().min(10, "Description required"),
-  location: z.string().min(3, "Location required"),
-  difficulty: z.string().min(1, "Difficulty required"),
-  points: z.string().min(1, "Points required"),
-});
+type ContentFormData = z.infer<typeof contentSchema>;
 
 export default function AdminContent() {
   const { toast } = useToast();
-  const [newsDialogOpen, setNewsDialogOpen] = useState(false);
-  const [quizDialogOpen, setQuizDialogOpen] = useState(false);
-  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-
-  const { data: newsData } = useQuery<{ data: any[] }>({ queryKey: ["/api/news"] });
-  const { data: quizzesData } = useQuery<{ data: any[] }>({ queryKey: ["/api/quizzes"] });
-  const { data: tasksData } = useQuery<{ data: any[] }>({ queryKey: ["/api/tasks"] });
-  const { data: microTasksData } = useQuery<{ data: any[] }>({ queryKey: ["/api/tasks/micro"] });
-
-  const newsForm = useForm({
-    resolver: zodResolver(newsSchema),
-    defaultValues: { title: "", content: "", category: "" },
+  const { filters, updateFilter, setFilters } = useResourceController({
+    pageSize: 20,
+    sortBy: "createdAt",
+    sortOrder: "desc",
   });
 
-  const quizForm = useForm({
-    resolver: zodResolver(quizSchema),
-    defaultValues: { question: "", category: "", points: "" },
-  });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingContent, setEditingContent] = useState<Content | null>(null);
+  const [deleteContentId, setDeleteContentId] = useState<string | null>(null);
 
-  const taskForm = useForm({
-    resolver: zodResolver(taskSchema),
-    defaultValues: { title: "", description: "", location: "", difficulty: "", points: "" },
-  });
+  const { data, isLoading } = useResourceList<Content>("/api/admin/content", filters);
+  const { create, update, remove } = useResourceMutations<Content>("/api/admin/content");
 
-  const createNewsMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/news", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/news"] });
-      toast({ title: "Success", description: "News post created" });
-      setNewsDialogOpen(false);
-      newsForm.reset();
+  const form = useForm<ContentFormData>({
+    resolver: zodResolver(contentSchema),
+    defaultValues: {
+      title: "",
+      content: "",
+      excerpt: "",
+      category: "",
+      imageUrl: "",
+      status: "draft",
+      publishedAt: "",
     },
   });
 
-  const createQuizMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/quizzes", {
-      ...data,
-      points: parseInt(data.points),
-      options: ["Option 1", "Option 2", "Option 3", "Option 4"],
-      correctAnswer: 0,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/quizzes"] });
-      toast({ title: "Success", description: "Quiz created" });
-      setQuizDialogOpen(false);
-      quizForm.reset();
+  const columns: Column<Content>[] = [
+    {
+      key: "title",
+      header: "Title",
+      render: (content) => (
+        <div className="max-w-md" data-testid={`text-title-${content.id}`}>
+          <p className="font-medium">{content.title}</p>
+          <p className="text-xs text-muted-foreground mt-1">{content.category}</p>
+        </div>
+      ),
     },
-  });
-
-  const createTaskMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/tasks", {
-      ...data,
-      points: parseInt(data.points),
-      skills: [],
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      toast({ title: "Success", description: "Task created" });
-      setTaskDialogOpen(false);
-      taskForm.reset();
+    {
+      key: "author",
+      header: "Author",
+      render: (content) => (
+        <span className="text-sm" data-testid={`text-author-${content.id}`}>
+          {content.author
+            ? `${content.author.firstName} ${content.author.lastName}`
+            : "System"}
+        </span>
+      ),
     },
-  });
-
-  const deleteContentMutation = useMutation({
-    mutationFn: ({ type, id }: { type: string; id: string }) => 
-      apiRequest("DELETE", `/api/${type}/${id}`),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/${variables.type}`] });
-      toast({ title: "Success", description: "Content deleted" });
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      render: (content) => (
+        <Badge
+          variant={
+            content.status === "published"
+              ? "default"
+              : content.status === "draft"
+              ? "outline"
+              : "destructive"
+          }
+          data-testid={`badge-status-${content.id}`}
+        >
+          {content.status}
+        </Badge>
+      ),
     },
-  });
+    {
+      key: "publishedAt",
+      header: "Published",
+      sortable: true,
+      render: (content) => (
+        <span className="text-sm" data-testid={`text-published-${content.id}`}>
+          {content.publishedAt
+            ? format(new Date(content.publishedAt), "MMM d, yyyy")
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (content) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setEditingContent(content);
+              form.reset({
+                title: content.title,
+                content: content.content,
+                excerpt: content.excerpt || "",
+                category: content.category,
+                imageUrl: content.imageUrl || "",
+                status: content.status,
+                publishedAt: content.publishedAt
+                  ? format(new Date(content.publishedAt), "yyyy-MM-dd'T'HH:mm")
+                  : "",
+              });
+              setDrawerOpen(true);
+            }}
+            data-testid={`button-edit-${content.id}`}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteContentId(content.id)}
+            data-testid={`button-delete-${content.id}`}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
-  const news = newsData?.data || [];
-  const quizzes = quizzesData?.data || [];
-  const tasks = tasksData?.data || [];
-  const microTasks = microTasksData?.data || [];
+  const onSubmit = async (data: ContentFormData) => {
+    try {
+      const contentData = {
+        title: data.title,
+        content: data.content,
+        excerpt: data.excerpt || null,
+        category: data.category,
+        imageUrl: data.imageUrl || null,
+        status: data.status,
+        publishedAt: data.publishedAt ? new Date(data.publishedAt).toISOString() : null,
+      };
+
+      if (editingContent) {
+        await update.mutateAsync({ id: editingContent.id, data: contentData });
+        toast({ title: "Success", description: "Content updated successfully" });
+      } else {
+        await create.mutateAsync(contentData);
+        toast({ title: "Success", description: "Content created successfully" });
+      }
+
+      setDrawerOpen(false);
+      setEditingContent(null);
+      form.reset();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save content",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteContentId) return;
+
+    try {
+      await remove.mutateAsync(deleteContentId);
+      toast({ title: "Success", description: "Content deleted successfully" });
+      setDeleteContentId(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete content",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSort = (column: string) => {
+    const newSortOrder =
+      filters.sortBy === column && filters.sortOrder === "desc" ? "asc" : "desc";
+    setFilters({ ...filters, sortBy: column, sortOrder: newSortOrder });
+  };
 
   return (
     <div className="space-y-6">
-      <BreadcrumbNav items={[{ label: 'Admin', href: '/admin/dashboard' }, { label: 'Content' }]} />
-      
-      <div>
-        <h1 className="font-display text-3xl font-bold" data-testid="text-content-title">Content Management</h1>
-        <p className="text-muted-foreground mt-1">Manage news, quizzes, tasks, and micro-tasks</p>
+      <BreadcrumbNav
+        items={[
+          { label: "Admin", href: "/admin/dashboard" },
+          { label: "Content Management" },
+        ]}
+      />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-bold" data-testid="text-page-title">
+            Content Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Create and manage news articles and content
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setEditingContent(null);
+            form.reset();
+            setDrawerOpen(true);
+          }}
+          data-testid="button-create-content"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Create Content
+        </Button>
       </div>
 
-      <Tabs defaultValue="news" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="news" data-testid="tab-news">News Posts</TabsTrigger>
-          <TabsTrigger value="quizzes" data-testid="tab-quizzes">Quizzes</TabsTrigger>
-          <TabsTrigger value="tasks" data-testid="tab-tasks">Volunteer Tasks</TabsTrigger>
-          <TabsTrigger value="micro-tasks" data-testid="tab-micro-tasks">Micro-tasks</TabsTrigger>
-        </TabsList>
+      <Card className="p-6">
+        <ResourceToolbar
+          searchValue={filters.search || ""}
+          onSearchChange={(value) => updateFilter("search", value)}
+          filterSlot={
+            <div className="flex gap-2">
+              <Select
+                value={filters.category || "all"}
+                onValueChange={(value) =>
+                  updateFilter("category", value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger className="w-[180px]" data-testid="select-filter-category">
+                  <SelectValue placeholder="Filter by category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="News">News</SelectItem>
+                  <SelectItem value="Announcement">Announcement</SelectItem>
+                  <SelectItem value="Policy">Policy</SelectItem>
+                  <SelectItem value="Event">Event</SelectItem>
+                </SelectContent>
+              </Select>
 
-        <TabsContent value="news" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setNewsDialogOpen(true)} data-testid="button-create-news">
-              <Plus className="h-4 w-4 mr-2" />
-              Create News Post
-            </Button>
-          </div>
-          <div className="grid gap-4">
-            {news.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No news posts
-                </CardContent>
-              </Card>
-            ) : (
-              news.map((item: any) => (
-                <Card key={item.id} data-testid={`news-card-${item.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{item.title}</CardTitle>
-                        <Badge variant="secondary" className="mt-2">{item.category}</Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" data-testid={`button-edit-news-${item.id}`}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => deleteContentMutation.mutate({ type: 'news', id: item.id })}
-                          data-testid={`button-delete-news-${item.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{item.content}</p>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
+              <Select
+                value={filters.status || "all"}
+                onValueChange={(value) =>
+                  updateFilter("status", value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger className="w-[150px]" data-testid="select-filter-status">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          }
+        />
 
-        <TabsContent value="quizzes" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setQuizDialogOpen(true)} data-testid="button-create-quiz">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Quiz
-            </Button>
-          </div>
-          <div className="grid gap-4">
-            {quizzes.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No quizzes
-                </CardContent>
-              </Card>
-            ) : (
-              quizzes.map((quiz: any) => (
-                <Card key={quiz.id} data-testid={`quiz-card-${quiz.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{quiz.question}</CardTitle>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="secondary">{quiz.category}</Badge>
-                          <Badge variant="outline">{quiz.points} points</Badge>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => deleteContentMutation.mutate({ type: 'quizzes', id: quiz.id })}
-                        data-testid={`button-delete-quiz-${quiz.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
+        <div className="mt-6">
+          <ResourceTable
+            columns={columns}
+            data={data?.data || []}
+            isLoading={isLoading}
+            currentPage={filters.page}
+            totalPages={data?.totalPages || 1}
+            onPageChange={(page) => updateFilter("page", page)}
+            onSort={handleSort}
+            sortBy={filters.sortBy}
+            sortOrder={filters.sortOrder as "asc" | "desc"}
+          />
+        </div>
 
-        <TabsContent value="tasks" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setTaskDialogOpen(true)} data-testid="button-create-task">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Task
-            </Button>
-          </div>
-          <div className="grid gap-4">
-            {tasks.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No volunteer tasks
-                </CardContent>
-              </Card>
-            ) : (
-              tasks.map((task: any) => (
-                <Card key={task.id} data-testid={`task-card-${task.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{task.title}</CardTitle>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="secondary">{task.difficulty}</Badge>
-                          <Badge variant="outline">{task.points} points</Badge>
-                          <Badge>{task.status}</Badge>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => deleteContentMutation.mutate({ type: 'tasks', id: task.id })}
-                        data-testid={`button-delete-task-${task.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{task.description}</p>
-                    <p className="text-sm text-muted-foreground mt-2">📍 {task.location}</p>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
+        <div className="mt-4 flex justify-end">
+          <ExportButton
+            endpoint="/api/admin/content/export"
+            filters={filters}
+            filename={`content_${Date.now()}.csv`}
+            label="Export to CSV"
+          />
+        </div>
+      </Card>
 
-        <TabsContent value="micro-tasks" className="space-y-4">
-          <div className="flex justify-end">
-            <Button data-testid="button-create-micro-task">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Micro-task
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              {microTasks.length === 0 ? "No micro-tasks" : `${microTasks.length} micro-tasks`}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <ResourceDrawer
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditingContent(null);
+          form.reset();
+        }}
+        title={editingContent ? "Edit Content" : "Create Content"}
+        description={editingContent ? "Update content details" : "Add new content"}
+      >
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Title</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Content title"
+                      {...field}
+                      data-testid="input-title"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-      <Dialog open={newsDialogOpen} onOpenChange={setNewsDialogOpen}>
-        <DialogContent data-testid="dialog-create-news">
-          <DialogHeader>
-            <DialogTitle>Create News Post</DialogTitle>
-          </DialogHeader>
-          <Form {...newsForm}>
-            <form onSubmit={newsForm.handleSubmit((data) => createNewsMutation.mutate(data))} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="excerpt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Excerpt (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Brief summary..."
+                      rows={2}
+                      {...field}
+                      data-testid="input-excerpt"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Content</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Full content..."
+                      rows={8}
+                      {...field}
+                      data-testid="input-content"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
-                control={newsForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-news-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={newsForm.control}
+                control={form.control}
                 name="category"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-news-category" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={newsForm.control}
-                name="content"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Content</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={5} data-testid="input-news-content" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setNewsDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" data-testid="button-submit-news">Create</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={quizDialogOpen} onOpenChange={setQuizDialogOpen}>
-        <DialogContent data-testid="dialog-create-quiz">
-          <DialogHeader>
-            <DialogTitle>Create Quiz</DialogTitle>
-          </DialogHeader>
-          <Form {...quizForm}>
-            <form onSubmit={quizForm.handleSubmit((data) => createQuizMutation.mutate(data))} className="space-y-4">
-              <FormField
-                control={quizForm.control}
-                name="question"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Question</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={3} data-testid="input-quiz-question" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={quizForm.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-quiz-category" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={quizForm.control}
-                name="points"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Points</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" data-testid="input-quiz-points" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setQuizDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" data-testid="button-submit-quiz">Create</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent data-testid="dialog-create-task">
-          <DialogHeader>
-            <DialogTitle>Create Volunteer Task</DialogTitle>
-          </DialogHeader>
-          <Form {...taskForm}>
-            <form onSubmit={taskForm.handleSubmit((data) => createTaskMutation.mutate(data))} className="space-y-4">
-              <FormField
-                control={taskForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-task-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={taskForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={3} data-testid="input-task-description" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={taskForm.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-task-location" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={taskForm.control}
-                  name="difficulty"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Difficulty</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-task-difficulty">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Easy">Easy</SelectItem>
-                          <SelectItem value="Medium">Medium</SelectItem>
-                          <SelectItem value="Hard">Hard</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={taskForm.control}
-                  name="points"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Points</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <Input {...field} type="number" data-testid="input-task-points" />
+                        <SelectTrigger data-testid="select-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setTaskDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" data-testid="button-submit-task">Create</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+                      <SelectContent>
+                        <SelectItem value="News">News</SelectItem>
+                        <SelectItem value="Announcement">Announcement</SelectItem>
+                        <SelectItem value="Policy">Policy</SelectItem>
+                        <SelectItem value="Event">Event</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-status">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="published">Published</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="imageUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Image URL (Optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://example.com/image.jpg"
+                      {...field}
+                      data-testid="input-image-url"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="publishedAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Publish Date (Optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="datetime-local"
+                      {...field}
+                      data-testid="input-published-at"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setEditingContent(null);
+                  form.reset();
+                }}
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={create.isPending || update.isPending}
+                data-testid="button-save"
+              >
+                {create.isPending || update.isPending
+                  ? "Saving..."
+                  : editingContent
+                  ? "Update Content"
+                  : "Create Content"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </ResourceDrawer>
+
+      <AlertDialog open={!!deleteContentId} onOpenChange={() => setDeleteContentId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Content</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this content? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
