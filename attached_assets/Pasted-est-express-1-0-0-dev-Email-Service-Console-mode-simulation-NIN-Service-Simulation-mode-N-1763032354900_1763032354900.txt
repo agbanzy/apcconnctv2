@@ -1,0 +1,33 @@
+est-express@1.0.0 dev
+📧 Email Service: Console mode (simulation)
+🆔 NIN Service: Simulation mode (NIMC API not configured)
+
+⚠️  WARNING: JWT_SECRET not set in environment. Using generated secret.
+   Set JWT_SECRET in .env for production use.
+
+[PushService] Initializing with provider: none
+[PushService] No provider configured. Running in simulation mode.
+🔔 Push Service: Simulation mode (no provider configured)
+⚠️  Development mode: Using permissive CSP for HMR
+11:08:35 AM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 13 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+11:08:56 AM [express] GET /api/auth/me 304 in 257ms :: {"success":true,"data":{"user":{"id":"078c451d…
+11:08:56 AM [express] GET /api/analytics/overview 403 in 143ms :: {"success":false,"error":"Forbidden…
+11:08:56 AM [express] GET /api/leaderboards/national/[object%20Object] 200 in 142ms
+11:08:56 AM [express] GET /api/members/me 304 in 180ms :: {"success":true,"data":{"id":"f3673764-2d78…
+11:08:57 AM [express] GET /api/news 304 in 1109ms :: {"success":true,"data":[{"id":"34bdff4e-9350-402…
+11:08:57 AM [express] GET /api/events 304 in 1111ms :: {"success":true,"data":[{"id":"d9985a9b-ca9b-4…
+11:08:57 AM [express] GET /api/points/transactions/f3673764-2d78-4d87-859b-8f6b3c099bab/[object%20Obj…
+11:08:58 AM [express] GET /api/analytics/map-data 304 in 2095ms :: {"success":true,"data":{"states":[…
+11:08:58 AM [express] GET /api/tasks/micro 304 in 1775ms :: {"success":true,"data":[{"id":"2f1f7189-8…
+11:08:58 AM [express] GET /api/referrals/my-code 304 in 774ms :: {"success":true,"data":{"referralCod…
+11:08:58 AM [express] GET /api/points/balance/f3673764-2d78-4d87-859b-8f6b3c099bab 304 in 810ms :: {"…
+11:08:58 AM [express] GET /api/referrals/stats 304 in 286ms :: {"success":true,"data":{"totalReferred…
+11:08:58 AM [express] GET /api/leaderboards/my-rank 304 in 770ms :: {"success":true,"data":{"national…
+11:08:59 AM [express] GET /api/events/d9985a9b-ca9b-43c5-ae34-41b22a558f0e/attendees 304 in 531ms :: …
+11:08:59 AM [express] GET /api/events/0c72c243-5c84-46b6-ab9f-a3b44d835ace/attendees 304 in 552ms :: …
+11:08:59 AM [express] GET /api/events/824f0a48-1fb2-4610-95b2-5e21d21e578c/attendees 304 in 585ms :: …
