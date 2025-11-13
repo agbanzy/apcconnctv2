@@ -82,9 +82,9 @@ export function StateDetailModal({ stateId, stateName, open, onOpenChange }: Sta
     enabled: open,
   });
 
-  const stateStats = mapData?.states.find((s: any) => s.name === stateName);
-
   if (!stateId || !stateName) return null;
+
+  const stateStats = mapData?.states?.find((s: any) => s.name === stateName);
 
   const memberChartData = stateStats ? [
     { name: 'Active', value: stateStats.activeMembers },
