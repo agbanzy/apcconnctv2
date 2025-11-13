@@ -9,7 +9,7 @@ import { Users, Copy, Check, Share2, TrendingUp, Award } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useState } from "react";
-import QRCode from "qrcode.react";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function ReferralsPage() {
   const { user } = useAuth();
@@ -251,7 +251,7 @@ export default function ReferralsPage() {
                 <Skeleton className="h-48 w-48" />
               ) : (
                 <div className="p-4 bg-white rounded-lg">
-                  <QRCode
+                  <QRCodeSVG
                     value={referralLink}
                     size={192}
                     level="M"
