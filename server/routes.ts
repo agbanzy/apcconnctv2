@@ -4297,17 +4297,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         data: {
-          totalMembers: totalMembers[0]?.count || 0,
-          activeMembers: activeMembers[0]?.count || 0,
-          totalEvents: totalEvents[0]?.count || 0,
-          upcomingEvents: upcomingEvents[0]?.count || 0,
-          totalElections: totalElections[0]?.count || 0,
-          totalVotes: totalVotes[0]?.count || 0,
-          activeCampaigns: activeCampaigns[0]?.count || 0,
-          totalIdeas: totalIdeas[0]?.count || 0,
-          statesWithPresence: statesWithPresence[0]?.count || 0,
-          wardsCovered: wardsCovered[0]?.count || 0,
-          totalEngagementPoints: totalEngagementPoints[0]?.total || 0
+          totalMembers: Number(totalMembers[0]?.count) || 0,
+          activeMembers: Number(activeMembers[0]?.count) || 0,
+          totalEvents: Number(totalEvents[0]?.count) || 0,
+          upcomingEvents: Number(upcomingEvents[0]?.count) || 0,
+          totalElections: Number(totalElections[0]?.count) || 0,
+          totalVotes: Number(totalVotes[0]?.count) || 0,
+          activeCampaigns: Number(activeCampaigns[0]?.count) || 0,
+          totalIdeas: Number(totalIdeas[0]?.count) || 0,
+          statesWithPresence: Number(statesWithPresence[0]?.count) || 0,
+          wardsCovered: Number(wardsCovered[0]?.count) || 0,
+          totalEngagementPoints: Number(totalEngagementPoints[0]?.total) || 0
         }
       });
     } catch (error) {
