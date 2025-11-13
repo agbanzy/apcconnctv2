@@ -63,11 +63,11 @@ interface Campaign {
 const COLORS = ['hsl(142 65% 35%)', 'hsl(142 65% 50%)', 'hsl(142 65% 65%)', 'hsl(142 65% 80%)'];
 
 export function StateDetailModal({ stateId, stateName, open, onOpenChange }: StateDetailModalProps) {
-  const { data: mapData } = useQuery<{ states: StateStats[] }>({
+  const { data: mapData, isLoading: isLoadingMap } = useQuery<{ states: StateStats[] }>({
     queryKey: ['/api/analytics/map-data'],
   });
 
-  const { data: lgasData } = useQuery<LGA[]>({
+  const { data: lgasData, isLoading: isLoadingLgas } = useQuery<LGA[]>({
     queryKey: stateId ? ['/api/locations/states', stateId, 'lgas'] : [],
     enabled: !!stateId && open,
   });
@@ -85,6 +85,7 @@ export function StateDetailModal({ stateId, stateName, open, onOpenChange }: Sta
   if (!stateId || !stateName) return null;
 
   const stateStats = mapData?.states?.find((s: any) => s.name === stateName);
+  const isLoading = isLoadingMap || isLoadingLgas;
 
   const memberChartData = stateStats ? [
     { name: 'Active', value: stateStats.activeMembers },
@@ -109,24 +110,48 @@ export function StateDetailModal({ stateId, stateName, open, onOpenChange }: Sta
         </DialogHeader>
 
         <ScrollArea className="h-[70vh] pr-4">
-          <div className="space-y-6">
-            {/* Key Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {isLoading ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i}>
+                    <CardHeader className="pb-2">
+                      <Skeleton className="h-4 w-24" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-16" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Total Members
-                  </CardTitle>
+                <CardHeader>
+                  <Skeleton className="h-5 w-32" />
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" />
-                    <span className="text-2xl font-bold" data-testid="text-total-members">
-                      {stateStats?.memberCount || 0}
-                    </span>
-                  </div>
+                  <Skeleton className="h-3 w-full" />
                 </CardContent>
               </Card>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Key Statistics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Members
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      <span className="text-2xl font-bold" data-testid="text-total-members">
+                        {stateStats?.memberCount || 0}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
 
               <Card>
                 <CardHeader className="pb-2">
@@ -298,6 +323,7 @@ export function StateDetailModal({ stateId, stateName, open, onOpenChange }: Sta
               </Button>
             </div>
           </div>
+          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>
