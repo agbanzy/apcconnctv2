@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -242,7 +242,7 @@ export const eventAttendance = pgTable("event_attendance", {
   uniqueEventAttendance: unique().on(table.memberId, table.eventId),
 }));
 
-// Volunteer Marketplace
+// Volunteer Marketplace (Enhanced for user-created tasks)
 export const volunteerTasks = pgTable("volunteer_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -250,15 +250,21 @@ export const volunteerTasks = pgTable("volunteer_tasks", {
   category: text("category").notNull(), // campaign, event, outreach, etc.
   location: text("location").notNull(),
   skills: jsonb("skills").$type<string[]>().notNull(),
-  points: integer("points").notNull(),
+  points: integer("points").notNull(), // Base points (admin tasks) or expected reward (user tasks)
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   deadline: timestamp("deadline"),
   difficulty: taskDifficultyEnum("difficulty").notNull(),
   maxVolunteers: integer("max_volunteers"),
   currentVolunteers: integer("current_volunteers").default(0),
-  creatorId: varchar("creator_id").references(() => users.id),
-  status: text("status").default("open"), // open, in-progress, completed
+  creatorId: varchar("creator_id").notNull().references(() => members.id), // NOT NULL - Every task has a creator
+  isUserCreated: boolean("is_user_created").default(false), // Created by member (vs admin)
+  // Note: Actual reward pool/escrow tracked in volunteer_task_funding table (single source of truth)
+  // IMPORTANT: Backend must enforce that volunteer_task_funding.funder_id = volunteer_tasks.creator_id
+  fundingStatus: text("funding_status").default("unfunded"), // unfunded, funded, distributing, completed
+  autoApprove: boolean("auto_approve").default(false), // Auto-approve completions if true
+  requiresProof: boolean("requires_proof").default(true), // Photo/evidence required
+  status: text("status").default("open"), // open, in-progress, completed, closed
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -377,24 +383,38 @@ export const userAchievements = pgTable("user_achievements", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Enhanced Point Ledger - Full transaction tracking
 export const userPoints = pgTable("user_points", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   memberId: varchar("member_id").notNull().references(() => members.id),
-  points: integer("points").default(0),
-  source: text("source").notNull(), // quiz, task, campaign, events, engagement, etc.
-  amount: integer("amount").notNull(),
+  transactionType: text("transaction_type").notNull(), // earn, spend, transfer, purchase, refund
+  source: text("source").notNull(), // quiz, task, campaign, events, engagement, purchase, etc.
+  amount: integer("amount").notNull(), // Positive for earning, negative for spending
+  balanceAfter: integer("balance_after").notNull(), // Running balance after this transaction
+  referenceId: varchar("reference_id"), // ID of related entity (quizId, taskId, etc.)
+  referenceType: text("reference_type"), // quiz, task, share, referral, purchase, etc.
+  metadata: jsonb("metadata"), // Additional transaction details
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Indexes for efficient queries
+  memberDateIdx: index("user_points_member_date_idx").on(table.memberId, table.createdAt),
+  referenceIdx: index("user_points_reference_idx").on(table.referenceType, table.referenceId),
+}));
 
-// Referrals
+// Referrals (Enhanced with 100 points reward)
 export const referrals = pgTable("referrals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   referrerId: varchar("referrer_id").notNull().references(() => members.id), // Who referred
   referredId: varchar("referred_id").notNull().references(() => members.id), // Who was referred
-  pointsEarned: integer("points_earned").default(0), // Points earned by referrer
-  status: text("status").default("pending"), // pending, completed
+  referralCode: text("referral_code"), // Unique code used for referral
+  pointsEarned: integer("points_earned").default(100), // Points earned by referrer (always 100)
+  status: text("status").default("pending"), // pending, completed, cancelled
+  completedAt: timestamp("completed_at"), // When referred member activated
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Ensure each person can only be referred once
+  uniqueReferredIdx: unique("unique_referred_idx").on(table.referredId),
+}));
 
 // Point Conversion Settings (Flutterwave)
 export const pointConversionSettings = pgTable("point_conversion_settings", {
@@ -425,6 +445,89 @@ export const pointRedemptions = pgTable("point_redemptions", {
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
 });
+
+// Point Purchases (Paystack - Buy points with card)
+export const pointPurchases = pgTable("point_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  pointsAmount: integer("points_amount").notNull(), // Points to purchase
+  nairaAmount: decimal("naira_amount", { precision: 10, scale: 2 }).notNull(), // Amount paid in NGN
+  exchangeRate: decimal("exchange_rate", { precision: 10, scale: 2 }).notNull(), // Rate at time of purchase
+  paystackReference: text("paystack_reference").notNull().unique(),
+  paystackAccessCode: text("paystack_access_code"),
+  status: text("status").notNull().default("pending"), // pending, success, failed, abandoned
+  paymentMethod: text("payment_method"), // card, bank_transfer, ussd
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  memberDateIdx: index("point_purchases_member_date_idx").on(table.memberId, table.createdAt),
+}));
+
+// Social Media Shares (10 points per verified share)
+export const socialShares = pgTable("social_shares", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  platform: text("platform").notNull(), // facebook, twitter, instagram, whatsapp
+  contentType: text("content_type").notNull(), // news, event, campaign, election
+  contentId: varchar("content_id").notNull(), // ID of shared content
+  shareUrl: text("share_url"),
+  shareHash: text("share_hash").notNull(), // Hash to prevent duplicates
+  verified: boolean("verified").default(false),
+  pointsAwarded: integer("points_awarded").default(0),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  // Prevent duplicate shares
+  uniqueShareIdx: unique("unique_share_idx").on(table.memberId, table.platform, table.shareHash),
+  memberPlatformIdx: index("social_shares_member_platform_idx").on(table.memberId, table.platform),
+}));
+
+// Share Verifications (Proof and validation)
+export const shareVerifications = pgTable("share_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shareId: varchar("share_id").notNull().references(() => socialShares.id),
+  verificationMethod: text("verification_method").notNull(), // screenshot, api, manual
+  proofUrl: text("proof_url"), // Screenshot or evidence
+  verifiedBy: varchar("verified_by").references(() => users.id), // Admin who verified
+  status: text("status").default("pending"), // pending, approved, rejected
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  verifiedAt: timestamp("verified_at"),
+});
+
+// Volunteer Task Funding (Escrow for user-created tasks - SINGLE funding per task)
+export const volunteerTaskFunding = pgTable("volunteer_task_funding", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => volunteerTasks.id).unique(), // UNIQUE: One funding per task
+  funderId: varchar("funder_id").notNull().references(() => members.id), // Task creator  
+  totalPointsLocked: integer("total_points_locked").notNull(), // Total points locked in escrow
+  pointsPerCompletion: integer("points_per_completion").notNull(), // Points per approved completion
+  maxCompletions: integer("max_completions").default(1), // How many can complete this task
+  completionsCount: integer("completions_count").default(0), // How many have completed
+  pointsDistributed: integer("points_distributed").default(0), // Points already paid out
+  status: text("status").default("locked"), // locked, distributing, completed, refunded
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  // Ensure one funding per task
+  uniqueTaskFunding: unique("unique_task_funding").on(table.taskId),
+}));
+
+// Note: Point balances will be computed dynamically from user_points ledger
+// or implemented as a materialized view with triggers in the future
+
+// Leaderboard Snapshots (Cache for performance)
+export const leaderboardSnapshots = pgTable("leaderboard_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  period: text("period").notNull(), // daily, weekly, monthly, all-time
+  scope: text("scope").notNull(), // national, state
+  scopeId: varchar("scope_id"), // state ID if scope is state
+  data: jsonb("data").$type<{rank: number; memberId: string; points: number; stateName?: string}[]>().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  periodScopeIdx: index("leaderboard_snapshots_period_scope_idx").on(table.period, table.scope, table.scopeId),
+}));
 
 // Micro Tasks
 export const microTasks = pgTable("micro_tasks", {
