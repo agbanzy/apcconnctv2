@@ -67,6 +67,10 @@ import Rewards from "@/pages/rewards";
 import NotificationSettings from "@/pages/notification-settings";
 import IdCardVerify from "@/pages/id-card-verify";
 import { AdminSidebar } from "@/components/admin-sidebar";
+import PointsPage from "@/pages/points";
+import PurchasePointsPage from "@/pages/purchase-points";
+import UserTasksPage from "@/pages/user-tasks";
+import ReferralsPage from "@/pages/referrals";
 
 function AppContent() {
   const { user, isLoading } = useAuth();
@@ -219,6 +223,10 @@ function AppContent() {
               <Route path="/invite-earn" component={() => <ProtectedRoute component={InviteEarn} />} />
               <Route path="/search" component={() => <ProtectedRoute component={SearchPage} />} />
               <Route path="/settings/notifications" component={() => <ProtectedRoute component={NotificationSettings} />} />
+              <Route path="/points" component={() => <ProtectedRoute component={PointsPage} />} />
+              <Route path="/purchase-points" component={() => <ProtectedRoute component={PurchasePointsPage} />} />
+              <Route path="/user-tasks" component={() => <ProtectedRoute component={UserTasksPage} />} />
+              <Route path="/referrals" component={() => <ProtectedRoute component={ReferralsPage} />} />
               <Route component={NotFound} />
             </Switch>
           </main>

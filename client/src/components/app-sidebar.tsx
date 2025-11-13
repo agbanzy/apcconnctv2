@@ -25,6 +25,9 @@ import {
   UserPlus,
   Search,
   Bell,
+  Coins,
+  ShoppingCart,
+  Gift,
 } from "lucide-react";
 import {
   Sidebar,
@@ -63,6 +66,29 @@ const coreMenuItems = [
     title: "Search",
     url: "/search",
     icon: Search,
+  },
+];
+
+const pointsItems = [
+  {
+    title: "My Points",
+    url: "/points",
+    icon: Coins,
+  },
+  {
+    title: "Purchase Points",
+    url: "/purchase-points",
+    icon: ShoppingCart,
+  },
+  {
+    title: "User Tasks",
+    url: "/user-tasks",
+    icon: CheckSquare,
+  },
+  {
+    title: "Referrals",
+    url: "/referrals",
+    icon: Gift,
   },
 ];
 
@@ -207,6 +233,24 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {coreMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Points & Rewards</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {pointsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
                     <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>

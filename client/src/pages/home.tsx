@@ -15,12 +15,19 @@ import {
   Target,
   Heart,
   Briefcase,
-  Lightbulb
+  Lightbulb,
+  Coins,
+  ShoppingCart,
+  Gift,
+  ArrowRight,
+  Crown,
+  Medal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import apcLogo from "@assets/logo_1760719840683.png";
@@ -50,11 +57,14 @@ export default function Home() {
     retry: false,
   });
 
-  const { data: userPoints } = useQuery<{
+  const memberId = memberProfile?.data?.id;
+
+  const { data: balanceData } = useQuery<{
     success: boolean;
-    data: { totalPoints: number };
+    balance: number;
   }>({
-    queryKey: ["/api/members/points"],
+    queryKey: [`/api/points/balance/${memberId}`],
+    enabled: !!memberId,
     retry: false,
   });
 
@@ -80,9 +90,62 @@ export default function Home() {
     retry: false,
   });
 
+  const { data: transactionsData } = useQuery<{
+    success: boolean;
+    data: any[];
+  }>({
+    queryKey: [`/api/points/transactions/${memberId}`, { limit: 3, offset: 0 }],
+    enabled: !!memberId,
+    retry: false,
+  });
+
+  const { data: leaderboardData } = useQuery<{
+    success: boolean;
+    data: any[];
+  }>({
+    queryKey: ["/api/leaderboards/national", { limit: 5, offset: 0 }],
+    retry: false,
+  });
+
+  const { data: myRankData } = useQuery<{
+    success: boolean;
+    data: {
+      nationalRank: number;
+      nationalTotal: number;
+      totalPoints: number;
+    };
+  }>({
+    queryKey: ["/api/leaderboards/my-rank"],
+    enabled: !!memberId,
+    retry: false,
+  });
+
+  const { data: referralCodeData } = useQuery<{
+    success: boolean;
+    data: {
+      referralCode: string;
+    };
+  }>({
+    queryKey: ["/api/referrals/my-code"],
+    enabled: !!memberId,
+    retry: false,
+  });
+
+  const { data: referralStatsData } = useQuery<{
+    success: boolean;
+    data: {
+      totalReferrals: number;
+      totalPointsEarned: number;
+    };
+  }>({
+    queryKey: ["/api/referrals/stats"],
+    enabled: !!memberId,
+    retry: false,
+  });
+
   const overview = overviewData?.data;
   const member = memberProfile?.data;
-  const points = userPoints?.data?.totalPoints || 0;
+  const points = balanceData?.balance || 0;
   const news = newsData?.data?.slice(0, 3) || [];
   const allEvents = eventsData?.data || [];
   const now = new Date();
@@ -229,6 +292,173 @@ export default function Home() {
           </Card>
         </div>
       </div>
+
+      {/* Gamification Widgets Row */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Points & Transactions Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Your Points</CardTitle>
+                <CardDescription>Recent activity and balance</CardDescription>
+              </div>
+              <Coins className="h-5 w-5 text-primary" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-center p-4 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-sm text-muted-foreground mb-1">Total Balance</p>
+              <p className="font-display text-4xl font-bold text-primary" data-testid="text-home-points-balance">
+                {points.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">points</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Recent Transactions</p>
+              {transactionsData?.data && transactionsData.data.length > 0 ? (
+                <div className="space-y-2">
+                  {transactionsData.data.slice(0, 3).map((txn) => (
+                    <div key={txn.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{txn.source || txn.type}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(txn.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <p className={`font-mono font-semibold ${txn.type === 'earn' ? 'text-green-600' : 'text-red-600'}`}>
+                        {txn.type === 'earn' ? '+' : '-'}{txn.amount}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No recent transactions</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/purchase-points">
+                <Button variant="default" size="sm" className="w-full" data-testid="button-home-purchase-points">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Buy Points
+                </Button>
+              </Link>
+              <Link href="/points">
+                <Button variant="outline" size="sm" className="w-full" data-testid="button-home-view-all-points">
+                  View All
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Leaderboard Preview Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Leaderboard</CardTitle>
+                <CardDescription>Top members nationwide</CardDescription>
+              </div>
+              <Trophy className="h-5 w-5 text-primary" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {myRankData?.data && (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Your Rank</p>
+                    <p className="font-display text-2xl font-bold text-primary">
+                      #{myRankData.data.nationalRank}
+                    </p>
+                    <p className="text-xs text-muted-foreground">of {myRankData.data.nationalTotal}</p>
+                  </div>
+                  <Trophy className="h-10 w-10 text-primary/50" />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Top Members</p>
+              {leaderboardData?.data && leaderboardData.data.length > 0 ? (
+                <div className="space-y-2">
+                  {leaderboardData.data.slice(0, 5).map((entry, index) => {
+                    const userName = `${entry.user?.firstName || ""} ${entry.user?.lastName || ""}`.trim() || "Unknown";
+                    return (
+                      <div key={entry.member?.id || index} className="flex items-center gap-3 p-2 rounded border">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted font-bold text-sm">
+                          {index === 0 ? <Crown className="h-4 w-4 text-yellow-500" /> : 
+                           index === 1 ? <Medal className="h-4 w-4 text-gray-400" /> :
+                           index === 2 ? <Medal className="h-4 w-4 text-amber-600" /> :
+                           `#${index + 1}`}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{userName}</p>
+                        </div>
+                        <p className="text-sm font-mono font-semibold text-primary">
+                          {entry.totalPoints?.toLocaleString() || 0}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No leaderboard data</p>
+              )}
+            </div>
+
+            <Link href="/leaderboard">
+              <Button variant="outline" size="sm" className="w-full" data-testid="button-home-view-leaderboard">
+                View Full Leaderboard
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Referral CTA Card */}
+      <Card className="border-primary/20 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/20">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-full bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center">
+                <Gift className="h-7 w-7 text-green-600 dark:text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-display text-xl font-bold">Earn 100 Points Per Referral!</h3>
+                <p className="text-muted-foreground">
+                  Invite friends to join APC Connect
+                  {referralCodeData?.data?.referralCode && (
+                    <span className="ml-2 font-mono font-semibold text-primary">
+                      Code: {referralCodeData.data.referralCode}
+                    </span>
+                  )}
+                </p>
+                {referralStatsData?.data && referralStatsData.data.totalReferrals > 0 && (
+                  <p className="text-sm mt-1">
+                    <span className="font-semibold text-green-600 dark:text-green-500">
+                      {referralStatsData.data.totalReferrals}
+                    </span>{" "}
+                    referrals earned you{" "}
+                    <span className="font-semibold text-green-600 dark:text-green-500">
+                      {referralStatsData.data.totalPointsEarned} points
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+            <Link href="/referrals">
+              <Button variant="default" className="bg-green-600 hover:bg-green-700" data-testid="button-home-refer-friends">
+                Refer Friends
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Platform Overview */}
       <div>

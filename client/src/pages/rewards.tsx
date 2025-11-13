@@ -56,8 +56,15 @@ export default function RewardsPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [quote, setQuote] = useState<any>(null);
 
+  const { data: memberData } = useQuery<{ success: boolean; data: any }>({
+    queryKey: ["/api/members/me"],
+  });
+
+  const memberId = memberData?.data?.id;
+
   const { data: myPoints, isLoading: pointsLoading } = useQuery({
-    queryKey: ["/api/points/my-points"]
+    queryKey: [`/api/points/balance/${memberId}`],
+    enabled: !!memberId,
   });
 
   const { data: allBadges, isLoading: badgesLoading } = useQuery({
@@ -105,7 +112,7 @@ export default function RewardsPage() {
         description: data?.data?.message || "Points redeemed successfully",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/redemptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/points/my-points"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
       setShowConfirmDialog(false);
       setPhoneNumber("");
       setAmount(100);
@@ -139,7 +146,7 @@ export default function RewardsPage() {
           description: `You've earned ${data.data.length} new badge(s)!`,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/badges/my-badges"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/points/my-points"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
       }
     }
   });
@@ -153,12 +160,12 @@ export default function RewardsPage() {
           description: `You've unlocked ${data.data.length} new achievement(s)!`,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/achievements/my-achievements"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/points/my-points"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
       }
     }
   });
 
-  const totalPoints = (myPoints as any)?.data?.totalPoints || 0;
+  const totalPoints = (myPoints as any)?.balance || 0;
   const breakdown = (myPoints as any)?.data?.breakdown || [];
   const { currentLevel, nextLevel, progressToNext } = getLevelInfo(totalPoints);
 

@@ -30,7 +30,7 @@ const requireAdmin = (req: AuthRequest, res: Response, next: Function) => {
 };
 
 const recordShareSchema = z.object({
-  platform: z.enum(["facebook", "twitter", "instagram", "whatsapp"]),
+  platform: z.enum(["facebook", "twitter", "linkedin", "instagram", "whatsapp"]),
   contentType: z.enum(["news", "event", "campaign", "election"]),
   contentId: z.string(),
   shareUrl: z.string().url().optional(),
