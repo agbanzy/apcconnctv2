@@ -31,7 +31,7 @@ export class LeaderboardService {
           COALESCE(mp.total_points, 0) as points,
           s.name as state_name,
           w.name as ward_name,
-          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.created_at ASC) as rank
+          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.join_date ASC) as rank
         FROM ${schema.members} m
         INNER JOIN ${schema.users} u ON m.user_id = u.id
         LEFT JOIN member_points mp ON m.id = mp.member_id
@@ -101,7 +101,7 @@ export class LeaderboardService {
           COALESCE(mp.total_points, 0) as points,
           s.name as state_name,
           w.name as ward_name,
-          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.created_at ASC) as rank
+          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.join_date ASC) as rank
         FROM ${schema.members} m
         INNER JOIN ${schema.users} u ON m.user_id = u.id
         LEFT JOIN member_points mp ON m.id = mp.member_id
@@ -182,7 +182,7 @@ export class LeaderboardService {
         SELECT 
           m.id as member_id,
           COALESCE(mp.total_points, 0) as points,
-          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.created_at ASC) as rank
+          ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.join_date ASC) as rank
         FROM ${schema.members} m
         LEFT JOIN member_points mp ON m.id = mp.member_id
         WHERE m.status = 'active'
@@ -208,7 +208,7 @@ export class LeaderboardService {
           SELECT 
             m.id as member_id,
             COALESCE(mp.total_points, 0) as points,
-            ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.created_at ASC) as rank
+            ROW_NUMBER() OVER (ORDER BY COALESCE(mp.total_points, 0) DESC, m.join_date ASC) as rank
           FROM ${schema.members} m
           LEFT JOIN member_points mp ON m.id = mp.member_id
           INNER JOIN ${schema.wards} w ON m.ward_id = w.id
