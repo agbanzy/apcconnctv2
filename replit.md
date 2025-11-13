@@ -3,6 +3,17 @@
 ## Overview
 APC Connect is a comprehensive political engagement platform for the All Progressives Congress (APC) in Nigeria. It's a mobile-first web application designed to modernize party operations, offering membership management, electronic primaries, youth engagement, and real-time election monitoring. The platform aims to facilitate democratic participation through features like NIN-verified registration, blockchain-based voting, gamified political education, and transparent dues tracking. It emphasizes accessibility with offline functionality, low-bandwidth optimization, and PWA capabilities, bridging the gap between leadership and grassroots members.
 
+## Recent Bug Fixes (Nov 13, 2025)
+
+### Database Schema & API Fixes
+1. **Analytics API Number Conversion**: Fixed string-to-number type mismatch where PostgreSQL bigint counts were serialized as strings by Neon driver. All analytics endpoints now wrap count values with `Number()` to ensure proper JavaScript number types.
+
+2. **Leaderboard SQL Column Fix**: Corrected SQL queries in `server/services/leaderboards.ts` that referenced non-existent `m.created_at` column. Updated all 4 queries to use `m.join_date` for member sorting.
+
+3. **Referrals Table Schema**: Added missing `referral_code` and `completed_at` columns to referrals table via `ALTER TABLE` statements to match schema definition.
+
+4. **Ideas Relation Naming**: Renamed `author` relation to `member` in `ideasRelations` schema for consistency. Updated all ideas API endpoints (`/api/ideas`, `/api/ideas/:id`, PATCH, DELETE) to use `member` instead of `author`, aligning backend responses with frontend expectations.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

@@ -5043,7 +5043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let query = db.query.ideas.findMany({
         with: {
-          author: { with: { user: true } },
+          member: { with: { user: true } },
           votes: true,
           comments: { with: { member: { with: { user: true } } } }
         },
@@ -5073,7 +5073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
         with: {
-          author: { with: { user: true } },
+          member: { with: { user: true } },
           votes: { with: { member: { with: { user: true } } } },
           comments: { 
             with: { member: { with: { user: true } } },
@@ -5118,7 +5118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
-        with: { author: { with: { user: true } } }
+        with: { member: { with: { user: true } } }
       });
 
       if (!idea) {
@@ -5129,8 +5129,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         where: eq(schema.members.userId, req.user!.id)
       });
 
-      const ideaAuthor = Array.isArray(idea.author) ? idea.author[0] : idea.author;
-      const ideaUser = ideaAuthor && !Array.isArray(ideaAuthor.user) ? ideaAuthor.user : (Array.isArray(ideaAuthor?.user) ? ideaAuthor.user[0] : null);
+      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
+      const ideaUser = ideaMember && !Array.isArray(ideaMember.user) ? ideaMember.user : (Array.isArray(ideaMember?.user) ? ideaMember.user[0] : null);
       if (ideaUser?.id !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }
@@ -5150,15 +5150,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
-        with: { author: { with: { user: true } } }
+        with: { member: { with: { user: true } } }
       });
 
       if (!idea) {
         return res.status(404).json({ success: false, error: "Idea not found" });
       }
 
-      const ideaAuthor = Array.isArray(idea.author) ? idea.author[0] : idea.author;
-      const ideaUser = ideaAuthor && !Array.isArray(ideaAuthor.user) ? ideaAuthor.user : (Array.isArray(ideaAuthor?.user) ? ideaAuthor.user[0] : null);
+      const ideaMember = Array.isArray(idea.member) ? idea.member[0] : idea.member;
+      const ideaUser = ideaMember && !Array.isArray(ideaMember.user) ? ideaMember.user : (Array.isArray(ideaMember?.user) ? ideaMember.user[0] : null);
       if (ideaUser?.id !== req.user!.id && req.user!.role !== "admin") {
         return res.status(403).json({ success: false, error: "Forbidden" });
       }

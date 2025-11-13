@@ -1218,7 +1218,7 @@ export const recurringMembershipDuesRelations = relations(recurringMembershipDue
 }));
 
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
-  author: one(members, {
+  member: one(members, {
     fields: [ideas.memberId],
     references: [members.id],
   }),
