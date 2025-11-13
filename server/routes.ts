@@ -32,6 +32,12 @@ import { seedAdminBoundaries } from "./seed-admin-boundaries";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { storage } from "./storage";
 import { FilterDTO } from "@shared/admin-types";
+import pointsRouter from "./routes/points";
+import userTasksRouter from "./routes/user-tasks";
+import socialSharesRouter from "./routes/social-shares";
+import referralsRouter from "./routes/referrals";
+import leaderboardsRouter from "./routes/leaderboards";
+import { PointLedgerService } from "./services/point-ledger";
 
 const PgSession = ConnectPgSimple(session);
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
@@ -1070,10 +1076,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (flwResponse.status === "success") {
           // Debit points
-          await db.insert(schema.userPoints).values({
+          const pointLedger = new PointLedgerService();
+          await pointLedger.deductPoints({
             memberId: member.id,
+            points: pointsNeeded,
+            transactionType: "spend",
             source: "redemption",
-            amount: -pointsNeeded
+            referenceType: "redemption",
+            referenceId: redemption.id,
+            metadata: { description: "Airtime redemption", reference, phoneNumber, carrier, productType, nairaValue }
           });
 
           // Update redemption status
@@ -2714,11 +2725,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Award points
-      await db.insert(schema.userPoints).values({
+      const pointLedger = new PointLedgerService();
+      await pointLedger.addPoints({
         memberId,
+        points: pointsEarned,
+        transactionType: "earn",
         source: "event",
-        amount: pointsEarned,
-        points: pointsEarned
+        referenceType: "event",
+        referenceId: req.params.id,
+        metadata: { attendanceId: attendance.id, coordinates, ipAddress, userAgent }
       });
 
       // Log audit trail
@@ -3171,11 +3186,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Award points if correct
       if (isCorrect) {
-        await db.insert(schema.userPoints).values({
+        const pointLedger = new PointLedgerService();
+        await pointLedger.addPoints({
           memberId,
+          points: pointsEarned,
+          transactionType: "earn",
           source: "quiz",
-          amount: pointsEarned,
-          points: pointsEarned
+          referenceType: "quiz",
+          referenceId: req.params.id,
+          metadata: { attemptId: attempt.id, isCorrect, completionTime, ipAddress, userAgent }
         });
       }
 
@@ -3337,11 +3356,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(schema.taskApplications.memberId, memberId)
         ));
 
-      await db.insert(schema.userPoints).values({
+      const pointLedger = new PointLedgerService();
+      await pointLedger.addPoints({
         memberId,
+        points: task.points,
+        transactionType: "earn",
         source: "task",
-        amount: task.points,
-        points: task.points
+        referenceType: "task",
+        referenceId: req.params.id,
+        metadata: { taskTitle: task.title, approved: true }
       });
 
       res.json({ success: true, data: { message: "Task approved and points awarded" } });
@@ -4669,11 +4692,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }).returning();
 
           if (badge.points && badge.points > 0) {
-            await db.insert(schema.userPoints).values({
+            const pointLedger = new PointLedgerService();
+            await pointLedger.addPoints({
               memberId: member.id,
+              points: badge.points,
+              transactionType: "earn",
               source: "badge",
-              amount: badge.points,
-              points: badge.points
+              referenceType: "badge",
+              referenceId: badge.id,
+              metadata: { badgeTitle: badge.title, badgeCategory: badge.category, criteriaValue: criteria.value }
             });
           }
 
@@ -4736,11 +4763,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { memberId, source, amount } = req.body;
 
-      const [points] = await db.insert(schema.userPoints).values({
-        memberId,
-        source,
-        amount
-      }).returning();
+      const pointLedger = new PointLedgerService();
+      const points = amount > 0 
+        ? await pointLedger.addPoints({
+            memberId,
+            points: amount,
+            transactionType: "earn",
+            source: source || "admin_award",
+            referenceType: "admin_award",
+            referenceId: req.user!.id,
+            metadata: { awardedBy: req.user!.id, adminEmail: req.user!.email }
+          })
+        : await pointLedger.deductPoints({
+            memberId,
+            points: Math.abs(amount),
+            transactionType: "spend",
+            source: source || "admin_deduction",
+            referenceType: "admin_deduction",
+            referenceId: req.user!.id,
+            metadata: { deductedBy: req.user!.id, adminEmail: req.user!.email, adminOverride: true }
+          });
 
       res.json({ success: true, data: points });
     } catch (error) {
@@ -4860,10 +4902,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }).returning();
 
           if (completed) {
-            await db.insert(schema.userPoints).values({
+            const pointLedger = new PointLedgerService();
+            await pointLedger.addPoints({
               memberId: member.id,
+              points: achievement.points,
+              transactionType: "earn",
               source: "achievement",
-              amount: achievement.points
+              referenceType: "achievement",
+              referenceId: achievement.id,
+              metadata: { achievementTitle: achievement.title, requirementType: requirement.type, progress }
             });
             newlyCompleted.push({ ...userAchievement, achievement });
           }
@@ -4872,10 +4919,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ completed: true, completedAt: new Date(), progress })
             .where(eq(schema.userAchievements.id, existing.id));
 
-          await db.insert(schema.userPoints).values({
+          const pointLedger = new PointLedgerService();
+          await pointLedger.addPoints({
             memberId: member.id,
+            points: achievement.points,
+            transactionType: "earn",
             source: "achievement",
-            amount: achievement.points
+            referenceType: "achievement",
+            referenceId: achievement.id,
+            metadata: { achievementTitle: achievement.title, requirementType: requirement.type, progress }
           });
 
           newlyCompleted.push({ ...existing, achievement, completed: true });
@@ -6677,11 +6729,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       // Award points if correct
       if (isCorrect) {
-        await db.insert(schema.userPoints).values({
+        const pointLedger = new PointLedgerService();
+        await pointLedger.addPoints({
           memberId,
+          points: pointsEarned,
+          transactionType: "earn",
           source: "micro-task",
-          amount: pointsEarned,
-          points: pointsEarned
+          referenceType: "micro-task",
+          referenceId: req.params.id,
+          metadata: { completionId: completion.id, isCorrect, ipAddress, userAgent }
         });
       }
 
@@ -6945,11 +7001,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
         .where(eq(schema.taskCompletions.id, completionId));
 
       if (approved) {
-        await db.insert(schema.userPoints).values({
+        const pointLedger = new PointLedgerService();
+        await pointLedger.addPoints({
           memberId: completion.memberId,
+          points: pointsEarned,
+          transactionType: "earn",
           source: "volunteer-task",
-          amount: pointsEarned,
-          points: pointsEarned
+          referenceType: "volunteer-task",
+          referenceId: task.id,
+          metadata: { completionId, taskTitle: task.title, verified: true }
         });
       }
 
@@ -7983,6 +8043,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.status(500).json({ success: false, error: "Failed to get donations" });
     }
   });
+
+  // Point Ledger & Purchase Routes
+  app.use("/api/points", pointsRouter);
+
+  // Gamification Routes
+  app.use("/api/tasks/user-created", userTasksRouter);
+  app.use("/api/social/shares", socialSharesRouter);
+  app.use("/api/referrals", referralsRouter);
+  app.use("/api/leaderboards", leaderboardsRouter);
 
   // Apply error handler middleware (must be last)
   app.use(errorHandler);

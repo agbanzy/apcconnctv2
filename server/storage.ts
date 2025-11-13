@@ -33,6 +33,14 @@ interface IStorage {
   
   // Donations Admin
   listDonations(filters: FilterDTO): Promise<PaginatedResponse<any>>;
+  
+  // Point Ledger
+  getMemberPointBalance(memberId: string): Promise<number>;
+  getMemberPointTransactions(memberId: string, filters: FilterDTO): Promise<PaginatedResponse<typeof schema.userPoints.$inferSelect>>;
+  
+  // Point Purchases
+  listPointPurchases(filters: FilterDTO): Promise<PaginatedResponse<typeof schema.pointPurchases.$inferSelect>>;
+  getPointPurchaseByReference(reference: string): Promise<typeof schema.pointPurchases.$inferSelect | undefined>;
 }
 
 // Database storage implementation
@@ -794,6 +802,144 @@ class DbStorage implements IStorage {
       pageSize,
       totalPages
     };
+  }
+
+  async getMemberPointBalance(memberId: string): Promise<number> {
+    const latestTransaction = await this.db.query.userPoints.findFirst({
+      where: eq(schema.userPoints.memberId, memberId),
+      orderBy: desc(schema.userPoints.createdAt),
+    });
+
+    return latestTransaction?.balanceAfter || 0;
+  }
+
+  async getMemberPointTransactions(memberId: string, filters: FilterDTO): Promise<PaginatedResponse<typeof schema.userPoints.$inferSelect>> {
+    const { page = 1, pageSize = 20, search = '', sortBy = 'createdAt', sortOrder = 'desc' } = filters;
+    const offset = (page - 1) * pageSize;
+    
+    let whereConditions: any[] = [eq(schema.userPoints.memberId, memberId)];
+    
+    if (search) {
+      whereConditions.push(
+        sql`(${schema.userPoints.source} ILIKE ${`%${search}%`} OR 
+             ${schema.userPoints.transactionType} ILIKE ${`%${search}%`})`
+      );
+    }
+    
+    if (filters.transactionType) {
+      whereConditions.push(eq(schema.userPoints.transactionType, filters.transactionType as string));
+    }
+    
+    if (filters.source) {
+      whereConditions.push(eq(schema.userPoints.source, filters.source as string));
+    }
+    
+    const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+    const sortOrderFn = sortOrder === 'asc' ? asc : desc;
+    
+    const allowedSortColumns: Record<string, any> = {
+      createdAt: schema.userPoints.createdAt,
+      amount: schema.userPoints.amount,
+      balanceAfter: schema.userPoints.balanceAfter,
+    };
+    const sortColumn = allowedSortColumns[sortBy as string] || schema.userPoints.createdAt;
+    
+    const [data, countResult] = await Promise.all([
+      this.db.query.userPoints.findMany({
+        where: whereClause,
+        orderBy: sortOrderFn(sortColumn),
+        limit: pageSize,
+        offset,
+      }),
+      this.db.select({ count: sql<number>`count(*)` })
+        .from(schema.userPoints)
+        .where(whereClause)
+    ]);
+    
+    const total = Number(countResult[0]?.count || 0);
+    const totalPages = Math.ceil(total / pageSize);
+    
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  async listPointPurchases(filters: FilterDTO): Promise<PaginatedResponse<typeof schema.pointPurchases.$inferSelect>> {
+    const { page = 1, pageSize = 20, search = '', sortBy = 'createdAt', sortOrder = 'desc' } = filters;
+    const offset = (page - 1) * pageSize;
+    
+    let whereConditions: any[] = [];
+    
+    if (search) {
+      whereConditions.push(
+        sql`(${schema.pointPurchases.paystackReference} ILIKE ${`%${search}%`})`
+      );
+    }
+    
+    if (filters.status) {
+      whereConditions.push(eq(schema.pointPurchases.status, filters.status as string));
+    }
+    
+    if (filters.memberId) {
+      whereConditions.push(eq(schema.pointPurchases.memberId, filters.memberId as string));
+    }
+    
+    const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+    const sortOrderFn = sortOrder === 'asc' ? asc : desc;
+    
+    const allowedSortColumns: Record<string, any> = {
+      createdAt: schema.pointPurchases.createdAt,
+      completedAt: schema.pointPurchases.completedAt,
+      pointsAmount: schema.pointPurchases.pointsAmount,
+      nairaAmount: schema.pointPurchases.nairaAmount,
+    };
+    const sortColumn = allowedSortColumns[sortBy as string] || schema.pointPurchases.createdAt;
+    
+    const [data, countResult] = await Promise.all([
+      this.db.query.pointPurchases.findMany({
+        where: whereClause,
+        orderBy: sortOrderFn(sortColumn),
+        limit: pageSize,
+        offset,
+        with: {
+          member: {
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                }
+              }
+            }
+          }
+        }
+      }),
+      this.db.select({ count: sql<number>`count(*)` })
+        .from(schema.pointPurchases)
+        .where(whereClause)
+    ]);
+    
+    const total = Number(countResult[0]?.count || 0);
+    const totalPages = Math.ceil(total / pageSize);
+    
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  async getPointPurchaseByReference(reference: string): Promise<typeof schema.pointPurchases.$inferSelect | undefined> {
+    return await this.db.query.pointPurchases.findFirst({
+      where: eq(schema.pointPurchases.paystackReference, reference),
+    });
   }
 }
 
