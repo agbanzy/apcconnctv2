@@ -1,0 +1,147 @@
+2025-11-13 12:11:45.45
+92bab687
+User
+======================================================================
+2025-11-13 12:11:45.45
+92bab687
+User
+📂 File path: attached_assets/nga_admin_boundaries_1762975238593.xlsx
+2025-11-13 12:11:45.45
+92bab687
+User
+📝 Note: Ward data represents administrative capitals/major wards,
+2025-11-13 12:11:45.45
+92bab687
+User
+not Nigeria's full ~8,809 ward list.
+2025-11-13 12:11:45.45
+92bab687
+User
+======================================================================
+2025-11-13 12:11:45.75
+92bab687
+User
+📄 Reading Excel file: /home/runner/workspace/attached_assets/nga_admin_boundaries_1762975238593.xlsx
+2025-11-13 12:12:48.36
+92bab687
+User
+⚠️ Warning: States count mismatch. Expected 38, got 37
+2025-11-13 12:12:48.36
+92bab687
+User
+⚠️ Warning: LGAs count mismatch. Expected 775, got 774
+2025-11-13 12:12:48.36
+92bab687
+User
+⚠️ Warning: Wards count mismatch. Expected 715, got 714
+2025-11-13 12:12:48.36
+92bab687
+User
+✅ Excel file parsed successfully
+2025-11-13 12:12:48.36
+92bab687
+User
+📋 Data counts:
+2025-11-13 12:12:48.36
+92bab687
+User
+- States: 37 (expected: 38)
+2025-11-13 12:12:48.36
+92bab687
+User
+- LGAs: 774 (expected: 775)
+2025-11-13 12:12:48.36
+92bab687
+User
+- Wards: 714 (expected: 715 - administrative capitals/major wards)
+2025-11-13 12:12:53.16
+92bab687
+User
+🔒 Production mode: Using strict Content Security Policy
+2025-11-13 12:13:02.46
+92bab687
+User
+📍 Step 1: Seeding States...
+2025-11-13 12:13:03.06
+92bab687
+User
+⏭️ Skipping duplicate state: ABIA
+2025-11-13 12:13:04.00
+92bab687
+User
+======================================================================
+2025-11-13 12:13:04.00
+92bab687
+User
+All database changes have been rolled back.
+2025-11-13 12:13:04.35
+92bab687
+User
+at cn.handlePacket (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1143:13)
+2025-11-13 12:13:04.35
+92bab687
+User
+at cn.parse (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1127:36)
+2025-11-13 12:13:04.35
+92bab687
+User
+at Receiver.emit (node:events:524:28)
+2025-11-13 12:13:04.35
+92bab687
+User
+at Receiver.dataMessage (/home/runner/workspace/node_modules/ws/lib/receiver.js:569:14)
+2025-11-13 12:13:04.35
+92bab687
+User
+at Receiver.getData (/home/runner/workspace/node_modules/ws/lib/receiver.js:496:10)
+2025-11-13 12:13:04.35
+92bab687
+User
+at TLSSocket.emit (node:events:524:28)
+2025-11-13 12:13:04.35
+92bab687
+User
+at addChunk (node:internal/streams/readable:561:12)
+2025-11-13 12:13:04.35
+92bab687
+User
+at readableAddChunkPushByteMode (node:internal/streams/readable:512:3) {
+2025-11-13 12:13:04.35
+92bab687
+User
+severity: 'ERROR',
+2025-11-13 12:13:04.35
+92bab687
+User
+internalQuery: undefined,
+2025-11-13 12:13:04.35
+92bab687
+User
+file: 'postgres.c',
+2025-11-13 12:13:04.35
+92bab687
+User
+line: '1500',
+2025-11-13 12:13:04.35
+92bab687
+User
+routine: 'exec_parse_message'
+2025-11-13 12:13:09.25
+92bab687
+System
+command finished with error [npm run start]: exit status 1
+2025-11-13 12:13:39.65
+92bab687
+User
+> rest-express@1.0.0 start
+2025-11-13 12:13:39.65
+92bab687
+User
+> NODE_ENV=production node dist/index.js
+
+Collapse
+
+Wrap
+
+Colors
+

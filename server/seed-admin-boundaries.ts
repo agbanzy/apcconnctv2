@@ -572,15 +572,18 @@ export async function seedAdminBoundaries(filePath?: string): Promise<SeedStats>
   }
 }
 
-// If run directly from command line
-if (import.meta.url === `file://${process.argv[1]}`) {
-  seedAdminBoundaries()
-    .then(() => {
-      console.log("✅ Seeding script completed successfully");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("❌ Seeding script failed:", error);
-      process.exit(1);
-    });
-}
+// If run directly from command line (disabled for production safety)
+// To seed boundaries, use the API endpoint: POST /api/admin/seed-boundaries
+// This prevents automatic seeding on production deployments which can crash the server
+// 
+// if (import.meta.url === `file://${process.argv[1]}`) {
+//   seedAdminBoundaries()
+//     .then(() => {
+//       console.log("✅ Seeding script completed successfully");
+//       process.exit(0);
+//     })
+//     .catch((error) => {
+//       console.error("❌ Seeding script failed:", error);
+//       process.exit(1);
+//     });
+// }
