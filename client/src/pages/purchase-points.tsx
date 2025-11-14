@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Coins, Check, Sparkles, TrendingUp } from "lucide-react";
+import { Coins, Check, Sparkles, TrendingUp, MessageCircle } from "lucide-react";
+import { SiWhatsapp } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -238,7 +239,7 @@ export default function PurchasePointsPage() {
                       {savings > 0 && (
                         <div className="flex items-center gap-2 text-primary font-semibold">
                           <TrendingUp className="h-4 w-4" />
-                          <span>Save {savings} pts!</span>
+                          <span>Save {savings.toLocaleString()} pts!</span>
                         </div>
                       )}
                     </div>
@@ -264,6 +265,61 @@ export default function PurchasePointsPage() {
                 </Card>
               );
             })}
+            
+            {/* Enterprise Package */}
+            <Card className="relative hover-elevate border-accent" data-testid="package-card-enterprise">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <Badge className="bg-accent text-accent-foreground">
+                  <MessageCircle className="h-3 w-3 mr-1" />
+                  Enterprise
+                </Badge>
+              </div>
+              
+              <CardHeader className="text-center pb-4">
+                <div className="h-16 w-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-3">
+                  <Coins className="h-8 w-8 text-accent" />
+                </div>
+                <CardTitle className="text-2xl font-bold">
+                  Custom Package
+                </CardTitle>
+                <CardDescription className="text-lg font-semibold text-foreground">
+                  Contact Us
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {/* Benefits */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-accent" />
+                    <span>Custom pricing</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-accent" />
+                    <span>Bulk discounts</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-accent" />
+                    <span>Dedicated support</span>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="pt-2 border-t text-center text-xs text-muted-foreground">
+                  For large volume purchases
+                </div>
+
+                {/* WhatsApp Contact Button */}
+                <Button
+                  className="w-full bg-[#25D366] text-white border-[#1EAA52]"
+                  onClick={() => window.open('https://wa.me/2349000000000?text=Hello,%20I%20am%20interested%20in%20enterprise%20point%20packages', '_blank')}
+                  data-testid="button-enterprise-contact"
+                >
+                  <SiWhatsapp className="h-4 w-4 mr-2" />
+                  Contact on WhatsApp
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
