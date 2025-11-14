@@ -536,8 +536,9 @@ export const microTasks = pgTable("micro_tasks", {
   description: text("description").notNull(),
   category: text("category").notNull(),
   points: integer("points").notNull(),
-  options: jsonb("options").$type<string[]>(), // Multiple choice options
-  correctAnswers: jsonb("correct_answers").$type<number[]>(), // Indices of correct answers
+  completionRequirement: text("completion_requirement").default("quiz"), // "quiz" | "image" | "none"
+  options: jsonb("options").$type<string[]>(), // Multiple choice options (for quiz type)
+  correctAnswers: jsonb("correct_answers").$type<number[]>(), // Indices of correct answers (for quiz type)
   timeEstimate: text("time_estimate").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

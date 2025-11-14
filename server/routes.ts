@@ -29,7 +29,7 @@ import { quizAntiCheat, taskAntiCheat, voteAntiCheat, eventAntiCheat } from "./m
 import { antiCheatService } from "./security/anti-cheat";
 import { generateQuizToken, verifyQuizToken } from "./security/crypto-tokens";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { storage } from "./storage";
 import { FilterDTO } from "@shared/admin-types";
 import pointsRouter from "./routes/points";
@@ -6665,9 +6665,9 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.post("/api/tasks/micro/:id/complete", requireAuth, taskLimiter, taskAntiCheat, async (req: AuthRequest, res: Response) => {
+  app.post("/api/tasks/micro/:id/complete", requireAuth, taskLimiter, taskAntiCheat, upload.single("proofImage"), async (req: AuthRequest, res: Response) => {
     try {
-      const { selectedAnswers, proofUrl } = req.body;
+      const { selectedAnswers } = req.body;
       const antiCheatData = (req as any).antiCheat;
       
       if (!antiCheatData) {
@@ -6682,24 +6682,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
         return res.status(400).json({ success: false, error: uniqueCheck.error });
       }
 
-      // Verify proof URL uniqueness if provided
-      if (proofUrl) {
-        const proofCheck = await antiCheatService.verifyUniqueProof(proofUrl);
-        if (!proofCheck.valid) {
-          await antiCheatService.logFraudDetection(
-            memberId,
-            "task",
-            "Duplicate proof submission",
-            "high",
-            true,
-            { proofUrl, taskId: req.params.id },
-            ipAddress,
-            userAgent
-          );
-          return res.status(400).json({ success: false, error: proofCheck.error });
-        }
-      }
-
       const task = await db.query.microTasks.findFirst({
         where: eq(schema.microTasks.id, req.params.id)
       });
@@ -6708,38 +6690,83 @@ Be friendly, informative, and politically neutral when discussing governance. En
         return res.status(404).json({ success: false, error: "Task not found" });
       }
 
-      // SERVER-SIDE ONLY: Verify correctness
-      const correctAnswers = task.correctAnswers as number[] || [];
-      const isCorrect = JSON.stringify(selectedAnswers?.sort()) === JSON.stringify(correctAnswers.sort());
-      const pointsEarned = isCorrect ? task.points : 0;
+      const completionRequirement = task.completionRequirement || "quiz";
+      let proofUrl: string | null = null;
+      let status = "pending";
+      let pointsEarned = 0;
+      let isCorrect = false;
 
-      // Record completion with fraud detection metadata
+      // Handle quiz-type tasks
+      if (completionRequirement === "quiz") {
+        const correctAnswers = task.correctAnswers as number[] || [];
+        isCorrect = JSON.stringify(selectedAnswers?.sort()) === JSON.stringify(correctAnswers.sort());
+        pointsEarned = isCorrect ? task.points : 0;
+        status = isCorrect ? "approved" : "rejected";
+
+        // Award points immediately for quiz tasks if correct
+        if (isCorrect) {
+          const pointLedger = new PointLedgerService();
+          await pointLedger.addPoints({
+            memberId,
+            points: pointsEarned,
+            transactionType: "earn",
+            source: "micro-task",
+            referenceType: "micro-task",
+            referenceId: req.params.id,
+            metadata: { isCorrect, ipAddress, userAgent }
+          });
+        }
+      } 
+      // Handle image-based tasks
+      else if (completionRequirement === "image") {
+        if (!req.file) {
+          return res.status(400).json({ success: false, error: "Proof image is required for this task" });
+        }
+
+        // Upload image to object storage
+        const objectStorageService = ObjectStorageService.getInstance();
+        const privateObjectDir = objectStorageService.getPrivateObjectDir();
+        const objectId = crypto.randomUUID();
+        const fullPath = `${privateObjectDir}/task-proofs/${objectId}`;
+        
+        // Parse object path to get bucket and object name
+        const pathParts = fullPath.split("/");
+        const bucketName = pathParts[1];
+        const objectName = pathParts.slice(2).join("/");
+        
+        // Upload file to object storage
+        const bucket = objectStorageClient.bucket(bucketName);
+        const file = bucket.file(objectName);
+        
+        await file.save(req.file.buffer, {
+          metadata: {
+            contentType: req.file.mimetype,
+            metadata: {
+              uploadedBy: memberId,
+              taskId: req.params.id,
+              originalName: req.file.originalname
+            }
+          }
+        });
+
+        proofUrl = `/objects/task-proofs/${objectId}`;
+        status = "pending"; // Awaits admin approval
+        pointsEarned = 0; // Points awarded only after approval
+      }
+
+      // Record completion
       const [completion] = await db.insert(schema.taskCompletions).values({
         taskId: req.params.id,
         taskType: "micro",
         memberId,
         proofUrl,
         pointsEarned,
-        verified: true,
-        status: isCorrect ? "approved" : "rejected",
+        verified: completionRequirement === "quiz" ? true : false,
+        status,
         ipAddress,
         userAgent,
         fingerprint
       }).returning();
-
-      // Award points if correct
-      if (isCorrect) {
-        const pointLedger = new PointLedgerService();
-        await pointLedger.addPoints({
-          memberId,
-          points: pointsEarned,
-          transactionType: "earn",
-          source: "micro-task",
-          referenceType: "micro-task",
-          referenceId: req.params.id,
-          metadata: { completionId: completion.id, isCorrect, ipAddress, userAgent }
-        });
-      }
 
       // Log audit trail
       await logAudit({
@@ -6747,7 +6774,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
         action: AuditActions.ADMIN_ACTION,
         resourceType: "task",
         resourceId: req.params.id,
-        details: { taskType: "micro", isCorrect, pointsEarned },
+        details: { taskType: "micro", completionRequirement, isCorrect, pointsEarned, status },
         ipAddress,
         userAgent,
         fingerprint,
@@ -6758,9 +6785,10 @@ Be friendly, informative, and politically neutral when discussing governance. En
         success: true, 
         data: { 
           completion, 
-          isCorrect, 
+          isCorrect: completionRequirement === "quiz" ? isCorrect : undefined, 
           pointsEarned,
-          correctAnswers: isCorrect ? undefined : correctAnswers
+          correctAnswers: (completionRequirement === "quiz" && !isCorrect) ? task.correctAnswers : undefined,
+          message: completionRequirement === "image" ? "Submission received. Awaiting admin approval." : undefined
         } 
       });
     } catch (error: any) {
@@ -6773,6 +6801,160 @@ Be friendly, informative, and politically neutral when discussing governance. En
       }
       console.error("Complete micro-task error:", error);
       res.status(500).json({ success: false, error: "Failed to complete micro-task" });
+    }
+  });
+
+  // Admin: Get pending task completions
+  app.get("/api/admin/task-completions/pending", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const completions = await db.query.taskCompletions.findMany({
+        where: eq(schema.taskCompletions.status, "pending"),
+        with: {
+          member: true,
+          task: true
+        },
+        orderBy: desc(schema.taskCompletions.completedAt)
+      });
+
+      res.json({ success: true, data: completions });
+    } catch (error) {
+      console.error("Fetch pending completions error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch pending completions" });
+    }
+  });
+
+  // Admin: Approve task completion
+  app.post("/api/admin/task-completions/:id/approve", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const completion = await db.query.taskCompletions.findFirst({
+        where: eq(schema.taskCompletions.id, req.params.id),
+        with: {
+          task: true,
+          member: true
+        }
+      });
+
+      if (!completion) {
+        return res.status(404).json({ success: false, error: "Task completion not found" });
+      }
+
+      if (completion.status !== "pending") {
+        return res.status(400).json({ success: false, error: "Task completion is not pending" });
+      }
+
+      // Update completion status
+      const pointsToAward = completion.task.points;
+      await db.update(schema.taskCompletions)
+        .set({
+          status: "approved",
+          approvedBy: req.user!.id,
+          approvedAt: new Date(),
+          pointsEarned: pointsToAward,
+          verified: true
+        })
+        .where(eq(schema.taskCompletions.id, req.params.id));
+
+      // Award points
+      const pointLedger = new PointLedgerService();
+      await pointLedger.addPoints({
+        memberId: completion.memberId,
+        points: pointsToAward,
+        transactionType: "earn",
+        source: "micro-task",
+        referenceType: "micro-task",
+        referenceId: completion.taskId,
+        metadata: { 
+          completionId: completion.id, 
+          approvedBy: req.user!.id,
+          approvalType: "manual"
+        }
+      });
+
+      // Set ACL policy for proof image (make it accessible)
+      if (completion.proofUrl) {
+        try {
+          const objectStorageService = ObjectStorageService.getInstance();
+          await objectStorageService.setObjectKeyAclPolicy(completion.proofUrl, {
+            visibility: "private",
+            owner: completion.memberId
+          });
+        } catch (error) {
+          console.error("Failed to set ACL policy:", error);
+        }
+      }
+
+      // Log audit
+      await logAudit({
+        memberId: req.user!.id,
+        action: AuditActions.ADMIN_ACTION,
+        resourceType: "task-completion",
+        resourceId: req.params.id,
+        details: { 
+          action: "approve", 
+          taskId: completion.taskId,
+          pointsAwarded: pointsToAward,
+          completedBy: completion.memberId
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        status: "success"
+      });
+
+      res.json({ success: true, data: { message: "Task completion approved", pointsAwarded: pointsToAward } });
+    } catch (error) {
+      console.error("Approve task completion error:", error);
+      res.status(500).json({ success: false, error: "Failed to approve task completion" });
+    }
+  });
+
+  // Admin: Reject task completion
+  app.post("/api/admin/task-completions/:id/reject", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = req.body;
+      
+      const completion = await db.query.taskCompletions.findFirst({
+        where: eq(schema.taskCompletions.id, req.params.id)
+      });
+
+      if (!completion) {
+        return res.status(404).json({ success: false, error: "Task completion not found" });
+      }
+
+      if (completion.status !== "pending") {
+        return res.status(400).json({ success: false, error: "Task completion is not pending" });
+      }
+
+      // Update completion status
+      await db.update(schema.taskCompletions)
+        .set({
+          status: "rejected",
+          approvedBy: req.user!.id,
+          approvedAt: new Date(),
+          rejectionReason: reason || "Did not meet requirements"
+        })
+        .where(eq(schema.taskCompletions.id, req.params.id));
+
+      // Log audit
+      await logAudit({
+        memberId: req.user!.id,
+        action: AuditActions.ADMIN_ACTION,
+        resourceType: "task-completion",
+        resourceId: req.params.id,
+        details: { 
+          action: "reject", 
+          taskId: completion.taskId,
+          reason,
+          completedBy: completion.memberId
+        },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        status: "success"
+      });
+
+      res.json({ success: true, data: { message: "Task completion rejected" } });
+    } catch (error) {
+      console.error("Reject task completion error:", error);
+      res.status(500).json({ success: false, error: "Failed to reject task completion" });
     }
   });
 
