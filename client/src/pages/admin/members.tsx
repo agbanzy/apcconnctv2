@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -36,44 +38,43 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Search, Download, Send, Eye, Edit, CheckCircle, UserCog, MoreVertical } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Search, Download, Send, Eye, Edit, CheckCircle, UserCog, MoreVertical, Ban, UserCheck, Trash2, RefreshCw, Key, History, StickyNote } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+
+import { useMemberManagementDialogs } from "@/hooks/useMemberManagementDialogs";
+import { MemberManagementDialogs } from "@/components/admin/member-management-dialogs";
+import { MemberActionsMenu } from "@/components/admin/member-actions-menu";
+import { MemberDetailsSheet } from "@/components/admin/member-details-sheet";
 
 export default function AdminMembers() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [selectedMember, setSelectedMember] = useState<any>(null);
-  const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
-  const [verifyNINOpen, setVerifyNINOpen] = useState(false);
-  const [ninValue, setNinValue] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 50;
+  
+  const dialogs = useMemberManagementDialogs();
 
   const { data: membersData, isLoading } = useQuery({
     queryKey: ["/api/members"],
-  });
-
-  const verifyNINMutation = useMutation({
-    mutationFn: async ({ memberId, nin }: { memberId: string; nin: string }) => {
-      return apiRequest("POST", `/api/members/${memberId}/verify-nin`, { nin });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/members"] });
-      toast({ title: "Success", description: "Member NIN verified successfully" });
-      setVerifyNINOpen(false);
-      setNinValue("");
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to verify NIN", variant: "destructive" });
-    },
   });
 
   const changeRoleMutation = useMutation({
@@ -88,6 +89,17 @@ export default function AdminMembers() {
       toast({ title: "Error", description: "Failed to update role", variant: "destructive" });
     },
   });
+
+  const handleMemberAction = (action: string, member: any) => {
+    if (action === "change-role") {
+      const newRole = member.user?.role === "admin" ? "member" : "admin";
+      changeRoleMutation.mutate({ userId: member.user?.id, role: newRole });
+    } else if (action === "view-details" || action === "view-history" || action === "view-notes") {
+      dialogs.openDialog("view-details", member);
+    } else {
+      dialogs.openDialog(action as any, member);
+    }
+  };
 
   const members = membersData?.data || [];
   const filteredMembers = members.filter((member: any) => {
@@ -105,15 +117,6 @@ export default function AdminMembers() {
 
   const paginatedMembers = filteredMembers.slice((page - 1) * pageSize, page * pageSize);
   const totalPages = Math.ceil(filteredMembers.length / pageSize);
-
-  const handleVerifyNIN = () => {
-    if (!selectedMember || !ninValue) return;
-    verifyNINMutation.mutate({ memberId: selectedMember.id, nin: ninValue });
-  };
-
-  const handleChangeRole = (userId: string, newRole: string) => {
-    changeRoleMutation.mutate({ userId, role: newRole });
-  };
 
   const exportToCSV = () => {
     const csv = [
@@ -187,6 +190,8 @@ export default function AdminMembers() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="deleted">Deleted</SelectItem>
                 <SelectItem value="expired">Expired</SelectItem>
               </SelectContent>
             </Select>
@@ -258,44 +263,7 @@ export default function AdminMembers() {
                       </TableCell>
                       <TableCell>{new Date(member.joinDate).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" data-testid={`button-actions-${member.id}`}>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                setSelectedMember(member);
-                                setViewDetailsOpen(true);
-                              }}
-                              data-testid={`action-view-${member.id}`}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            {member.status === 'pending' && (
-                              <DropdownMenuItem 
-                                onClick={() => {
-                                  setSelectedMember(member);
-                                  setVerifyNINOpen(true);
-                                }}
-                                data-testid={`action-verify-${member.id}`}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Verify NIN
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem 
-                              onClick={() => handleChangeRole(member.user?.id, member.user?.role === 'admin' ? 'member' : 'admin')}
-                              data-testid={`action-change-role-${member.id}`}
-                            >
-                              <UserCog className="h-4 w-4 mr-2" />
-                              Change Role
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <MemberActionsMenu member={member} onAction={handleMemberAction} />
                       </TableCell>
                     </TableRow>
                   ))
@@ -332,102 +300,19 @@ export default function AdminMembers() {
         </CardContent>
       </Card>
 
-      <Sheet open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
-        <SheetContent className="w-[400px] sm:w-[540px]">
-          <SheetHeader>
-            <SheetTitle>Member Details</SheetTitle>
-            <SheetDescription>Full information about the member</SheetDescription>
-          </SheetHeader>
-          {selectedMember && (
-            <div className="mt-6 space-y-4">
-              <div>
-                <p className="text-sm font-medium">Member ID</p>
-                <p className="text-sm text-muted-foreground font-mono">{selectedMember.memberId}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Full Name</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedMember.user?.firstName} {selectedMember.user?.lastName}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Email</p>
-                <p className="text-sm text-muted-foreground">{selectedMember.user?.email}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Phone</p>
-                <p className="text-sm text-muted-foreground">{selectedMember.user?.phone || 'Not provided'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">NIN</p>
-                <p className="text-sm text-muted-foreground font-mono">{selectedMember.nin || 'Not verified'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Location</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedMember.ward?.name}, {selectedMember.ward?.lga?.name}, {selectedMember.ward?.lga?.state?.name}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Status</p>
-                <Badge variant={selectedMember.status === 'active' ? 'default' : 'secondary'}>
-                  {selectedMember.status}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Role</p>
-                <Badge variant="outline">{selectedMember.user?.role || 'member'}</Badge>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Join Date</p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(selectedMember.joinDate).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Member Details Sheet with Tabs */}
+      <MemberDetailsSheet
+        member={dialogs.selectedMember}
+        open={dialogs.isOpen("view-details")}
+        onClose={dialogs.closeDialog}
+      />
 
-      <Dialog open={verifyNINOpen} onOpenChange={setVerifyNINOpen}>
-        <DialogContent data-testid="dialog-verify-nin">
-          <DialogHeader>
-            <DialogTitle>Verify NIN</DialogTitle>
-            <DialogDescription>
-              Enter the member's National Identification Number to verify and activate their account.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-2">Member</p>
-              <p className="text-sm text-muted-foreground">
-                {selectedMember?.user?.firstName} {selectedMember?.user?.lastName}
-              </p>
-            </div>
-            <div>
-              <Input
-                placeholder="Enter 11-digit NIN"
-                value={ninValue}
-                onChange={(e) => setNinValue(e.target.value)}
-                maxLength={11}
-                data-testid="input-nin"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setVerifyNINOpen(false)} data-testid="button-cancel-nin">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleVerifyNIN}
-              disabled={ninValue.length !== 11}
-              data-testid="button-verify-nin"
-            >
-              Verify & Activate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* All Account Management Dialogs */}
+      <MemberManagementDialogs
+        selectedMember={dialogs.selectedMember}
+        activeDialog={dialogs.activeDialog}
+        onClose={dialogs.closeDialog}
+      />
     </div>
   );
 }
