@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Smartphone, Wifi, ArrowLeft, Zap, Info } from "lucide-react";
+import { Smartphone, Wifi, ArrowLeft, Zap, Info, TrendingUp, History, Coins } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
 // Helper function to generate unique idempotency key
 function generateIdempotencyKey(): string {
@@ -216,9 +218,13 @@ export default function RedeemPoints() {
 
   const airtimeNaira = calculateNaira(airtimePoints, "airtime");
   const dataNaira = calculateNaira(dataPoints, "data");
+  const balance = balanceData?.balance || 0;
+  const conversionRate = airtimeSettings ? parseFloat(airtimeSettings.baseRate) : 1.0;
+  const airtimeProgress = (airtimePoints && balance > 0) ? Math.min((parseInt(airtimePoints) / balance) * 100, 100) : 0;
+  const dataProgress = (dataPoints && balance > 0) ? Math.min((parseInt(dataPoints) / balance) * 100, 100) : 0;
 
   return (
-    <div className="container max-p-4 py-8 space-y-6">
+    <div className="container max-w-4xl p-4 py-8 space-y-6">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -228,40 +234,68 @@ export default function RedeemPoints() {
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Redeem Points</h1>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold" data-testid="text-redeem-title">Redeem Points</h1>
           <p className="text-muted-foreground">
-            Convert your points to airtime or data
+            Convert your points to airtime or data instantly
           </p>
         </div>
       </div>
 
-      {/* Balance Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            Available Balance
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold">
-            {balanceData?.balance?.toLocaleString() || "0"} points
+      {/* Enhanced Balance Card with Visual Indicators */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-primary/10">
+                <Coins className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground font-medium">Available Balance</p>
+                <div className="text-4xl font-bold mt-1" data-testid="text-balance">
+                  {balance.toLocaleString()}
+                  <span className="text-2xl ml-2 text-muted-foreground font-normal">points</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-start md:items-end gap-2">
+              <Badge variant="secondary" className="text-sm">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                1 point = ₦{conversionRate.toFixed(2)}
+              </Badge>
+              <p className="text-sm text-muted-foreground">
+                = ₦{(balance * conversionRate).toLocaleString()} total value
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            1 point = ₦{airtimeSettings ? parseFloat(airtimeSettings.baseRate) : 1}
-          </p>
         </CardContent>
       </Card>
 
-      {/* Conversion Info Alert */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Conversion Rates:</strong> Airtime & Data redemptions use a 1:1 ratio (1 point = ₦1).
-          {airtimeSettings && ` Min: ${airtimeSettings.minPoints} pts, Max: ${airtimeSettings.maxPoints} pts`}
-        </AlertDescription>
-      </Alert>
+      {/* Conversion Info with Better Visual Hierarchy */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-6 flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-500 mt-0.5" />
+            <div>
+              <p className="font-medium mb-1">Redemption Limits</p>
+              <p className="text-sm text-muted-foreground">
+                Min: {airtimeSettings?.minPoints || 100} pts • Max: {airtimeSettings?.maxPoints?.toLocaleString() || "10,000"} pts
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-start gap-3">
+            <Zap className="h-5 w-5 text-yellow-500 mt-0.5" />
+            <div>
+              <p className="font-medium mb-1">Instant Processing</p>
+              <p className="text-sm text-muted-foreground">
+                Airtime & data delivered within seconds
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Redemption Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "airtime" | "data")}>
@@ -279,13 +313,16 @@ export default function RedeemPoints() {
         <TabsContent value="airtime">
           <Card>
             <CardHeader>
-              <CardTitle>Recharge Airtime</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-primary" />
+                Recharge Airtime
+              </CardTitle>
               <CardDescription>
                 Convert your points to airtime credit for any Nigerian network
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAirtimeSubmit} className="space-y-4">
+              <form onSubmit={handleAirtimeSubmit} className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="airtime-phone">Phone Number</Label>
                   <Input
@@ -295,14 +332,15 @@ export default function RedeemPoints() {
                     placeholder="08012345678"
                     value={airtimePhone}
                     onChange={(e) => setAirtimePhone(e.target.value)}
+                    className="text-lg"
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter the phone number to receive airtime
+                    Works with MTN, Glo, Airtel, and 9mobile
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label htmlFor="airtime-points">Points to Redeem</Label>
                   <Input
                     id="airtime-points"
@@ -313,22 +351,33 @@ export default function RedeemPoints() {
                     onChange={(e) => setAirtimePoints(e.target.value)}
                     min={airtimeSettings?.minPoints || 100}
                     max={airtimeSettings?.maxPoints || 10000}
+                    className="text-lg"
                     required
                   />
                   {airtimePoints && (
-                    <p className="text-sm font-medium text-primary">
-                      = ₦{airtimeNaira.toLocaleString()} airtime
-                    </p>
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Conversion</span>
+                        <span className="font-bold text-lg text-primary">
+                          ₦{airtimeNaira.toLocaleString()}
+                        </span>
+                      </div>
+                      <Progress value={airtimeProgress} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{parseInt(airtimePoints).toLocaleString()} pts</span>
+                        <span>{balance > 0 ? ((parseInt(airtimePoints) / balance) * 100).toFixed(1) : "0"}% of balance</span>
+                      </div>
+                    </>
                   )}
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full h-12 text-base"
                   disabled={redeemAirtimeMutation.isPending}
                   data-testid="button-redeem-airtime"
                 >
-                  {redeemAirtimeMutation.isPending ? "Processing..." : "Redeem Airtime"}
+                  {redeemAirtimeMutation.isPending ? "Processing..." : `Redeem ${airtimePoints ? `₦${airtimeNaira.toLocaleString()}` : ""} Airtime`}
                 </Button>
               </form>
             </CardContent>
@@ -338,13 +387,16 @@ export default function RedeemPoints() {
         <TabsContent value="data">
           <Card>
             <CardHeader>
-              <CardTitle>Buy Data Bundle</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-primary" />
+                Buy Data Bundle
+              </CardTitle>
               <CardDescription>
                 Convert your points to data bundles for your mobile number
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleDataSubmit} className="space-y-4">
+              <form onSubmit={handleDataSubmit} className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="data-phone">Phone Number</Label>
                   <Input
@@ -354,14 +406,15 @@ export default function RedeemPoints() {
                     placeholder="08012345678"
                     value={dataPhone}
                     onChange={(e) => setDataPhone(e.target.value)}
+                    className="text-lg"
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter the phone number to receive data
+                    Works with MTN, Glo, Airtel, and 9mobile
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label htmlFor="data-points">Points to Redeem</Label>
                   <Input
                     id="data-points"
@@ -372,22 +425,33 @@ export default function RedeemPoints() {
                     onChange={(e) => setDataPoints(e.target.value)}
                     min={dataSettings?.minPoints || 100}
                     max={dataSettings?.maxPoints || 10000}
+                    className="text-lg"
                     required
                   />
                   {dataPoints && (
-                    <p className="text-sm font-medium text-primary">
-                      = ₦{dataNaira.toLocaleString()} data bundle
-                    </p>
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Conversion</span>
+                        <span className="font-bold text-lg text-primary">
+                          ₦{dataNaira.toLocaleString()}
+                        </span>
+                      </div>
+                      <Progress value={dataProgress} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{parseInt(dataPoints).toLocaleString()} pts</span>
+                        <span>{balance > 0 ? ((parseInt(dataPoints) / balance) * 100).toFixed(1) : "0"}% of balance</span>
+                      </div>
+                    </>
                   )}
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full h-12 text-base"
                   disabled={redeemDataMutation.isPending}
                   data-testid="button-redeem-data"
                 >
-                  {redeemDataMutation.isPending ? "Processing..." : "Redeem Data"}
+                  {redeemDataMutation.isPending ? "Processing..." : `Redeem ${dataPoints ? `₦${dataNaira.toLocaleString()}` : ""} Data`}
                 </Button>
               </form>
             </CardContent>
@@ -395,15 +459,16 @@ export default function RedeemPoints() {
         </TabsContent>
       </Tabs>
 
-      {/* Transaction History Link */}
-      <Card>
-        <CardContent className="pt-6">
+      {/* Enhanced Transaction History Link */}
+      <Card className="hover-elevate transition-all duration-300">
+        <CardContent className="p-6">
           <Button
             variant="outline"
-            className="w-full"
+            className="w-full h-12"
             onClick={() => navigate("/redemption-history")}
             data-testid="button-view-history"
           >
+            <History className="h-4 w-4 mr-2" />
             View Redemption History
           </Button>
         </CardContent>
