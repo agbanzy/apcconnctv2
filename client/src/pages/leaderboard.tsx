@@ -105,9 +105,9 @@ export default function LeaderboardPage() {
               <div className="text-center">
                 <p className="text-sm text-muted-foreground mb-1">Total Points</p>
                 <p className="font-display text-3xl font-bold text-primary" data-testid="text-my-total-points">
-                  {myRank.totalPoints.toLocaleString()}
+                  {(myRank.totalPoints ?? 0).toLocaleString()}
                 </p>
-                {myRank.nextRankPoints > 0 && (
+                {(myRank.nextRankPoints ?? 0) > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {myRank.nextRankPoints} pts to next rank
                   </p>
