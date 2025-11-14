@@ -214,6 +214,13 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
       });
     }
 
+    if (existingPurchase.status === "failed") {
+      return res.status(400).json({ 
+        success: false, 
+        error: "This payment has already failed verification",
+      });
+    }
+
     console.log(`Verifying payment for reference: ${reference}`);
 
     const paystackVerification = await paystack.transaction.verify(reference);
@@ -278,7 +285,8 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
     }
 
     await db.transaction(async (tx) => {
-      await tx.update(schema.pointPurchases)
+      // Use conditional update with status check to prevent race conditions
+      const updateResult = await tx.update(schema.pointPurchases)
         .set({ 
           status: "success",
           completedAt: new Date(),
@@ -290,7 +298,16 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
             channel: paymentData.channel,
           },
         })
-        .where(eq(schema.pointPurchases.id, existingPurchase.id));
+        .where(and(
+          eq(schema.pointPurchases.id, existingPurchase.id),
+          eq(schema.pointPurchases.status, "pending")
+        ))
+        .returning();
+
+      // If no rows were updated, another request already processed this
+      if (!updateResult || updateResult.length === 0) {
+        throw new Error("Purchase has already been processed by another request");
+      }
 
       const currentBalance = await pointLedgerService.getBalance(existingPurchase.memberId);
       const newBalance = currentBalance + existingPurchase.pointsAmount;
