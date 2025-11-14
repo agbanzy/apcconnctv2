@@ -4339,8 +4339,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(schema.members.status, "active")
           ));
 
-        // Note: Events table doesn't have stateId column, so we can't filter by state
-        const upcomingEventsByState = [{ count: 0 }];
+        const upcomingEventsByState = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.events)
+          .where(and(
+            eq(schema.events.stateId, state.id),
+            gte(schema.events.date, new Date())
+          ));
 
         const activeCampaignsByState = await db
           .select({ count: sql<number>`count(*)` })
@@ -4377,12 +4382,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           stateId: state.id,
           name: state.name,
           code: state.code,
-          memberCount: membersByState[0]?.count || 0,
-          activeMembers: activeMembersByState[0]?.count || 0,
-          upcomingEvents: upcomingEventsByState[0]?.count || 0,
-          activeCampaigns: activeCampaignsByState[0]?.count || 0,
-          lgasCovered: lgasCovered[0]?.count || 0,
-          wardsCovered: wardsCovered[0]?.count || 0
+          memberCount: Number(membersByState[0]?.count) || 0,
+          activeMembers: Number(activeMembersByState[0]?.count) || 0,
+          upcomingEvents: Number(upcomingEventsByState[0]?.count) || 0,
+          activeCampaigns: Number(activeCampaignsByState[0]?.count) || 0,
+          lgasCovered: Number(lgasCovered[0]?.count) || 0,
+          wardsCovered: Number(wardsCovered[0]?.count) || 0
         };
       }));
 
