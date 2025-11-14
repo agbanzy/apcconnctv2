@@ -547,11 +547,14 @@ export const taskCompletions = pgTable("task_completions", {
   taskId: varchar("task_id").notNull(), // ID of either micro or volunteer task
   taskType: text("task_type").notNull(), // "micro" | "volunteer"
   memberId: varchar("member_id").notNull().references(() => members.id),
-  proofUrl: text("proof_url"), // Screenshot or evidence
+  proofUrl: text("proof_url"), // Screenshot or evidence (image URL from object storage)
   status: text("status").default("pending"), // pending, approved, rejected
   pointsEarned: integer("points_earned").default(0),
   verified: boolean("verified").default(false),
   completedAt: timestamp("completed_at").defaultNow(),
+  approvedBy: varchar("approved_by").references(() => users.id), // Admin who approved/rejected
+  approvedAt: timestamp("approved_at"), // When it was approved/rejected
+  rejectionReason: text("rejection_reason"), // Why it was rejected (optional)
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   fingerprint: text("fingerprint"),
@@ -1127,6 +1130,10 @@ export const taskCompletionsRelations = relations(taskCompletions, ({ one }) => 
   member: one(members, {
     fields: [taskCompletions.memberId],
     references: [members.id],
+  }),
+  approver: one(users, {
+    fields: [taskCompletions.approvedBy],
+    references: [users.id],
   }),
 }));
 
