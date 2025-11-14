@@ -4,7 +4,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { pointLedgerService } from "./point-ledger";
 import crypto from "crypto";
 
-const SHARE_REWARD_POINTS = 10;
+const SHARE_REWARD_POINTS = 5;
 
 export interface RecordShareParams {
   memberId: string;

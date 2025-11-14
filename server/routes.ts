@@ -1303,6 +1303,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // MEMBER ACCOUNT MANAGEMENT ROUTES
+  // =================================
+  // Admin-only routes for managing member accounts
+
+  const memberActionReasonSchema = z.object({
+    reason: z.string().min(1, "Reason is required")
+  });
+
+  app.post("/api/members/:id/suspend", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = memberActionReasonSchema.parse(req.body);
+      
+      await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "suspended",
+        changedBy: req.user!.id,
+        reason,
+        ipAddress: req.antiCheat?.ipAddress || req.ip,
+        userAgent: req.antiCheat?.userAgent || req.headers["user-agent"]
+      });
+
+      res.json({ success: true, message: "Member account suspended successfully" });
+    } catch (error: any) {
+      console.error("[POST /api/members/:id/suspend] Error:", error);
+      res.status(error.message === "Member not found" ? 404 : 500).json({ 
+        success: false, 
+        error: error.message || "Failed to suspend member" 
+      });
+    }
+  });
+
+  app.post("/api/members/:id/activate", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "active",
+        changedBy: req.user!.id,
+        reason: "Account activated by admin",
+        ipAddress: req.antiCheat?.ipAddress || req.ip,
+        userAgent: req.antiCheat?.userAgent || req.headers["user-agent"]
+      });
+
+      res.json({ success: true, message: "Member account activated successfully" });
+    } catch (error: any) {
+      console.error("[POST /api/members/:id/activate] Error:", error);
+      res.status(error.message === "Member not found" ? 404 : 500).json({ 
+        success: false, 
+        error: error.message || "Failed to activate member" 
+      });
+    }
+  });
+
+  app.post("/api/members/:id/delete", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = memberActionReasonSchema.parse(req.body);
+      
+      await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "deleted",
+        changedBy: req.user!.id,
+        reason,
+        ipAddress: req.antiCheat?.ipAddress || req.ip,
+        userAgent: req.antiCheat?.userAgent || req.headers["user-agent"]
+      });
+
+      res.json({ success: true, message: "Member account deleted successfully" });
+    } catch (error: any) {
+      console.error("[POST /api/members/:id/delete] Error:", error);
+      res.status(error.message === "Member not found" ? 404 : 500).json({ 
+        success: false, 
+        error: error.message || "Failed to delete member" 
+      });
+    }
+  });
+
+  app.post("/api/members/:id/restore", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "active",
+        changedBy: req.user!.id,
+        reason: "Account restored by admin",
+        ipAddress: req.antiCheat?.ipAddress || req.ip,
+        userAgent: req.antiCheat?.userAgent || req.headers["user-agent"]
+      });
+
+      res.json({ success: true, message: "Member account restored successfully" });
+    } catch (error: any) {
+      console.error("[POST /api/members/:id/restore] Error:", error);
+      res.status(error.message === "Member not found" ? 404 : 500).json({ 
+        success: false, 
+        error: error.message || "Failed to restore member" 
+      });
+    }
+  });
+
+  app.post("/api/members/:id/reset-password", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, req.params.id),
+        with: { user: true }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const result = await memberAccountService.initiateAdminPasswordReset(
+        member.userId,
+        req.user!.id,
+        "email"
+      );
+
+      res.json({ 
+        success: true, 
+        message: "Password reset initiated successfully",
+        ...result
+      });
+    } catch (error: any) {
+      console.error("[POST /api/members/:id/reset-password] Error:", error);
+      res.status(error.message === "User not found" ? 404 : 500).json({ 
+        success: false, 
+        error: error.message || "Failed to reset password" 
+      });
+    }
+  });
+
   // NIN VERIFICATION ENDPOINT
   // ==========================
   // This endpoint handles NIN verification for members using the NIMC API integration
