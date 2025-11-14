@@ -4,7 +4,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Enums
-export const membershipStatusEnum = pgEnum("membership_status", ["active", "pending", "expired"]);
+export const membershipStatusEnum = pgEnum("membership_status", ["active", "pending", "expired", "suspended", "deleted"]);
 export const electionStatusEnum = pgEnum("election_status", ["upcoming", "ongoing", "completed"]);
 export const incidentSeverityEnum = pgEnum("incident_severity", ["low", "medium", "high"]);
 export const pollingUnitStatusEnum = pgEnum("polling_unit_status", ["active", "delayed", "completed", "incident"]);
@@ -101,6 +101,7 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   usedAt: timestamp("used_at"),
+  initiatedBy: varchar("initiated_by").references(() => users.id),
 });
 
 export const refreshTokens = pgTable("refresh_tokens", {
@@ -124,6 +125,12 @@ export const members = pgTable("members", {
   photoUrl: text("photo_url"), // Member photo for ID card
   wardId: varchar("ward_id").notNull().references(() => wards.id),
   status: membershipStatusEnum("status").default("pending"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: varchar("suspended_by").references(() => users.id),
+  suspensionReason: text("suspension_reason"),
+  deletedAt: timestamp("deleted_at"),
+  deletedBy: varchar("deleted_by").references(() => users.id),
+  deletionReason: text("deletion_reason"),
   joinDate: timestamp("join_date").defaultNow(),
   interests: jsonb("interests").$type<string[]>(), // ["education", "jobs", "security"]
   referralCode: text("referral_code").unique(), // Unique code for this member to share
@@ -164,6 +171,27 @@ export const memberIdCards = pgTable("member_id_cards", {
   signatureNonce: text("signature_nonce").notNull(),
   revokedAt: timestamp("revoked_at"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const memberStatusHistory = pgTable("member_status_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  changedBy: varchar("changed_by").notNull().references(() => users.id),
+  reason: text("reason"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const memberNotes = pgTable("member_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  note: text("note").notNull(),
+  visibility: text("visibility").notNull(), // admin_only | coordinator_visible
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Elections & Voting
@@ -937,6 +965,8 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   incidents: many(incidents),
   postEngagement: many(postEngagement),
   notifications: many(notifications),
+  statusHistory: many(memberStatusHistory),
+  notes: many(memberNotes),
   ideas: many(ideas),
   ideaVotes: many(ideaVotes),
   ideaComments: many(ideaComments),
@@ -1225,6 +1255,28 @@ export const recurringMembershipDuesRelations = relations(recurringMembershipDue
   }),
 }));
 
+export const memberStatusHistoryRelations = relations(memberStatusHistory, ({ one }) => ({
+  member: one(members, {
+    fields: [memberStatusHistory.memberId],
+    references: [members.id],
+  }),
+  actor: one(users, {
+    fields: [memberStatusHistory.changedBy],
+    references: [users.id],
+  }),
+}));
+
+export const memberNotesRelations = relations(memberNotes, ({ one }) => ({
+  member: one(members, {
+    fields: [memberNotes.memberId],
+    references: [members.id],
+  }),
+  author: one(users, {
+    fields: [memberNotes.authorId],
+    references: [users.id],
+  }),
+}));
+
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
   member: one(members, {
     fields: [ideas.memberId],
@@ -1375,6 +1427,8 @@ export const insertMemberSchema = createInsertSchema(members).omit({ id: true, j
 export const insertDuesSchema = createInsertSchema(membershipDues).omit({ id: true, createdAt: true, paidAt: true });
 export const insertRecurringDuesSchema = createInsertSchema(recurringMembershipDues).omit({ id: true, createdAt: true, updatedAt: true, lastPaymentDate: true });
 export const insertMemberIdCardSchema = createInsertSchema(memberIdCards).omit({ id: true, createdAt: true, lastGeneratedAt: true });
+export const insertMemberStatusHistorySchema = createInsertSchema(memberStatusHistory).omit({ id: true, createdAt: true });
+export const insertMemberNoteSchema = createInsertSchema(memberNotes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertElectionSchema = createInsertSchema(elections).omit({ id: true, createdAt: true, totalVotes: true });
 export const insertCandidateSchema = createInsertSchema(candidates).omit({ id: true, createdAt: true, votes: true });
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true, castedAt: true });
@@ -1445,6 +1499,10 @@ export type InsertRecurringDues = z.infer<typeof insertRecurringDuesSchema>;
 export type RecurringMembershipDues = typeof recurringMembershipDues.$inferSelect;
 export type InsertMemberIdCard = z.infer<typeof insertMemberIdCardSchema>;
 export type MemberIdCard = typeof memberIdCards.$inferSelect;
+export type InsertMemberStatusHistory = z.infer<typeof insertMemberStatusHistorySchema>;
+export type MemberStatusHistory = typeof memberStatusHistory.$inferSelect;
+export type InsertMemberNote = z.infer<typeof insertMemberNoteSchema>;
+export type MemberNote = typeof memberNotes.$inferSelect;
 export type InsertElection = z.infer<typeof insertElectionSchema>;
 export type Election = typeof elections.$inferSelect;
 export type InsertCandidate = z.infer<typeof insertCandidateSchema>;
