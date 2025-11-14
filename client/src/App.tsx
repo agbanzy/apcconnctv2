@@ -72,6 +72,8 @@ import PointsPage from "@/pages/points";
 import PurchasePointsPage from "@/pages/purchase-points";
 import UserTasksPage from "@/pages/user-tasks";
 import ReferralsPage from "@/pages/referrals";
+import RedeemPointsPage from "@/pages/redeem-points";
+import RedemptionHistoryPage from "@/pages/redemption-history";
 
 function AppContent() {
   const { user, isLoading } = useAuth();
@@ -227,6 +229,8 @@ function AppContent() {
               <Route path="/settings/notifications" component={() => <ProtectedRoute component={NotificationSettings} />} />
               <Route path="/points" component={() => <ProtectedRoute component={PointsPage} />} />
               <Route path="/purchase-points" component={() => <ProtectedRoute component={PurchasePointsPage} />} />
+              <Route path="/redeem-points" component={() => <ProtectedRoute component={RedeemPointsPage} />} />
+              <Route path="/redemption-history" component={() => <ProtectedRoute component={RedemptionHistoryPage} />} />
               <Route path="/user-tasks" component={() => <ProtectedRoute component={UserTasksPage} />} />
               <Route path="/referrals" component={() => <ProtectedRoute component={ReferralsPage} />} />
               <Route component={NotFound} />
