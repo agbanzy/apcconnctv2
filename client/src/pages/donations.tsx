@@ -61,10 +61,10 @@ export default function Donations() {
   const createDonationMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/donations/create", data);
-      return res.json();
+      return await res.json();
     },
     onSuccess: (data) => {
-      if (data.data?.authorization_url) {
+      if (data.success && data.data?.authorization_url) {
         window.location.href = data.data.authorization_url;
       }
     },

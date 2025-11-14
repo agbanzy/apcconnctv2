@@ -54,25 +54,20 @@ export default function PurchasePointsPage() {
 
   const purchaseMutation = useMutation({
     mutationFn: async (params: { mode: "preset" | "custom"; points: number; naira: number }) => {
-      const response = await apiRequest<{
-        success: boolean;
-        authorizationUrl: string;
-        reference: string;
-        purchase: any;
-      }>({
-        url: "/api/points/purchase",
-        method: "POST",
-        data: {
+      const response = await apiRequest(
+        "POST",
+        "/api/points/purchase",
+        {
           mode: params.mode,
           pointsAmount: params.points,
           nairaAmount: params.naira,
           callbackUrl: `${window.location.origin}/purchase-points`,
-        },
-      });
-      return response;
+        }
+      );
+      return await response.json();
     },
     onSuccess: (data) => {
-      // Redirect to Paystack payment page
+      // Redirect to Flutterwave payment page
       window.location.href = data.authorizationUrl;
     },
     onError: (error: any) => {
@@ -87,16 +82,12 @@ export default function PurchasePointsPage() {
 
   const verifyMutation = useMutation({
     mutationFn: async (reference: string) => {
-      const response = await apiRequest<{
-        success: boolean;
-        message: string;
-        purchase: any;
-      }>({
-        url: "/api/points/purchase/verify",
-        method: "POST",
-        data: { reference },
-      });
-      return response;
+      const response = await apiRequest(
+        "POST",
+        "/api/points/purchase/verify",
+        { reference }
+      );
+      return await response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
