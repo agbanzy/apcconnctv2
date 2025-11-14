@@ -25,10 +25,9 @@ const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
 };
 
 const POINT_PACKAGES = [
-  { points: 500, naira: 500, exchangeRate: 1.0 },
-  { points: 1000, naira: 900, exchangeRate: 1.11 },
-  { points: 2500, naira: 2000, exchangeRate: 1.25 },
-  { points: 5000, naira: 3500, exchangeRate: 1.43 },
+  { points: 200000, naira: 150000, exchangeRate: 1.33 },
+  { points: 500000, naira: 350000, exchangeRate: 1.43 },
+  { points: 1000000, naira: 650000, exchangeRate: 1.54 },
 ];
 
 const purchaseSchema = z.object({
