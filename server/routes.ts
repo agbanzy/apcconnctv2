@@ -36,6 +36,7 @@ import socialSharesRouter from "./routes/social-shares";
 import referralsRouter from "./routes/referrals";
 import leaderboardsRouter from "./routes/leaderboards";
 import { PointLedgerService } from "./services/point-ledger";
+import * as memberAccountService from "./services/member-account";
 
 const PgSession = ConnectPgSimple(session);
 
@@ -7095,6 +7096,274 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // ========================================
+  // ADMIN ACCOUNT MANAGEMENT ENDPOINTS
+  // ========================================
+
+  // Suspend member account
+  app.post("/api/admin/members/:id/suspend", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = req.body;
+      
+      if (!reason || reason.trim() === "") {
+        return res.status(400).json({ success: false, error: "Suspension reason is required" });
+      }
+
+      const result = await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "suspended",
+        changedBy: req.user!.id,
+        reason,
+        metadata: { suspendedVia: "admin_panel" },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent")
+      });
+
+      res.json({ 
+        success: true, 
+        data: result,
+        message: "Member account suspended successfully"
+      });
+    } catch (error: any) {
+      console.error("Suspend member error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to suspend member" });
+    }
+  });
+
+  // Activate member account
+  app.post("/api/admin/members/:id/activate", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = req.body;
+      
+      // Provide default reason if not supplied
+      const activationReason = reason && reason.trim() !== "" 
+        ? reason 
+        : "Account activated by administrator";
+      
+      const result = await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "active",
+        changedBy: req.user!.id,
+        reason: activationReason,
+        metadata: { activatedVia: "admin_panel" },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent")
+      });
+
+      res.json({ 
+        success: true, 
+        data: result,
+        message: "Member account activated successfully"
+      });
+    } catch (error: any) {
+      console.error("Activate member error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to activate member" });
+    }
+  });
+
+  // Soft delete member account
+  app.post("/api/admin/members/:id/delete", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ success: false, error: "Deletion reason is required" });
+      }
+
+      const result = await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "deleted",
+        changedBy: req.user!.id,
+        reason,
+        metadata: { deletedVia: "admin_panel" },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent")
+      });
+
+      res.json({ 
+        success: true, 
+        data: result,
+        message: "Member account deleted successfully"
+      });
+    } catch (error: any) {
+      console.error("Delete member error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to delete member" });
+    }
+  });
+
+  // Restore deleted member account
+  app.post("/api/admin/members/:id/restore", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { reason } = req.body;
+      
+      // Provide default reason if not supplied
+      const restoreReason = reason && reason.trim() !== "" 
+        ? reason 
+        : "Account restored by administrator";
+      
+      const result = await memberAccountService.applyMemberStatusChange({
+        memberId: req.params.id,
+        newStatus: "active",
+        changedBy: req.user!.id,
+        reason: restoreReason,
+        metadata: { restoredVia: "admin_panel" },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent")
+      });
+
+      res.json({ 
+        success: true, 
+        data: result,
+        message: "Member account restored successfully"
+      });
+    } catch (error: any) {
+      console.error("Restore member error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to restore member" });
+    }
+  });
+
+  // Get member status history
+  app.get("/api/admin/members/:id/status-history", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const history = await db.query.memberStatusHistory.findMany({
+        where: eq(schema.memberStatusHistory.memberId, req.params.id),
+        with: {
+          actor: {
+            columns: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              role: true
+            }
+          }
+        },
+        orderBy: desc(schema.memberStatusHistory.createdAt)
+      });
+
+      res.json({ success: true, data: history });
+    } catch (error) {
+      console.error("Fetch status history error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch status history" });
+    }
+  });
+
+  // Get member notes
+  app.get("/api/admin/members/:id/notes", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const notes = await db.query.memberNotes.findMany({
+        where: eq(schema.memberNotes.memberId, req.params.id),
+        with: {
+          author: {
+            columns: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              role: true
+            }
+          }
+        },
+        orderBy: desc(schema.memberNotes.createdAt)
+      });
+
+      res.json({ success: true, data: notes });
+    } catch (error) {
+      console.error("Fetch member notes error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch member notes" });
+    }
+  });
+
+  // Create member note
+  app.post("/api/admin/members/:id/notes", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { content, visibility } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ success: false, error: "Note content is required" });
+      }
+
+      const note = await memberAccountService.createMemberNote({
+        memberId: req.params.id,
+        authorId: req.user!.id,
+        content,
+        visibility: visibility || "admin_only"
+      });
+
+      res.json({ 
+        success: true, 
+        data: note,
+        message: "Note created successfully"
+      });
+    } catch (error: any) {
+      console.error("Create note error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to create note" });
+    }
+  });
+
+  // Update member note
+  app.patch("/api/admin/members/:memberId/notes/:noteId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { content, visibility } = req.body;
+
+      const note = await memberAccountService.updateMemberNote(
+        req.params.noteId,
+        req.user!.id,
+        { content, visibility }
+      );
+
+      res.json({ 
+        success: true, 
+        data: note,
+        message: "Note updated successfully"
+      });
+    } catch (error: any) {
+      console.error("Update note error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to update note" });
+    }
+  });
+
+  // Delete member note
+  app.delete("/api/admin/members/:memberId/notes/:noteId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await memberAccountService.deleteMemberNote(req.params.noteId, req.user!.id);
+
+      res.json({ 
+        success: true,
+        message: "Note deleted successfully"
+      });
+    } catch (error: any) {
+      console.error("Delete note error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to delete note" });
+    }
+  });
+
+  // Admin password reset
+  app.post("/api/admin/members/:id/reset-password", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      // Get member to find their userId
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, req.params.id),
+        with: { user: true }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const result = await memberAccountService.initiateAdminPasswordReset(
+        member.userId,
+        req.user!.id,
+        "email"
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to reset password" });
+    }
+  });
+
   app.delete("/api/tasks/micro/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
       await db.delete(schema.microTasks).where(eq(schema.microTasks.id, req.params.id));
@@ -8027,25 +8296,87 @@ Be friendly, informative, and politically neutral when discussing governance. En
   // Members Bulk Operations
   app.post("/api/admin/members/bulk", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const { ids, action } = req.body;
+      const { ids, action, reason } = req.body;
 
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, error: "Invalid member IDs" });
       }
 
-      await storage.bulkUpdateMembers(ids, action);
+      // Validate action
+      const validActions = ["suspend", "activate", "delete", "restore", "activate", "deactivate"];
+      if (!validActions.includes(action)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Invalid action. Allowed: ${validActions.join(", ")}` 
+        });
+      }
 
+      // Map old action names to new status values
+      const statusMap: Record<string, "active" | "inactive" | "suspended" | "deleted"> = {
+        "activate": "active",
+        "deactivate": "inactive",
+        "suspend": "suspended",
+        "delete": "deleted",
+        "restore": "active"
+      };
+
+      const newStatus = statusMap[action];
+      const results: { id: string; success: boolean; error?: string }[] = [];
+
+      // Process each member individually using service layer
+      for (const memberId of ids) {
+        try {
+          await memberAccountService.applyMemberStatusChange({
+            memberId,
+            newStatus,
+            changedBy: req.user!.id,
+            reason: reason || `Bulk ${action} operation`,
+            metadata: { bulkOperation: true, totalCount: ids.length },
+            ipAddress: req.ip,
+            userAgent: req.get("user-agent")
+          });
+          results.push({ id: memberId, success: true });
+        } catch (error: any) {
+          console.error(`Failed to ${action} member ${memberId}:`, error);
+          results.push({ 
+            id: memberId, 
+            success: false, 
+            error: error.message || "Unknown error"
+          });
+        }
+      }
+
+      // Count successes and failures
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      // Audit log
       await logAudit({
         userId: req.user!.id,
         action: `bulk_${action}_members`,
         resourceType: 'member',
-        details: { memberIds: ids, count: ids.length },
-        status: 'success',
+        details: { 
+          memberIds: ids, 
+          totalCount: ids.length,
+          successCount,
+          failureCount,
+          reason
+        },
+        status: failureCount === 0 ? 'success' : 'failure',
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
 
-      res.json({ success: true, message: `Bulk action "${action}" completed on ${ids.length} member(s)` });
+      res.json({ 
+        success: true, 
+        message: `Bulk ${action}: ${successCount} succeeded, ${failureCount} failed`,
+        data: {
+          total: ids.length,
+          succeeded: successCount,
+          failed: failureCount,
+          results
+        }
+      });
     } catch (error) {
       console.error("Members bulk operation error:", error);
       res.status(500).json({ success: false, error: "Failed to complete bulk operation" });
