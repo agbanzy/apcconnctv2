@@ -30,7 +30,13 @@ const POINT_PACKAGES = [
   { points: 1000000, naira: 650000, exchangeRate: 1.54 },
 ];
 
+// Custom purchase configuration
+const CUSTOM_EXCHANGE_RATE = parseFloat(process.env.CUSTOM_POINTS_EXCHANGE_RATE || "1.0");
+const MIN_CUSTOM_POINTS = 10000;
+const MAX_CUSTOM_POINTS = 2000000;
+
 const purchaseSchema = z.object({
+  mode: z.enum(["preset", "custom"]).default("preset"),
   pointsAmount: z.number().int().positive(),
   nairaAmount: z.number().positive(),
   callbackUrl: z.string().url().optional(),
@@ -412,7 +418,15 @@ router.post("/transfer", requireAuth, async (req: AuthRequest, res: Response) =>
 });
 
 router.get("/packages", (req: Request, res: Response) => {
-  res.json({ success: true, packages: POINT_PACKAGES });
+  res.json({ 
+    success: true, 
+    packages: POINT_PACKAGES,
+    customRate: {
+      exchangeRate: CUSTOM_EXCHANGE_RATE,
+      minPoints: MIN_CUSTOM_POINTS,
+      maxPoints: MAX_CUSTOM_POINTS,
+    }
+  });
 });
 
 export default router;
