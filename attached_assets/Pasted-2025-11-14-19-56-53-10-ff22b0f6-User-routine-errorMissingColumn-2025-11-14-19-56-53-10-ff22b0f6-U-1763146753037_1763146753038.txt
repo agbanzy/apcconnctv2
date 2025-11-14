@@ -1,0 +1,160 @@
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+routine: 'errorMissingColumn'
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+dataType: undefined,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+position: '143',
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+Node.js v20.19.3
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+file: 'parse_relation.c',
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+column: undefined,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+at async NeonPreparedQuery.execute (file:///home/runner/workspace/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+error: column "suspended_at" does not exist
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+severity: 'ERROR',
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+length: 113,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+at async file:///home/runner/workspace/dist/index.js:7545:24 {
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+internalPosition: undefined,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+table: undefined,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+detail: undefined,
+2025-11-14 19:56:53.10
+ff22b0f6
+User
+}
+2025-11-14 19:56:53.12
+ff22b0f6
+User
+npm notice
+2025-11-14 19:56:53.12
+ff22b0f6
+User
+npm notice New major version of npm available! 10.8.2 -> 11.6.2
+2025-11-14 19:56:53.12
+ff22b0f6
+User
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.2
+2025-11-14 19:56:53.12
+ff22b0f6
+User
+npm notice
+2025-11-14 19:56:53.12
+ff22b0f6
+User
+npm notice To update run: npm install -g npm@11.6.2
+2025-11-14 19:56:53.13
+ff22b0f6
+System
+command finished with error [npm run start]: exit status 1
+2025-11-14 19:57:01.75
+ff22b0f6
+User
+> NODE_ENV=production node dist/index.js
+2025-11-14 19:57:01.75
+ff22b0f6
+User
+> rest-express@1.0.0 start
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Set NIMC_API_KEY, NIMC_API_SECRET, and NIMC_BASE_URL environment variables
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Emails will only be logged, not actually sent
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Set EMAIL_SERVICE_PROVIDER environment variable to use a real provider
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+⚠️ WARNING: NIN verification service running in SIMULATION mode in production
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+NIN verifications will use mock responses, not real NIMC API
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+⚠️ WARNING: Email service running in CONSOLE mode in production
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+[PushService] No provider configured. Running in simulation mode.
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+⚠️ WARNING: JWT_SECRET not set in environment. Using generated secret.
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Set JWT_SECRET in .env for production use.
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+[PushService] Initializing with provider: none
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Set PUSH_SERVICE_PROVIDER environment variable (fcm | onesignal | web-push)
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+Push notifications will only be logged, not actually sent
+2025-11-14 19:58:29.37
+ff22b0f6
+User
+⚠️ WARNING: Push notification service running in SIMULATION mode in production
+2025-11-14 19:58:29.39
+ff22b0f6
+User
+🔒 Production mode: Using strict Content Security Policy
+2025-11-14 19:58:29.44
+ff22b0f6
+User
+6:58:29 PM [express] serving on port 5000
+2025-11-14 19:58:29.44
+ff22b0f6
+User
+6:58:29 PM [express] serving on port 5000
