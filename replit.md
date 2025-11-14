@@ -1,122 +1,7 @@
 # APC Connect
 
 ## Overview
-APC Connect is a comprehensive political engagement platform for the All Progressives Congress (APC) in Nigeria. It's a mobile-first web application designed to modernize party operations, offering membership management, electronic primaries, youth engagement, and real-time election monitoring. The platform aims to facilitate democratic participation through features like NIN-verified registration, blockchain-based voting, gamified political education, and transparent dues tracking. It emphasizes accessibility with offline functionality, low-bandwidth optimization, and PWA capabilities, bridging the gap between leadership and grassroots members.
-
-## Recent Updates (Nov 14, 2025)
-
-### Payment Migration: Paystack → Flutterwave
-Replaced entire payment processing infrastructure with Flutterwave:
-
-1. **Backend Migration (server/routes.ts, server/routes/points.ts)**:
-   - Removed Paystack SDK dependency
-   - Implemented Flutterwave v3 REST API using native fetch
-   - Updated all payment endpoints: point purchases, membership dues, donations
-   - Changed webhook endpoint from `/api/paystack/webhook` to `/api/flutterwave/webhook`
-   - Fixed donation verification to update campaign progress tracking automatically
-   - Environment variables: `FLUTTERWAVE_SECRET_KEY`, `VITE_FLUTTERWAVE_PUBLIC_KEY`, `FLUTTERWAVE_ENCRYPTION_KEY`
-
-2. **Payment Flow Changes**:
-   - Point purchases: Now use Flutterwave hosted checkout (redirect flow)
-   - Membership dues: Flutterwave payment link with NGN currency
-   - Donations: Flutterwave checkout with automatic campaign progress updates
-   - Verification: Changed from Paystack's `/verify/:reference` to Flutterwave's `/verify_by_reference?tx_ref=`
-   - Amount handling: Flutterwave uses naira directly (not kobo), adjusted all calculations
-
-3. **Campaign Progress Tracking**:
-   - Added automatic donation progress updates in verification endpoint
-   - When a campaign donation is verified, `donationCampaigns.currentAmount` increments by donation amount
-   - Progress bar in frontend already configured to show `currentAmount / goalAmount`
-
-4. **Outstanding Work**:
-   - Frontend needs Flutterwave inline checkout implementation (using flutterwave-react-v3 or vanilla JS)
-   - Recurring dues endpoints still reference removed Paystack SDK (lines 2093, 2125, 6238)
-   - LSP errors in client/src/pages/purchase-points.tsx for generic types
-
-## Recent Updates (Nov 14, 2025)
-
-### Interactive Map: Real-Data Connection
-Connected Nigeria interactive map to live database instead of placeholder data:
-
-1. **Map-Data Endpoint (server/routes.ts `/api/analytics/map-data`)**:
-   - Added real events counting by state using `events.stateId` column (replaced hardcoded 0)
-   - Query: `SELECT count(*) FROM events WHERE stateId = ? AND date >= NOW()`
-   - Wrapped all count values with `Number()` to prevent Neon driver string serialization
-   - Returns per-state metrics: memberCount, activeMembers, upcomingEvents, activeCampaigns, lgasCovered, wardsCovered
-
-2. **Frontend Map Component (client/src/components/nigeria-map.tsx)**:
-   - Already configured to consume `/api/analytics/map-data`
-   - Mode switching: Members / Events / Campaigns / Activity
-   - Color intensity visualization based on real data values
-   - Interactive tooltips showing all state statistics
-   - Click-to-filter functionality for incident lists
-
-3. **Schema & Relation Fixes**:
-   - Fixed `ideas` relation from `author` to `member` (consistent with replit.md documentation)
-   - Fixed badge/achievement metadata using `name` instead of `title`
-   - Kept `issueCampaigns` using `author` relation (per schema definition)
-   - Resolved all 5 LSP errors in server/routes.ts
-
-### New Features: Custom Point Purchases
-Implemented flexible point purchase system allowing users to buy any amount:
-
-1. **Backend (server/routes/points.ts)**:
-   - Added custom purchase mode alongside preset packages
-   - Configurable exchange rate via `CUSTOM_POINTS_EXCHANGE_RATE` env var (default: 1.0 ₦/pt)
-   - Min/max limits: 10,000 - 2,000,000 points
-   - Extended purchase schema with `mode: "preset" | "custom"`
-   - Verification validates both preset packages and custom rate calculations
-   - Stored mode in metadata for purchase tracking
-
-2. **Frontend (client/src/pages/purchase-points.tsx)**:
-   - Custom amount card with real-time naira calculation
-   - Input validation showing min/max limits
-   - Positioned between preset packages and enterprise WhatsApp option
-   - Uses same Paystack payment flow as preset packages
-
-3. **Enterprise Packages**:
-   - Updated preset packages to enterprise scale: 200k, 500k, 1M points
-   - Pricing: ₦150k, ₦350k, ₦650k with better rates at higher volumes
-   - WhatsApp contact option for custom enterprise negotiations
-
-### New Features: Task Approval System
-Implemented comprehensive task approval workflow for image-based micro tasks:
-
-1. **Backend (server/routes.ts)**:
-   - Extended task completion endpoint to handle multipart/form-data with image uploads
-   - Added `completionRequirement` field to microTasks ("quiz" | "image" | "none")
-   - Quiz tasks: Auto-approve/reject based on correctness, award points immediately
-   - Image tasks: Upload to object storage, set status="pending", await admin approval
-   - Created 3 admin endpoints:
-     - `GET /api/admin/task-completions/pending` - List pending submissions
-     - `POST /api/admin/task-completions/:id/approve` - Approve and award points
-     - `POST /api/admin/task-completions/:id/reject` - Reject with reason
-
-2. **Database Schema (shared/schema.ts)**:
-   - Added `approvedBy`, `approvedAt`, `rejectionReason`, `completionRequirement` fields
-   - Updated microTaskCompletions to support approval workflow
-   - Proof images stored in object storage, URLs saved to `proofUrl` field
-
-3. **Frontend**:
-   - Updated micro-tasks page (client/src/pages/micro-tasks.tsx) with completion dialog
-   - Supports both quiz (radio group) and image (file upload) task types
-   - Created admin task approvals page (client/src/pages/admin/task-approvals.tsx)
-   - Admin UI shows pending submissions with proof images
-   - Quick approve and detailed review dialog with reject option
-
-### Critical Production Fixes
-1. **Seed Script Auto-Execution**: Disabled automatic seeding on production deployments. The seed script (`server/seed-admin-boundaries.ts`) was executing during production startup, causing database transaction errors and server crashes. Auto-execution is now commented out; seeding is only available via the admin API endpoint `POST /api/admin/seed-boundaries`.
-
-2. **Query Parameter Serialization**: Fixed React Query's `queryKey` parameter handling in `client/src/lib/queryClient.ts`. The default query function was calling `queryKey.join("/")` which converted objects to `[object Object]` in URLs. Now properly serializes objects as URL query parameters using `URLSearchParams`, fixing leaderboard pagination and other API calls with query params.
-
-### Database Schema & API Fixes (Nov 13, 2025)
-1. **Analytics API Number Conversion**: Fixed string-to-number type mismatch where PostgreSQL bigint counts were serialized as strings by Neon driver. All analytics endpoints now wrap count values with `Number()` to ensure proper JavaScript number types.
-
-2. **Leaderboard SQL Column Fix**: Corrected SQL queries in `server/services/leaderboards.ts` that referenced non-existent `m.created_at` column. Updated all 4 queries to use `m.join_date` for member sorting.
-
-3. **Referrals Table Schema**: Added missing `referral_code` and `completed_at` columns to referrals table via `ALTER TABLE` statements to match schema definition.
-
-4. **Ideas Relation Naming**: Renamed `author` relation to `member` in `ideasRelations` schema for consistency. Updated all ideas API endpoints (`/api/ideas`, `/api/ideas/:id`, PATCH, DELETE) to use `member` instead of `author`, aligning backend responses with frontend expectations.
+APC Connect is a comprehensive political engagement platform for the All Progressives Congress (APC) in Nigeria. It is a mobile-first web application designed to modernize party operations, offering membership management, electronic primaries, youth engagement, and real-time election monitoring. The platform aims to facilitate democratic participation through features like NIN-verified registration, blockchain-based voting, gamified political education, and transparent dues tracking. It emphasizes accessibility with offline functionality, low-bandwidth optimization, and PWA capabilities, bridging the gap between leadership and grassroots members. The project's ambition is to enhance democratic participation and modernize party operations across Nigeria.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -138,31 +23,14 @@ Preferred communication style: Simple, everyday language.
 - **Real-time Communication**: Socket.IO for live updates (elections, monitoring).
 - **API Design**: RESTful endpoints, consistent `{ success: boolean, data: any }` response structure.
 - **File Upload**: Multer for incident report attachments.
+- **Admin User & Account Management**: Comprehensive system for managing member accounts including suspension, activation, deletion, restoration, session revocation, status history tracking, member notes, password resets, and bulk operations. All status changes are logged and require a reason for audit compliance.
 
 ### Data Layer
 - **Database**: PostgreSQL via Neon serverless driver.
 - **ORM**: Drizzle ORM for type-safe operations.
 - **Database Schema**: Hierarchical administrative structure (states, LGAs, wards), users/members (NIN verification), elections (voting, blockchain audit), engagement (gamification, tasks), content (news, events), governance (dues, incident reports).
 - **Migrations**: Drizzle Kit.
-
-#### Administrative Boundaries Data
-The platform uses Nigeria's administrative structure (states, LGAs, wards) for member registration, event organization, and election management.
-
-**Data Source**: `attached_assets/nga_admin_boundaries_1762975238593.xlsx`
-- **States**: 38 entries (all 36 states + FCT)
-- **LGAs**: 775 Local Government Areas
-- **Wards**: 715 wards (administrative capitals and major wards only)
-
-**Important Note**: The ward data represents a curated subset of administrative capitals and major wards, not Nigeria's full ~8,809 ward list. This subset is sufficient for administrative operations while keeping the database manageable.
-
-**Seeding Script**: `server/seed-admin-boundaries.ts`
-- Uses transaction wrapping for atomicity (all-or-nothing)
-- Configurable file path via parameter or `ADMIN_BOUNDARIES_FILE` environment variable
-- Validates Excel structure and data counts before seeding
-- Automatically generates unique codes for states, LGAs, and wards
-- Skips existing entries to support incremental updates
-
-**Production Deployment**: Set `ADMIN_BOUNDARIES_FILE` environment variable to the Excel file path in production environments.
+- **Administrative Boundaries Data**: Utilizes Nigeria's administrative structure (states, LGAs, wards) sourced from `attached_assets/nga_admin_boundaries_1762975238593.xlsx`. A seeding script (`server/seed-admin-boundaries.ts`) handles atomic data insertion and unique code generation.
 
 ### Security & Data Privacy
 - **Anonymous Reporting**: Supports anonymous incident submissions.
@@ -180,16 +48,15 @@ The platform uses Nigeria's administrative structure (states, LGAs, wards) for m
 ### Features
 - **Search System**: Multi-category full-text search across various content types.
 - **Data Export (Admin)**: CSV export for members, votes, donations.
-- **Communication Frameworks**:
-    - **Email Notifications**: `EmailService` class with templating for welcome, event, election notifications.
-    - **SMS Notifications**: `SMSService` class for Nigerian numbers, optimized messages for reminders, OTPs.
-    - **Push Notifications**: `PushService` for broadcast, segment, and individual targeting with multiple templates.
-- **Automation & Scheduling**: `CronService` for scheduled jobs (event/dues reminders, membership renewals, election notices, inactive member cleanup, analytics aggregation), supporting Nigerian timezone (Africa/Lagos).
-- **Membership Dues System**: Recurring membership dues with Paystack integration, status tracking, and admin management for bulk operations and overdue checks.
+- **Communication Frameworks**: Email, SMS, and Push Notifications with templating and scheduling.
+- **Automation & Scheduling**: `CronService` for scheduled jobs (reminders, renewals, cleanup) with Nigerian timezone support.
+- **Membership Dues System**: Recurring membership dues with payment integration, status tracking, and admin management.
+- **Interactive Map**: Displays real-time, state-level analytics for members, events, and campaigns.
+- **Custom Point Purchases**: Flexible system allowing users to buy custom amounts of points with configurable exchange rates.
+- **Task Approval System**: Workflow for image-based micro-tasks requiring admin approval, with proof image uploads and status tracking.
 
 ## External Dependencies
-- **Payment Processing**: Paystack for membership dues and donations.
+- **Payment Processing**: Flutterwave for membership dues, point purchases, and donations.
 - **Geolocation**: Mapbox (planned) for event navigation and ward assignment.
 - **Blockchain**: For election vote audit trails (planned).
 - **Google Fonts**: Inter, Plus Jakarta Sans, JetBrains Mono (via CDN).
-- **Development Tools**: Replit-specific plugins, TypeScript, PostCSS with Tailwind and Autoprefixer.
