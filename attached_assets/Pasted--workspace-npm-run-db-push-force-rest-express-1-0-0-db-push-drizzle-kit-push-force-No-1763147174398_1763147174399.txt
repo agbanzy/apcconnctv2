@@ -1,0 +1,91 @@
+~/workspace$ npm run db:push -- --force
+
+> rest-express@1.0.0 db:push
+> drizzle-kit push --force
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/home/runner/workspace/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+
++ proof_url column will be created
+
++ verified_by column will be created
+
++ status column will be created
+
++ rejection_reason column will be created
+
++ created_at column will be created
+--- all columns conflicts in share_verifications table resolved ---
+
+
++ period column will be created
+
++ scope column will be created
+
++ scope_id column will be created
+
++ data column will be created
+--- all columns conflicts in leaderboard_snapshots table resolved ---
+
+
+
+
+· You're about to add event_attendance_member_id_event_id_unique unique constraint to the table, which contains 1 items. If this statement fails, you will receive an error from the database. Do you want to truncate event_attendance table?
+
+· You're about to add knowledge_categories_slug_unique unique constraint to the table, which contains 5 items. If this statement fails, you will receive an error from the database. Do you want to truncate knowledge_categories table?
+
+· You're about to add knowledge_articles_slug_unique unique constraint to the table, which contains 5 items. If this statement fails, you will receive an error from the database. Do you want to truncate knowledge_articles table?
+
+· You're about to add campaign_votes_member_id_campaign_id_unique unique constraint to the table, which contains 685 items. If this statement fails, you will receive an error from the database. Do you want to truncate campaign_votes table?
+
+· You're about to add quiz_attempts_member_id_quiz_id_unique unique constraint to the table, which contains 58 items. If this statement fails, you will receive an error from the database. Do you want to truncate quiz_attempts table?
+
+· You're about to add task_completions_member_id_task_id_task_type_unique unique constraint to the table, which contains 180 items. If this statement fails, you will receive an error from the database. Do you want to truncate task_completions table?
+
+· You're about to add wards_code_unique unique constraint to the table, which contains 952 items. If this statement fails, you will receive an error from the database. Do you want to truncate wards table?
+
+· You're about to add lgas_code_unique unique constraint to the table, which contains 794 items. If this statement fails, you will receive an error from the database. Do you want to truncate lgas table?
+
+· You're about to add states_name_unique unique constraint to the table, which contains 38 items. If this statement fails, you will receive an error from the database. Do you want to truncate states table?
+
+· You're about to add states_code_unique unique constraint to the table, which contains 38 items. If this statement fails, you will receive an error from the database. Do you want to truncate states table?
+
+· You're about to add point_purchases_paystack_reference_unique unique constraint to the table, which contains 2 items. If this statement fails, you will receive an error from the database. Do you want to truncate point_purchases table?
+
+· You're about to add unique_referred_idx unique constraint to the table, which contains 4 items. If this statement fails, you will receive an error from the database. Do you want to truncate referrals table?
+
+· You're about to add members_member_id_unique unique constraint to the table, which contains 6184 items. If this statement fails, you will receive an error from the database. Do you want to truncate members table?
+
+· You're about to add members_referral_code_unique unique constraint to the table, which contains 6184 items. If this statement fails, you will receive an error from the database. Do you want to truncate members table?
+
+error: column "balance_after" of relation "user_points" contains null values
+    at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Object.query (/home/runner/workspace/node_modules/drizzle-kit/bin.cjs:80601:26)
+    at async pgPush (/home/runner/workspace/node_modules/drizzle-kit/bin.cjs:84411:13)
+    at async Object.handler (/home/runner/workspace/node_modules/drizzle-kit/bin.cjs:93813:9)
+    at async run (/home/runner/workspace/node_modules/drizzle-kit/bin.cjs:93059:7) {
+  length: 168,
+  severity: 'ERROR',
+  code: '23502',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'user_points',
+  column: 'balance_after',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+  line: '6111',
+  routine: 'ATRewriteTable'
+}
+~/workspace$ 
+~/workspace$ 
+~/workspace$ 
+~/workspace$ 
