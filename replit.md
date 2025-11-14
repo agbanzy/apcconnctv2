@@ -3,9 +3,14 @@
 ## Overview
 APC Connect is a comprehensive political engagement platform for the All Progressives Congress (APC) in Nigeria. It's a mobile-first web application designed to modernize party operations, offering membership management, electronic primaries, youth engagement, and real-time election monitoring. The platform aims to facilitate democratic participation through features like NIN-verified registration, blockchain-based voting, gamified political education, and transparent dues tracking. It emphasizes accessibility with offline functionality, low-bandwidth optimization, and PWA capabilities, bridging the gap between leadership and grassroots members.
 
-## Recent Bug Fixes (Nov 13, 2025)
+## Recent Bug Fixes (Nov 14, 2025)
 
-### Database Schema & API Fixes
+### Critical Production Fixes
+1. **Seed Script Auto-Execution**: Disabled automatic seeding on production deployments. The seed script (`server/seed-admin-boundaries.ts`) was executing during production startup, causing database transaction errors and server crashes. Auto-execution is now commented out; seeding is only available via the admin API endpoint `POST /api/admin/seed-boundaries`.
+
+2. **Query Parameter Serialization**: Fixed React Query's `queryKey` parameter handling in `client/src/lib/queryClient.ts`. The default query function was calling `queryKey.join("/")` which converted objects to `[object Object]` in URLs. Now properly serializes objects as URL query parameters using `URLSearchParams`, fixing leaderboard pagination and other API calls with query params.
+
+### Database Schema & API Fixes (Nov 13, 2025)
 1. **Analytics API Number Conversion**: Fixed string-to-number type mismatch where PostgreSQL bigint counts were serialized as strings by Neon driver. All analytics endpoints now wrap count values with `Number()` to ensure proper JavaScript number types.
 
 2. **Leaderboard SQL Column Fix**: Corrected SQL queries in `server/services/leaderboards.ts` that referenced non-existent `m.created_at` column. Updated all 4 queries to use `m.join_date` for member sorting.
