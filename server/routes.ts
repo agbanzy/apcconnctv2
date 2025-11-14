@@ -6,8 +6,6 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import { Server as SocketIOServer } from "socket.io";
-// @ts-ignore - No types available for paystack-api
-import Paystack from "paystack-api";
 import multer from "multer";
 import QRCode from "qrcode";
 import OpenAI from "openai";
@@ -40,7 +38,10 @@ import leaderboardsRouter from "./routes/leaderboards";
 import { PointLedgerService } from "./services/point-ledger";
 
 const PgSession = ConnectPgSimple(session);
-const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
+
+// Flutterwave configuration
+const FLW_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY as string;
+const FLW_BASE_URL = "https://api.flutterwave.com/v3";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1822,34 +1823,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      const tx_ref = `dues_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+
       const [payment] = await db.insert(schema.membershipDues).values({
         id: crypto.randomUUID(),
         memberId: member.id,
-        amount: String(amount), // Store in naira, not kobo
+        amount: String(amount),
         paymentStatus: "pending",
-        paymentMethod: "paystack",
+        paymentMethod: "flutterwave",
         dueDate: new Date(),
       }).returning();
 
       const user = Array.isArray(member.user) ? member.user[0] : member.user;
-      const paystackResponse = await paystack.transaction.initialize({
-        email: user?.email || "",
-        amount: amount * 100, // Paystack expects kobo
-        reference: payment.id,
-        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/verify`,
-        metadata: {
+      
+      // Initialize Flutterwave payment
+      const flwPayload = {
+        tx_ref,
+        amount,
+        currency: "NGN",
+        redirect_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/verify`,
+        payment_options: "card,banktransfer,ussd,account",
+        customer: {
+          email: user?.email || "",
+          name: `${user?.firstName} ${user?.lastName}`,
+        },
+        customizations: {
+          title: "APC Connect - Membership Dues",
+          description: "Membership dues payment",
+          logo: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/logo.png`,
+        },
+        meta: {
           payment_id: payment.id,
           member_id: member.id,
           type: "membership_dues",
-        }
+        },
+      };
+
+      const flwResponse = await fetch(`${FLW_BASE_URL}/payments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(flwPayload),
       });
+
+      const flwData = await flwResponse.json();
+
+      if (flwData.status !== 'success') {
+        throw new Error(flwData.message || "Failed to initialize payment");
+      }
+
+      // Update payment record with Flutterwave reference
+      await db.update(schema.membershipDues)
+        .set({ paystackReference: tx_ref })
+        .where(eq(schema.membershipDues.id, payment.id));
 
       res.json({
         success: true,
         data: {
-          authorization_url: paystackResponse.data.authorization_url,
-          access_code: paystackResponse.data.access_code,
-          reference: paystackResponse.data.reference,
+          authorization_url: flwData.data.link,
+          access_code: flwData.data.link,
+          reference: tx_ref,
         }
       });
     } catch (error) {
@@ -1862,20 +1897,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { reference } = req.body;
 
-      const verification = await paystack.transaction.verify(reference);
+      // Verify with Flutterwave
+      const flwVerifyResponse = await fetch(
+        `${FLW_BASE_URL}/transactions/verify_by_reference?tx_ref=${reference}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+          },
+        }
+      );
 
-      if (verification.data.status === "success") {
+      const verification = await flwVerifyResponse.json();
+
+      if (verification.status === 'success' && verification.data.status === "successful") {
+        // Find payment by Flutterwave reference
+        const payment = await db.query.membershipDues.findFirst({
+          where: eq(schema.membershipDues.paystackReference, reference)
+        });
+
+        if (!payment) {
+          return res.status(404).json({ success: false, error: "Payment not found" });
+        }
+
         await db.update(schema.membershipDues)
           .set({
             paymentStatus: "completed",
-            paystackReference: reference,
             paidAt: new Date(),
           })
-          .where(eq(schema.membershipDues.id, reference));
-
-        const payment = await db.query.membershipDues.findFirst({
-          where: eq(schema.membershipDues.id, reference)
-        });
+          .where(eq(schema.membershipDues.id, payment.id));
 
         if (payment) {
           await db.update(schema.members)
@@ -1885,9 +1934,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({ success: true, data: { payment } });
       } else {
-        await db.update(schema.membershipDues)
-          .set({ paymentStatus: "failed" })
-          .where(eq(schema.membershipDues.id, reference));
+        const payment = await db.query.membershipDues.findFirst({
+          where: eq(schema.membershipDues.paystackReference, reference)
+        });
+
+        if (payment) {
+          await db.update(schema.membershipDues)
+            .set({ paymentStatus: "failed" })
+            .where(eq(schema.membershipDues.id, payment.id));
+        }
 
         res.status(400).json({ success: false, error: "Payment verification failed" });
       }
@@ -1897,31 +1952,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/paystack/webhook", async (req: Request, res: Response) => {
+  app.post("/api/flutterwave/webhook", async (req: Request, res: Response) => {
     try {
-      const hash = crypto
-        .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY as string)
-        .update(JSON.stringify(req.body))
-        .digest("hex");
+      const secretHash = process.env.FLUTTERWAVE_SECRET_KEY;
+      const signature = req.headers["verif-hash"];
 
-      if (hash !== req.headers["x-paystack-signature"]) {
+      if (!signature || signature !== secretHash) {
         return res.status(401).json({ error: "Invalid signature" });
       }
 
-      const event = req.body;
+      const payload = req.body;
 
-      if (event.event === "charge.success") {
-        const reference = event.data.reference;
-        const metadata = event.data.metadata;
+      if (payload.event === "charge.completed" && payload.data.status === "successful") {
+        const tx_ref = payload.data.tx_ref;
+        const meta = payload.data.meta;
 
-        if (metadata.type === "membership_dues") {
-          await db.update(schema.membershipDues)
-            .set({ paymentStatus: "completed", paidAt: new Date() })
-            .where(eq(schema.membershipDues.id, reference));
-        } else if (metadata.donation_id) {
-          await db.update(schema.donations)
-            .set({ paymentStatus: "completed" })
-            .where(eq(schema.donations.id, reference));
+        if (meta && meta.type === "membership_dues") {
+          const payment = await db.query.membershipDues.findFirst({
+            where: eq(schema.membershipDues.paystackReference, tx_ref)
+          });
+          
+          if (payment) {
+            await db.update(schema.membershipDues)
+              .set({ paymentStatus: "completed", paidAt: new Date() })
+              .where(eq(schema.membershipDues.id, payment.id));
+          }
+        } else if (meta && meta.donation_id) {
+          const donation = await db.query.donations.findFirst({
+            where: eq(schema.donations.paystackReference, tx_ref)
+          });
+          
+          if (donation) {
+            await db.update(schema.donations)
+              .set({ paymentStatus: "completed" })
+              .where(eq(schema.donations.id, donation.id));
+          }
         }
       }
 
@@ -5761,7 +5826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Donation Endpoints
   app.post("/api/donations/create", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { amount, campaign_id, is_anonymous, message } = req.body;
+      const { amount, campaignId, isAnonymous, message } = req.body;
       const member_id = req.user!.id;
 
       const member = await db.query.members.findFirst({
@@ -5773,37 +5838,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      const tx_ref = `don_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+
       const [donation] = await db.insert(schema.donations).values({
         id: crypto.randomUUID(),
         memberId: member.id,
-        campaignId: campaign_id || null,
+        campaignId: campaignId || null,
         amount: amount * 100,
         currency: "NGN",
-        paymentMethod: "paystack",
+        paymentMethod: "flutterwave",
         paymentStatus: "pending",
-        isAnonymous: is_anonymous || false,
+        isAnonymous: isAnonymous || false,
         message: message || null,
       }).returning();
 
       const user = Array.isArray(member.user) ? member.user[0] : member.user;
-      const paystackResponse = await paystack.transaction.initialize({
-        email: user?.email || "",
-        amount: amount * 100,
-        reference: donation.id,
-        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/donations/verify`,
-        metadata: {
+      
+      // Initialize Flutterwave payment
+      const flwPayload = {
+        tx_ref,
+        amount,
+        currency: "NGN",
+        redirect_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/donations`,
+        payment_options: "card,banktransfer,ussd,account",
+        customer: {
+          email: user?.email || "",
+          name: `${user?.firstName} ${user?.lastName}`,
+        },
+        customizations: {
+          title: "APC Connect - Donation",
+          description: campaignId ? "Campaign donation" : "General donation",
+          logo: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/logo.png`,
+        },
+        meta: {
           donation_id: donation.id,
-          campaign_id: campaign_id || null,
+          campaign_id: campaignId || null,
           member_id: member.id,
-        }
+        },
+      };
+
+      const flwResponse = await fetch(`${FLW_BASE_URL}/payments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(flwPayload),
       });
+
+      const flwData = await flwResponse.json();
+
+      if (flwData.status !== 'success') {
+        throw new Error(flwData.message || "Failed to initialize payment");
+      }
+
+      // Update donation record with Flutterwave reference
+      await db.update(schema.donations)
+        .set({ paystackReference: tx_ref })
+        .where(eq(schema.donations.id, donation.id));
 
       res.json({
         success: true,
         data: {
-          authorization_url: paystackResponse.data.authorization_url,
-          access_code: paystackResponse.data.access_code,
-          reference: paystackResponse.data.reference,
+          authorization_url: flwData.data.link,
+          access_code: flwData.data.link,
+          reference: tx_ref,
         }
       });
     } catch (error: any) {
@@ -5816,17 +5915,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { reference } = req.body;
 
-      const verification = await paystack.transaction.verify(reference);
+      // Verify with Flutterwave
+      const flwVerifyResponse = await fetch(
+        `${FLW_BASE_URL}/transactions/verify_by_reference?tx_ref=${reference}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+          },
+        }
+      );
 
-      if (verification.data.status === "success") {
+      const verification = await flwVerifyResponse.json();
+
+      if (verification.status === 'success' && verification.data.status === "successful") {
+        // Find donation by Flutterwave reference
+        const donation = await db.query.donations.findFirst({
+          where: eq(schema.donations.paystackReference, reference)
+        });
+
+        if (!donation) {
+          return res.status(404).json({ success: false, error: "Donation not found" });
+        }
+
         await db.update(schema.donations)
           .set({
             paymentStatus: "completed",
-            paystackReference: reference,
           })
-          .where(eq(schema.donations.id, reference));
+          .where(eq(schema.donations.id, donation.id));
 
-        const donation = await db.query.donations.findFirst({
+        // Update campaign progress if campaign donation
+        if (donation.campaignId) {
+          const campaign = await db.query.donationCampaigns.findFirst({
+            where: eq(schema.donationCampaigns.id, donation.campaignId)
+          });
+
+          if (campaign) {
+            await db.update(schema.donationCampaigns)
+              .set({
+                currentAmount: campaign.currentAmount + donation.amount
+              })
+              .where(eq(schema.donationCampaigns.id, donation.campaignId));
+          }
+        }
+
+        const updatedDonation = await db.query.donations.findFirst({
           where: eq(schema.donations.id, reference)
         });
 

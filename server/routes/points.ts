@@ -1,7 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-// @ts-ignore - No types available for paystack-api
-import Paystack from "paystack-api";
 import crypto from "crypto";
 import { db } from "../db";
 import * as schema from "@shared/schema";
@@ -9,7 +7,10 @@ import { eq, and, desc } from "drizzle-orm";
 import { pointLedgerService } from "../services/point-ledger";
 
 const router = Router();
-const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY as string);
+
+// Flutterwave configuration
+const FLW_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY as string;
+const FLW_BASE_URL = "https://api.flutterwave.com/v3";
 
 type UserType = typeof schema.users.$inferSelect;
 
@@ -170,23 +171,45 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       packageType = "custom";
     }
 
-    const reference = `pt_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+    const tx_ref = `pt_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
 
-    const paystackResponse = await paystack.transaction.initialize({
-      amount: nairaAmount * 100,
-      email: req.user!.email,
-      reference,
-      callback_url: callbackUrl || `${process.env.VITE_APP_URL || 'http://localhost:5000'}/purchase-points`,
-      metadata: {
+    // Initialize Flutterwave payment
+    const flwPayload = {
+      tx_ref,
+      amount: nairaAmount,
+      currency: "NGN",
+      redirect_url: callbackUrl || `${process.env.VITE_APP_URL || 'http://localhost:5000'}/purchase-points`,
+      payment_options: "card,banktransfer,ussd,account",
+      customer: {
+        email: req.user!.email,
+        name: req.user!.email.split('@')[0],
+      },
+      customizations: {
+        title: "APC Connect - Point Purchase",
+        description: `Purchase ${pointsAmount.toLocaleString()} points`,
+        logo: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/logo.png`,
+      },
+      meta: {
         memberId: userMember.id,
         pointsAmount,
         exchangeRate,
         mode,
       },
+    };
+
+    const flwResponse = await fetch(`${FLW_BASE_URL}/payments`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(flwPayload),
     });
 
-    if (!paystackResponse.status) {
-      throw new Error("Failed to initialize payment");
+    const flwData = await flwResponse.json();
+
+    if (flwData.status !== 'success') {
+      throw new Error(flwData.message || "Failed to initialize payment");
     }
 
     const [purchase] = await db.insert(schema.pointPurchases).values({
@@ -194,18 +217,18 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       pointsAmount,
       nairaAmount: nairaAmount.toString(),
       exchangeRate: exchangeRate.toString(),
-      paystackReference: reference,
-      paystackAccessCode: paystackResponse.data.access_code,
+      paystackReference: tx_ref,
+      paystackAccessCode: flwData.data.link,
       status: "pending",
-      metadata: { packageType, mode, ip: req.ip },
+      metadata: { packageType, mode, ip: req.ip, provider: 'flutterwave' },
     }).returning();
 
     res.json({
       success: true,
       purchase,
-      authorizationUrl: paystackResponse.data.authorization_url,
-      accessCode: paystackResponse.data.access_code,
-      reference,
+      authorizationUrl: flwData.data.link,
+      accessCode: flwData.data.link,
+      reference: tx_ref,
     });
   } catch (error: any) {
     console.error("Purchase initiation error:", error);
@@ -260,21 +283,31 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
 
     console.log(`Verifying payment for reference: ${reference}`);
 
-    const paystackVerification = await paystack.transaction.verify(reference);
+    // Verify with Flutterwave
+    const flwVerifyResponse = await fetch(
+      `${FLW_BASE_URL}/transactions/verify_by_reference?tx_ref=${reference}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+        },
+      }
+    );
 
-    if (!paystackVerification.status || !paystackVerification.data) {
-      throw new Error("Failed to verify payment with Paystack");
+    const flwVerification = await flwVerifyResponse.json();
+
+    if (flwVerification.status !== 'success' || !flwVerification.data) {
+      throw new Error(flwVerification.message || "Failed to verify payment with Flutterwave");
     }
 
-    const paymentData = paystackVerification.data;
+    const paymentData = flwVerification.data;
     
     console.log(`Payment verification result - Reference: ${reference}, Status: ${paymentData.status}`);
 
-    if (paymentData.status !== "success") {
+    if (paymentData.status !== "successful") {
       await db.update(schema.pointPurchases)
         .set({ 
           status: "failed",
-          metadata: { ...(existingPurchase.metadata as any || {}), paystackStatus: paymentData.status },
+          metadata: { ...(existingPurchase.metadata as any || {}), flutterwaveStatus: paymentData.status },
         })
         .where(eq(schema.pointPurchases.id, existingPurchase.id));
 
@@ -285,8 +318,8 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
       });
     }
 
-    const amountPaidKobo = paymentData.amount;
-    const expectedAmountKobo = parseFloat(existingPurchase.nairaAmount) * 100;
+    const amountPaidNaira = paymentData.amount;
+    const expectedAmountNaira = parseFloat(existingPurchase.nairaAmount);
 
     // Validate based on mode (stored in metadata)
     const purchaseMetadata = existingPurchase.metadata as any || {};
@@ -317,16 +350,16 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
       }
     }
 
-    if (amountPaidKobo !== expectedAmountKobo) {
-      console.error(`Amount mismatch - Reference: ${reference}, Expected: ${expectedAmountKobo}, Received: ${amountPaidKobo}`);
+    if (Math.abs(amountPaidNaira - expectedAmountNaira) > 0.01) {
+      console.error(`Amount mismatch - Reference: ${reference}, Expected: ${expectedAmountNaira}, Received: ${amountPaidNaira}`);
       await db.update(schema.pointPurchases)
         .set({ 
           status: "failed",
           metadata: { 
             ...(existingPurchase.metadata as any || {}), 
             error: "Amount mismatch",
-            expected: expectedAmountKobo,
-            received: amountPaidKobo,
+            expected: expectedAmountNaira,
+            received: amountPaidNaira,
           },
         })
         .where(eq(schema.pointPurchases.id, existingPurchase.id));
@@ -343,12 +376,14 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
         .set({ 
           status: "success",
           completedAt: new Date(),
-          paymentMethod: paymentData.channel,
+          paymentMethod: paymentData.payment_type,
           metadata: {
             ...(existingPurchase.metadata as any || {}),
-            paystackStatus: paymentData.status,
-            paidAt: paymentData.paid_at,
-            channel: paymentData.channel,
+            flutterwaveStatus: paymentData.status,
+            transactionId: paymentData.id,
+            flwRef: paymentData.flw_ref,
+            paidAt: paymentData.created_at,
+            channel: paymentData.payment_type,
           },
         })
         .where(and(
@@ -368,13 +403,13 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
       await tx.insert(schema.userPoints).values({
         memberId: existingPurchase.memberId,
         transactionType: "purchase",
-        source: "paystack",
+        source: "flutterwave",
         amount: existingPurchase.pointsAmount,
         balanceAfter: newBalance,
         referenceType: "point_purchase",
         referenceId: existingPurchase.id,
         metadata: {
-          paystackReference: reference,
+          flutterwaveReference: reference,
           nairaAmount: existingPurchase.nairaAmount,
           exchangeRate: existingPurchase.exchangeRate,
         },

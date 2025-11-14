@@ -5,6 +5,36 @@ APC Connect is a comprehensive political engagement platform for the All Progres
 
 ## Recent Updates (Nov 14, 2025)
 
+### Payment Migration: Paystack → Flutterwave
+Replaced entire payment processing infrastructure with Flutterwave:
+
+1. **Backend Migration (server/routes.ts, server/routes/points.ts)**:
+   - Removed Paystack SDK dependency
+   - Implemented Flutterwave v3 REST API using native fetch
+   - Updated all payment endpoints: point purchases, membership dues, donations
+   - Changed webhook endpoint from `/api/paystack/webhook` to `/api/flutterwave/webhook`
+   - Fixed donation verification to update campaign progress tracking automatically
+   - Environment variables: `FLUTTERWAVE_SECRET_KEY`, `VITE_FLUTTERWAVE_PUBLIC_KEY`, `FLUTTERWAVE_ENCRYPTION_KEY`
+
+2. **Payment Flow Changes**:
+   - Point purchases: Now use Flutterwave hosted checkout (redirect flow)
+   - Membership dues: Flutterwave payment link with NGN currency
+   - Donations: Flutterwave checkout with automatic campaign progress updates
+   - Verification: Changed from Paystack's `/verify/:reference` to Flutterwave's `/verify_by_reference?tx_ref=`
+   - Amount handling: Flutterwave uses naira directly (not kobo), adjusted all calculations
+
+3. **Campaign Progress Tracking**:
+   - Added automatic donation progress updates in verification endpoint
+   - When a campaign donation is verified, `donationCampaigns.currentAmount` increments by donation amount
+   - Progress bar in frontend already configured to show `currentAmount / goalAmount`
+
+4. **Outstanding Work**:
+   - Frontend needs Flutterwave inline checkout implementation (using flutterwave-react-v3 or vanilla JS)
+   - Recurring dues endpoints still reference removed Paystack SDK (lines 2093, 2125, 6238)
+   - LSP errors in client/src/pages/purchase-points.tsx for generic types
+
+## Recent Updates (Nov 14, 2025)
+
 ### Interactive Map: Real-Data Connection
 Connected Nigeria interactive map to live database instead of placeholder data:
 
