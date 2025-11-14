@@ -5,7 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Coins, Check, Sparkles, TrendingUp, MessageCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Coins, Check, Sparkles, TrendingUp, MessageCircle, Edit3 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,12 +19,19 @@ interface PointPackage {
   exchangeRate: number;
 }
 
+interface CustomRateConfig {
+  exchangeRate: number;
+  minPoints: number;
+  maxPoints: number;
+}
+
 export default function PurchasePointsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [selectedPackage, setSelectedPackage] = useState<PointPackage | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [customPoints, setCustomPoints] = useState<string>("");
 
   const { data: memberData } = useQuery<{ success: boolean; data: any }>({
     queryKey: ["/api/members/me"],
@@ -38,12 +47,13 @@ export default function PurchasePointsPage() {
   const { data: packagesData, isLoading: isLoadingPackages } = useQuery<{
     success: boolean;
     packages: PointPackage[];
+    customRate: CustomRateConfig;
   }>({
     queryKey: ["/api/points/packages"],
   });
 
   const purchaseMutation = useMutation({
-    mutationFn: async (pkg: PointPackage) => {
+    mutationFn: async (params: { mode: "preset" | "custom"; points: number; naira: number }) => {
       const response = await apiRequest<{
         success: boolean;
         authorizationUrl: string;
@@ -53,8 +63,9 @@ export default function PurchasePointsPage() {
         url: "/api/points/purchase",
         method: "POST",
         data: {
-          pointsAmount: pkg.points,
-          nairaAmount: pkg.naira,
+          mode: params.mode,
+          pointsAmount: params.points,
+          nairaAmount: params.naira,
           callbackUrl: `${window.location.origin}/purchase-points`,
         },
       });
@@ -131,11 +142,27 @@ export default function PurchasePointsPage() {
   const handlePurchase = (pkg: PointPackage) => {
     setSelectedPackage(pkg);
     setIsProcessing(true);
-    purchaseMutation.mutate(pkg);
+    purchaseMutation.mutate({ mode: "preset", points: pkg.points, naira: pkg.naira });
+  };
+
+  const handleCustomPurchase = () => {
+    const points = parseInt(customPoints);
+    if (isNaN(points) || !customRate) return;
+
+    const naira = Math.round(points / customRate.exchangeRate);
+    setIsProcessing(true);
+    purchaseMutation.mutate({ mode: "custom", points, naira });
   };
 
   const packages = packagesData?.packages || [];
+  const customRate = packagesData?.customRate;
   const balance = balanceData?.balance || 0;
+
+  const customPointsNum = parseInt(customPoints) || 0;
+  const customNairaCost = customRate && customPointsNum > 0 
+    ? Math.round(customPointsNum / customRate.exchangeRate) 
+    : 0;
+  const isCustomValid = customRate && customPointsNum >= customRate.minPoints && customPointsNum <= customRate.maxPoints;
   
   // Find best value package (highest exchange rate)
   const bestValuePackage = packages.reduce((best, pkg) => 
@@ -265,6 +292,91 @@ export default function PurchasePointsPage() {
                 </Card>
               );
             })}
+            
+            {/* Custom Amount Card */}
+            {customRate && (
+              <Card className="relative hover-elevate border-primary" data-testid="package-card-custom">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <Badge className="bg-primary text-primary-foreground">
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    Custom Amount
+                  </Badge>
+                </div>
+                
+                <CardHeader className="text-center pb-4">
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                    <Coins className="h-8 w-8 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl font-bold">
+                    Buy Any Amount
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    {customPointsNum > 0 ? `₦${customNairaCost.toLocaleString()}` : "Enter points"}
+                  </CardDescription>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {/* Custom Amount Input */}
+                  <div className="space-y-2">
+                    <Label htmlFor="custom-points">Points Amount</Label>
+                    <Input
+                      id="custom-points"
+                      type="number"
+                      placeholder={`${customRate.minPoints.toLocaleString()} - ${customRate.maxPoints.toLocaleString()}`}
+                      value={customPoints}
+                      onChange={(e) => setCustomPoints(e.target.value)}
+                      min={customRate.minPoints}
+                      max={customRate.maxPoints}
+                      data-testid="input-custom-points"
+                    />
+                    {customPointsNum > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Cost: ₦{customNairaCost.toLocaleString()} ({customPointsNum.toLocaleString()} pts)
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Benefits */}
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span>Any amount you need</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span>Instant credit</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span>Secure payment</span>
+                    </div>
+                  </div>
+
+                  {/* Exchange Rate */}
+                  <div className="pt-2 border-t text-center text-xs text-muted-foreground">
+                    Rate: ₦1 = {customRate.exchangeRate.toFixed(2)} pts
+                  </div>
+
+                  {/* Purchase Button */}
+                  <Button
+                    className="w-full"
+                    onClick={handleCustomPurchase}
+                    disabled={!isCustomValid || isProcessing || purchaseMutation.isPending}
+                    data-testid="button-purchase-custom"
+                  >
+                    {isProcessing && !selectedPackage
+                      ? "Processing..."
+                      : "Purchase Now"}
+                  </Button>
+                  
+                  {customPointsNum > 0 && !isCustomValid && (
+                    <p className="text-xs text-destructive text-center">
+                      Amount must be between {customRate.minPoints.toLocaleString()} and {customRate.maxPoints.toLocaleString()} points
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             
             {/* Enterprise Package */}
             <Card className="relative hover-elevate border-accent" data-testid="package-card-enterprise">

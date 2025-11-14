@@ -5,6 +5,28 @@ APC Connect is a comprehensive political engagement platform for the All Progres
 
 ## Recent Updates (Nov 14, 2025)
 
+### New Features: Custom Point Purchases
+Implemented flexible point purchase system allowing users to buy any amount:
+
+1. **Backend (server/routes/points.ts)**:
+   - Added custom purchase mode alongside preset packages
+   - Configurable exchange rate via `CUSTOM_POINTS_EXCHANGE_RATE` env var (default: 1.0 ₦/pt)
+   - Min/max limits: 10,000 - 2,000,000 points
+   - Extended purchase schema with `mode: "preset" | "custom"`
+   - Verification validates both preset packages and custom rate calculations
+   - Stored mode in metadata for purchase tracking
+
+2. **Frontend (client/src/pages/purchase-points.tsx)**:
+   - Custom amount card with real-time naira calculation
+   - Input validation showing min/max limits
+   - Positioned between preset packages and enterprise WhatsApp option
+   - Uses same Paystack payment flow as preset packages
+
+3. **Enterprise Packages**:
+   - Updated preset packages to enterprise scale: 200k, 500k, 1M points
+   - Pricing: ₦150k, ₦350k, ₦650k with better rates at higher volumes
+   - WhatsApp contact option for custom enterprise negotiations
+
 ### New Features: Task Approval System
 Implemented comprehensive task approval workflow for image-based micro tasks:
 

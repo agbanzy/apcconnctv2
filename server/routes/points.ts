@@ -119,7 +119,7 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       return res.status(400).json({ success: false, error: validation.error.errors });
     }
 
-    const { pointsAmount, nairaAmount, callbackUrl } = validation.data;
+    const { mode, pointsAmount, nairaAmount, callbackUrl } = validation.data;
 
     const userMember = await db.query.members.findFirst({
       where: eq(schema.members.userId, req.user!.id),
@@ -129,15 +129,45 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       return res.status(404).json({ success: false, error: "Member profile not found" });
     }
 
-    const matchingPackage = POINT_PACKAGES.find(
-      pkg => pkg.points === pointsAmount && pkg.naira === nairaAmount
-    );
+    let exchangeRate: number;
+    let packageType: string;
 
-    if (!matchingPackage) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Invalid package. Available packages: " + JSON.stringify(POINT_PACKAGES) 
-      });
+    if (mode === "preset") {
+      // Validate against preset packages
+      const matchingPackage = POINT_PACKAGES.find(
+        pkg => pkg.points === pointsAmount && pkg.naira === nairaAmount
+      );
+
+      if (!matchingPackage) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Invalid package. Available packages: " + JSON.stringify(POINT_PACKAGES) 
+        });
+      }
+
+      exchangeRate = matchingPackage.exchangeRate;
+      packageType = `${pointsAmount}pts`;
+    } else {
+      // Custom purchase validation
+      if (pointsAmount < MIN_CUSTOM_POINTS || pointsAmount > MAX_CUSTOM_POINTS) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Custom purchase must be between ${MIN_CUSTOM_POINTS.toLocaleString()} and ${MAX_CUSTOM_POINTS.toLocaleString()} points` 
+        });
+      }
+
+      exchangeRate = CUSTOM_EXCHANGE_RATE;
+      const expectedNaira = Math.round(pointsAmount / exchangeRate);
+      
+      // Allow ₦1 tolerance for rounding
+      if (Math.abs(nairaAmount - expectedNaira) > 1) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Invalid naira amount for ${pointsAmount} points. Expected: ₦${expectedNaira}` 
+        });
+      }
+
+      packageType = "custom";
     }
 
     const reference = `pt_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
@@ -146,11 +176,12 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       amount: nairaAmount * 100,
       email: req.user!.email,
       reference,
-      callback_url: callbackUrl || `${process.env.VITE_APP_URL || 'http://localhost:5000'}/rewards`,
+      callback_url: callbackUrl || `${process.env.VITE_APP_URL || 'http://localhost:5000'}/purchase-points`,
       metadata: {
         memberId: userMember.id,
         pointsAmount,
-        exchangeRate: matchingPackage.exchangeRate,
+        exchangeRate,
+        mode,
       },
     });
 
@@ -162,11 +193,11 @@ router.post("/purchase", requireAuth, async (req: AuthRequest, res: Response) =>
       memberId: userMember.id,
       pointsAmount,
       nairaAmount: nairaAmount.toString(),
-      exchangeRate: matchingPackage.exchangeRate.toString(),
+      exchangeRate: exchangeRate.toString(),
       paystackReference: reference,
       paystackAccessCode: paystackResponse.data.access_code,
       status: "pending",
-      metadata: { packageType: `${pointsAmount}pts`, ip: req.ip },
+      metadata: { packageType, mode, ip: req.ip },
     }).returning();
 
     res.json({
@@ -257,17 +288,33 @@ router.post("/purchase/verify", requireAuth, async (req: AuthRequest, res: Respo
     const amountPaidKobo = paymentData.amount;
     const expectedAmountKobo = parseFloat(existingPurchase.nairaAmount) * 100;
 
-    const matchingPackage = POINT_PACKAGES.find(
-      pkg => pkg.points === existingPurchase.pointsAmount && 
-             pkg.naira === parseFloat(existingPurchase.nairaAmount)
-    );
+    // Validate based on mode (stored in metadata)
+    const purchaseMetadata = existingPurchase.metadata as any || {};
+    const purchaseMode = purchaseMetadata.mode || "preset";
 
-    if (!matchingPackage) {
-      console.error(`Invalid package configuration for purchase ${existingPurchase.id}`);
-      return res.status(400).json({ 
-        success: false, 
-        error: "Invalid package configuration",
-      });
+    if (purchaseMode === "preset") {
+      const matchingPackage = POINT_PACKAGES.find(
+        pkg => pkg.points === existingPurchase.pointsAmount && 
+               pkg.naira === parseFloat(existingPurchase.nairaAmount)
+      );
+
+      if (!matchingPackage) {
+        console.error(`Invalid package configuration for purchase ${existingPurchase.id}`);
+        return res.status(400).json({ 
+          success: false, 
+          error: "Invalid package configuration",
+        });
+      }
+    } else {
+      // Custom purchase - verify exchange rate calculation
+      const expectedPoints = Math.round(parseFloat(existingPurchase.nairaAmount) * CUSTOM_EXCHANGE_RATE);
+      if (Math.abs(existingPurchase.pointsAmount - expectedPoints) > 1) {
+        console.error(`Custom purchase rate mismatch for purchase ${existingPurchase.id}`);
+        return res.status(400).json({ 
+          success: false, 
+          error: "Invalid custom purchase configuration",
+        });
+      }
     }
 
     if (amountPaidKobo !== expectedAmountKobo) {
