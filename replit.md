@@ -5,6 +5,28 @@ APC Connect is a comprehensive political engagement platform for the All Progres
 
 ## Recent Updates (Nov 14, 2025)
 
+### Interactive Map: Real-Data Connection
+Connected Nigeria interactive map to live database instead of placeholder data:
+
+1. **Map-Data Endpoint (server/routes.ts `/api/analytics/map-data`)**:
+   - Added real events counting by state using `events.stateId` column (replaced hardcoded 0)
+   - Query: `SELECT count(*) FROM events WHERE stateId = ? AND date >= NOW()`
+   - Wrapped all count values with `Number()` to prevent Neon driver string serialization
+   - Returns per-state metrics: memberCount, activeMembers, upcomingEvents, activeCampaigns, lgasCovered, wardsCovered
+
+2. **Frontend Map Component (client/src/components/nigeria-map.tsx)**:
+   - Already configured to consume `/api/analytics/map-data`
+   - Mode switching: Members / Events / Campaigns / Activity
+   - Color intensity visualization based on real data values
+   - Interactive tooltips showing all state statistics
+   - Click-to-filter functionality for incident lists
+
+3. **Schema & Relation Fixes**:
+   - Fixed `ideas` relation from `author` to `member` (consistent with replit.md documentation)
+   - Fixed badge/achievement metadata using `name` instead of `title`
+   - Kept `issueCampaigns` using `author` relation (per schema definition)
+   - Resolved all 5 LSP errors in server/routes.ts
+
 ### New Features: Custom Point Purchases
 Implemented flexible point purchase system allowing users to buy any amount:
 
