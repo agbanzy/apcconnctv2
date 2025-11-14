@@ -3,7 +3,32 @@
 ## Overview
 APC Connect is a comprehensive political engagement platform for the All Progressives Congress (APC) in Nigeria. It's a mobile-first web application designed to modernize party operations, offering membership management, electronic primaries, youth engagement, and real-time election monitoring. The platform aims to facilitate democratic participation through features like NIN-verified registration, blockchain-based voting, gamified political education, and transparent dues tracking. It emphasizes accessibility with offline functionality, low-bandwidth optimization, and PWA capabilities, bridging the gap between leadership and grassroots members.
 
-## Recent Bug Fixes (Nov 14, 2025)
+## Recent Updates (Nov 14, 2025)
+
+### New Features: Task Approval System
+Implemented comprehensive task approval workflow for image-based micro tasks:
+
+1. **Backend (server/routes.ts)**:
+   - Extended task completion endpoint to handle multipart/form-data with image uploads
+   - Added `completionRequirement` field to microTasks ("quiz" | "image" | "none")
+   - Quiz tasks: Auto-approve/reject based on correctness, award points immediately
+   - Image tasks: Upload to object storage, set status="pending", await admin approval
+   - Created 3 admin endpoints:
+     - `GET /api/admin/task-completions/pending` - List pending submissions
+     - `POST /api/admin/task-completions/:id/approve` - Approve and award points
+     - `POST /api/admin/task-completions/:id/reject` - Reject with reason
+
+2. **Database Schema (shared/schema.ts)**:
+   - Added `approvedBy`, `approvedAt`, `rejectionReason`, `completionRequirement` fields
+   - Updated microTaskCompletions to support approval workflow
+   - Proof images stored in object storage, URLs saved to `proofUrl` field
+
+3. **Frontend**:
+   - Updated micro-tasks page (client/src/pages/micro-tasks.tsx) with completion dialog
+   - Supports both quiz (radio group) and image (file upload) task types
+   - Created admin task approvals page (client/src/pages/admin/task-approvals.tsx)
+   - Admin UI shows pending submissions with proof images
+   - Quick approve and detailed review dialog with reject option
 
 ### Critical Production Fixes
 1. **Seed Script Auto-Execution**: Disabled automatic seeding on production deployments. The seed script (`server/seed-admin-boundaries.ts`) was executing during production startup, causing database transaction errors and server crashes. Auto-execution is now commented out; seeding is only available via the admin API endpoint `POST /api/admin/seed-boundaries`.
