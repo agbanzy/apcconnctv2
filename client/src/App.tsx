@@ -58,6 +58,7 @@ import AdminKnowledgeBase from "@/pages/admin/knowledge-base";
 import AdminDonations from "@/pages/admin/donations";
 import AdminChatbotAnalytics from "@/pages/admin/chatbot-analytics";
 import AdminTasks from "@/pages/admin/tasks";
+import AdminTaskApprovals from "@/pages/admin/task-approvals";
 import AdminBadges from "@/pages/admin/badges";
 import AdminDues from "@/pages/admin/dues";
 import AdminRewardsSettings from "@/pages/admin/rewards-settings";
@@ -156,6 +157,7 @@ function AppContent() {
                 <Route path="/admin/donations" component={() => <AdminRoute component={AdminDonations} />} />
                 <Route path="/admin/chatbot-analytics" component={() => <AdminRoute component={AdminChatbotAnalytics} />} />
                 <Route path="/admin/tasks" component={() => <AdminRoute component={AdminTasks} />} />
+                <Route path="/admin/task-approvals" component={() => <AdminRoute component={AdminTaskApprovals} />} />
                 <Route path="/admin/badges" component={() => <AdminRoute component={AdminBadges} />} />
                 <Route path="/admin/quizzes" component={() => <AdminRoute component={AdminQuizzes} />} />
                 <Route path="/admin/audit-logs" component={() => <AdminRoute component={AdminAuditLogs} />} />

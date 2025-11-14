@@ -101,6 +101,11 @@ const adminMenuItems = [
     icon: CheckSquare,
   },
   {
+    title: "Task Approvals",
+    url: "/admin/task-approvals",
+    icon: CheckSquare,
+  },
+  {
     title: "Badges",
     url: "/admin/badges",
     icon: Award,
