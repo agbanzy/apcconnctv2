@@ -4436,7 +4436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderBy: desc(schema.ideas.votesCount),
         limit: 3,
         with: {
-          author: {
+          member: {
             with: { user: true }
           }
         }
@@ -4705,7 +4705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               source: "badge",
               referenceType: "badge",
               referenceId: badge.id,
-              metadata: { badgeTitle: badge.title, badgeCategory: badge.category, criteriaValue: criteria.value }
+              metadata: { badgeName: badge.name, badgeCategory: badge.category, criteriaValue: criteria.value }
             });
           }
 
@@ -4915,7 +4915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               source: "achievement",
               referenceType: "achievement",
               referenceId: achievement.id,
-              metadata: { achievementTitle: achievement.title, requirementType: requirement.type, progress }
+              metadata: { achievementName: achievement.name, requirementType: requirement.type, progress }
             });
             newlyCompleted.push({ ...userAchievement, achievement });
           }
@@ -4932,7 +4932,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             source: "achievement",
             referenceType: "achievement",
             referenceId: achievement.id,
-            metadata: { achievementTitle: achievement.title, requirementType: requirement.type, progress }
+            metadata: { achievementName: achievement.name, requirementType: requirement.type, progress }
           });
 
           newlyCompleted.push({ ...existing, achievement, completed: true });
@@ -7392,7 +7392,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
           limit: searchLimit,
           orderBy: [desc(schema.ideas.createdAt)],
           with: {
-            author: true
+            member: true
           }
         });
         results.ideas = ideasResults;
