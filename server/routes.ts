@@ -3824,11 +3824,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         data: {
-          totalUnits: totalUnits[0]?.count || 0,
-          activeUnits: activeUnits[0]?.count || 0,
-          completedUnits: completedUnits[0]?.count || 0,
-          incidentUnits: incidentUnits[0]?.count || 0,
-          totalVotes: totalVotes[0]?.total || 0,
+          totalUnits: Number(totalUnits[0]?.count) || 0,
+          activeUnits: Number(activeUnits[0]?.count) || 0,
+          completedUnits: Number(completedUnits[0]?.count) || 0,
+          incidentUnits: Number(incidentUnits[0]?.count) || 0,
+          totalVotes: Number(totalVotes[0]?.total) || 0,
           recentIncidents
         }
       });
@@ -4177,11 +4177,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         data: {
-          totalMembers: totalMembers[0]?.count || 0,
-          activeMembers: activeMembers[0]?.count || 0,
-          totalEvents: totalEvents[0]?.count || 0,
-          totalElections: totalElections[0]?.count || 0,
-          totalVotes: totalVotes[0]?.count || 0
+          totalMembers: Number(totalMembers[0]?.count) || 0,
+          activeMembers: Number(activeMembers[0]?.count) || 0,
+          totalEvents: Number(totalEvents[0]?.count) || 0,
+          totalElections: Number(totalElections[0]?.count) || 0,
+          totalVotes: Number(totalVotes[0]?.count) || 0
         }
       });
     } catch (error) {
@@ -4224,10 +4224,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         data: {
-          totalRsvps: totalRsvps[0]?.count || 0,
-          totalQuizAttempts: totalQuizAttempts[0]?.count || 0,
-          totalTaskApplications: totalTaskApplications[0]?.count || 0,
-          totalCampaignVotes: totalCampaignVotes[0]?.count || 0
+          totalRsvps: Number(totalRsvps[0]?.count) || 0,
+          totalQuizAttempts: Number(totalQuizAttempts[0]?.count) || 0,
+          totalTaskApplications: Number(totalTaskApplications[0]?.count) || 0,
+          totalCampaignVotes: Number(totalCampaignVotes[0]?.count) || 0
         }
       });
     } catch (error) {
@@ -4594,12 +4594,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         data: {
           state,
-          memberCount: memberCount[0]?.count || 0,
-          activeMembers: activeMembers[0]?.count || 0,
-          upcomingEvents: upcomingEvents[0]?.count || 0,
-          activeCampaigns: activeCampaigns[0]?.count || 0,
-          lgasCovered: lgasCovered[0]?.count || 0,
-          wardsCovered: wardsCovered[0]?.count || 0
+          memberCount: Number(memberCount[0]?.count) || 0,
+          activeMembers: Number(activeMembers[0]?.count) || 0,
+          upcomingEvents: Number(upcomingEvents[0]?.count) || 0,
+          activeCampaigns: Number(activeCampaigns[0]?.count) || 0,
+          lgasCovered: Number(lgasCovered[0]?.count) || 0,
+          wardsCovered: Number(wardsCovered[0]?.count) || 0
         }
       });
     } catch (error) {
