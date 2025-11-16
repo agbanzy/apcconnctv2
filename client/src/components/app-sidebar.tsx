@@ -46,177 +46,179 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import apcLogo from "@assets/logo_1760719840683.png";
-
-const coreMenuItems = [
-  {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: Home,
-  },
-  {
-    title: "Profile",
-    url: "/profile",
-    icon: User,
-  },
-  {
-    title: "News",
-    url: "/news",
-    icon: Newspaper,
-  },
-  {
-    title: "Search",
-    url: "/search",
-    icon: Search,
-  },
-];
-
-const pointsItems = [
-  {
-    title: "My Points",
-    url: "/points",
-    icon: Coins,
-  },
-  {
-    title: "Purchase Points",
-    url: "/purchase-points",
-    icon: ShoppingCart,
-  },
-  {
-    title: "Point Conversion",
-    url: "/redeem-points",
-    icon: Smartphone,
-  },
-  {
-    title: "User Tasks",
-    url: "/user-tasks",
-    icon: CheckSquare,
-  },
-  {
-    title: "Referrals",
-    url: "/referrals",
-    icon: Gift,
-  },
-];
-
-const engagementItems = [
-  {
-    title: "Tasks & Jobs",
-    url: "/tasks",
-    icon: CheckSquare,
-  },
-  {
-    title: "Rewards & Badges",
-    url: "/rewards",
-    icon: Award,
-  },
-  {
-    title: "Leaderboard",
-    url: "/leaderboard",
-    icon: Trophy,
-  },
-  {
-    title: "Invite & Earn",
-    url: "/invite-earn",
-    icon: UserPlus,
-  },
-];
-
-const politicalItems = [
-  {
-    title: "Elections & Voting",
-    url: "/elections",
-    icon: Vote,
-  },
-  {
-    title: "Campaigns",
-    url: "/campaigns",
-    icon: MessageSquare,
-  },
-  {
-    title: "Volunteer Tasks",
-    url: "/volunteer",
-    icon: Briefcase,
-  },
-];
-
-const communityItems = [
-  {
-    title: "Events",
-    url: "/events",
-    icon: Calendar,
-  },
-  {
-    title: "Ideas Hub",
-    url: "/ideas",
-    icon: Lightbulb,
-  },
-  {
-    title: "Donations",
-    url: "/donations",
-    icon: Heart,
-  },
-  {
-    title: "Dues Payment",
-    url: "/dues",
-    icon: DollarSign,
-  },
-];
-
-const knowledgeItems = [
-  {
-    title: "Political Literacy",
-    url: "/political-literacy",
-    icon: GraduationCap,
-  },
-  {
-    title: "Knowledge Base",
-    url: "/knowledge-base",
-    icon: BookOpen,
-  },
-  {
-    title: "About APC",
-    url: "/about",
-    icon: Info,
-  },
-];
-
-const monitoringItems = [
-  {
-    title: "Situation Room",
-    url: "/situation-room",
-    icon: Activity,
-  },
-  {
-    title: "Events Gallery",
-    url: "/events-gallery",
-    icon: Image,
-  },
-  {
-    title: "Leadership",
-    url: "/leadership-board",
-    icon: Shield,
-  },
-];
-
-const adminItems = [
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: TrendingUp,
-  },
-];
-
-const settingsItems = [
-  {
-    title: "Notification Settings",
-    url: "/settings/notifications",
-    icon: Bell,
-  },
-];
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
+
+  const coreMenuItems = [
+    {
+      title: t.dashboard,
+      url: "/dashboard",
+      icon: Home,
+    },
+    {
+      title: t.profile,
+      url: "/profile",
+      icon: User,
+    },
+    {
+      title: t.news,
+      url: "/news",
+      icon: Newspaper,
+    },
+    {
+      title: t.search,
+      url: "/search",
+      icon: Search,
+    },
+  ];
+
+  const pointsItems = [
+    {
+      title: t.myPoints,
+      url: "/points",
+      icon: Coins,
+    },
+    {
+      title: t.purchasePoints,
+      url: "/purchase-points",
+      icon: ShoppingCart,
+    },
+    {
+      title: t.pointConversion,
+      url: "/redeem-points",
+      icon: Smartphone,
+    },
+    {
+      title: t.userTasks,
+      url: "/user-tasks",
+      icon: CheckSquare,
+    },
+    {
+      title: t.referrals,
+      url: "/referrals",
+      icon: Gift,
+    },
+  ];
+
+  const engagementItems = [
+    {
+      title: t.tasksAndJobs,
+      url: "/tasks",
+      icon: CheckSquare,
+    },
+    {
+      title: t.rewardsAndBadges,
+      url: "/rewards",
+      icon: Award,
+    },
+    {
+      title: t.leaderboard,
+      url: "/leaderboard",
+      icon: Trophy,
+    },
+    {
+      title: t.inviteAndEarn,
+      url: "/invite-earn",
+      icon: UserPlus,
+    },
+  ];
+
+  const politicalItems = [
+    {
+      title: t.electionsAndVoting,
+      url: "/elections",
+      icon: Vote,
+    },
+    {
+      title: t.campaigns,
+      url: "/campaigns",
+      icon: MessageSquare,
+    },
+    {
+      title: t.volunteerTasks,
+      url: "/volunteer",
+      icon: Briefcase,
+    },
+  ];
+
+  const communityItems = [
+    {
+      title: t.events,
+      url: "/events",
+      icon: Calendar,
+    },
+    {
+      title: t.ideasHub,
+      url: "/ideas",
+      icon: Lightbulb,
+    },
+    {
+      title: t.donations,
+      url: "/donations",
+      icon: Heart,
+    },
+    {
+      title: t.duesPayment,
+      url: "/dues",
+      icon: DollarSign,
+    },
+  ];
+
+  const knowledgeItems = [
+    {
+      title: t.politicalLiteracy,
+      url: "/political-literacy",
+      icon: GraduationCap,
+    },
+    {
+      title: t.knowledgeBase,
+      url: "/knowledge-base",
+      icon: BookOpen,
+    },
+    {
+      title: t.aboutAPC,
+      url: "/about",
+      icon: Info,
+    },
+  ];
+
+  const monitoringItems = [
+    {
+      title: t.situationRoom,
+      url: "/situation-room",
+      icon: Activity,
+    },
+    {
+      title: t.eventsGallery,
+      url: "/events-gallery",
+      icon: Image,
+    },
+    {
+      title: t.leadership,
+      url: "/leadership-board",
+      icon: Shield,
+    },
+  ];
+
+  const adminItems = [
+    {
+      title: t.analytics,
+      url: "/analytics",
+      icon: TrendingUp,
+    },
+  ];
+
+  const settingsItems = [
+    {
+      title: t.notificationSettings,
+      url: "/settings/notifications",
+      icon: Bell,
+    },
+  ];
 
   return (
     <Sidebar>

@@ -7,7 +7,6 @@ export interface Translations {
   login: string;
   register: string;
   logout: string;
-  profile: string;
   settings: string;
   back: string;
   submit: string;
@@ -19,17 +18,51 @@ export interface Translations {
   error: string;
   success: string;
   
-  // Navigation
+  // Navigation - Core
   dashboard: string;
-  campaigns: string;
-  elections: string;
-  events: string;
+  profile: string;
   news: string;
+  search: string;
+  
+  // Navigation - Points & Rewards
+  myPoints: string;
+  purchasePoints: string;
+  pointConversion: string;
+  userTasks: string;
+  referrals: string;
+  
+  // Navigation - Engagement
+  tasksAndJobs: string;
+  rewardsAndBadges: string;
   leaderboard: string;
-  points: string;
-  tasks: string;
-  volunteers: string;
+  inviteAndEarn: string;
+  
+  // Navigation - Political
+  electionsAndVoting: string;
+  campaigns: string;
+  volunteerTasks: string;
+  
+  // Navigation - Community
+  events: string;
+  ideasHub: string;
   donations: string;
+  duesPayment: string;
+  
+  // Navigation - Knowledge
+  politicalLiteracy: string;
+  knowledgeBase: string;
+  aboutAPC: string;
+  
+  // Navigation - Monitoring
+  situationRoom: string;
+  eventsGallery: string;
+  leadership: string;
+  
+  // Navigation - Settings
+  notificationSettings: string;
+  
+  // Navigation - Admin
+  analytics: string;
   
   // Dashboard
   welcomeBack: string;
@@ -41,7 +74,7 @@ export interface Translations {
   upcomingEvents: string;
   latestNews: string;
   
-  // Points & Rewards
+  // Points & Rewards Pages
   redeemPoints: string;
   pointBalance: string;
   earnPoints: string;
@@ -49,6 +82,9 @@ export interface Translations {
   buyData: string;
   transactionHistory: string;
   pointsAwarded: string;
+  redemptionHistory: string;
+  airtimeTopUp: string;
+  dataTopUp: string;
   
   // Profile
   myProfile: string;
@@ -175,7 +211,6 @@ export const translations: Record<Language, Translations> = {
     login: "Login",
     register: "Register",
     logout: "Logout",
-    profile: "Profile",
     settings: "Settings",
     back: "Back",
     submit: "Submit",
@@ -187,17 +222,51 @@ export const translations: Record<Language, Translations> = {
     error: "Error",
     success: "Success",
     
-    // Navigation
+    // Navigation - Core
     dashboard: "Dashboard",
-    campaigns: "Campaigns",
-    elections: "Elections",
-    events: "Events",
+    profile: "Profile",
     news: "News",
+    search: "Search",
+    
+    // Navigation - Points & Rewards
+    myPoints: "My Points",
+    purchasePoints: "Purchase Points",
+    pointConversion: "Point Conversion",
+    userTasks: "User Tasks",
+    referrals: "Referrals",
+    
+    // Navigation - Engagement
+    tasksAndJobs: "Tasks & Jobs",
+    rewardsAndBadges: "Rewards & Badges",
     leaderboard: "Leaderboard",
-    points: "Points",
-    tasks: "Tasks",
-    volunteers: "Volunteers",
+    inviteAndEarn: "Invite & Earn",
+    
+    // Navigation - Political
+    electionsAndVoting: "Elections & Voting",
+    campaigns: "Campaigns",
+    volunteerTasks: "Volunteer Tasks",
+    
+    // Navigation - Community
+    events: "Events",
+    ideasHub: "Ideas Hub",
     donations: "Donations",
+    duesPayment: "Dues Payment",
+    
+    // Navigation - Knowledge
+    politicalLiteracy: "Political Literacy",
+    knowledgeBase: "Knowledge Base",
+    aboutAPC: "About APC",
+    
+    // Navigation - Monitoring
+    situationRoom: "Situation Room",
+    eventsGallery: "Events Gallery",
+    leadership: "Leadership",
+    
+    // Navigation - Settings
+    notificationSettings: "Notification Settings",
+    
+    // Navigation - Admin
+    analytics: "Analytics",
     
     // Dashboard
     welcomeBack: "Welcome back",
@@ -209,7 +278,7 @@ export const translations: Record<Language, Translations> = {
     upcomingEvents: "Upcoming Events",
     latestNews: "Latest News",
     
-    // Points & Rewards
+    // Points & Rewards Pages
     redeemPoints: "Redeem Points",
     pointBalance: "Point Balance",
     earnPoints: "Earn Points",
@@ -217,6 +286,9 @@ export const translations: Record<Language, Translations> = {
     buyData: "Buy Data",
     transactionHistory: "Transaction History",
     pointsAwarded: "Points Awarded",
+    redemptionHistory: "Redemption History",
+    airtimeTopUp: "Airtime Top-up",
+    dataTopUp: "Data Top-up",
     
     // Profile
     myProfile: "My Profile",
@@ -342,7 +414,6 @@ export const translations: Record<Language, Translations> = {
     login: "Banye",
     register: "Debanye Aha",
     logout: "Pụọ",
-    profile: "Profaịlụ",
     settings: "Ntọala",
     back: "Laghachi Azụ",
     submit: "Zite",
@@ -354,17 +425,51 @@ export const translations: Record<Language, Translations> = {
     error: "Njehie",
     success: "Ihe Ịga Nke Ọma",
     
-    // Navigation
+    // Navigation - Core
     dashboard: "Bọọdụ Njikwa",
-    campaigns: "Mkpọsa",
-    elections: "Ntuli Aka",
-    events: "Mmemme",
+    profile: "Profaịlụ",
     news: "Akụkọ",
+    search: "Chọọ",
+    
+    // Navigation - Points & Rewards
+    myPoints: "Isi Akara M",
+    purchasePoints: "Zụta Isi Akara",
+    pointConversion: "Ntụgharị Isi Akara",
+    userTasks: "Ọrụ Onye Ọrụ",
+    referrals: "Ndị Ị Kpọgara",
+    
+    // Navigation - Engagement
+    tasksAndJobs: "Ọrụ & Ọrụ",
+    rewardsAndBadges: "Ụgwọ Ọrụ & Akara",
     leaderboard: "Ndekọ Ọkwa",
-    points: "Isi Akara",
-    tasks: "Ọrụ",
-    volunteers: "Ndị Afọ Ọfụma",
+    inviteAndEarn: "Kpọọ & Rite",
+    
+    // Navigation - Political
+    electionsAndVoting: "Ntuli Aka & Ịtụ Vootu",
+    campaigns: "Mkpọsa",
+    volunteerTasks: "Ọrụ Ndị Afọ Ọfụma",
+    
+    // Navigation - Community
+    events: "Mmemme",
+    ideasHub: "Ebe Echiche",
     donations: "Onyinye",
+    duesPayment: "Ịkwụ Ụgwọ",
+    
+    // Navigation - Knowledge
+    politicalLiteracy: "Ọgụgụ Ndọrọ Ndọrọ Ọchịchị",
+    knowledgeBase: "Ntọala Ihe Ọmụma",
+    aboutAPC: "Maka APC",
+    
+    // Navigation - Monitoring
+    situationRoom: "Ụlọ Ọnọdụ",
+    eventsGallery: "Gallery Mmemme",
+    leadership: "Nduzi",
+    
+    // Navigation - Settings
+    notificationSettings: "Ntọala Ọkwa",
+    
+    // Navigation - Admin
+    analytics: "Nyocha",
     
     // Dashboard
     welcomeBack: "Nnọọ",
@@ -376,7 +481,7 @@ export const translations: Record<Language, Translations> = {
     upcomingEvents: "Mmemme Na-abịa",
     latestNews: "Akụkọ Ọhụrụ",
     
-    // Points & Rewards
+    // Points & Rewards Pages
     redeemPoints: "Gbapụta Isi Akara",
     pointBalance: "Ngụkọta Isi Akara",
     earnPoints: "Nweta Isi Akara",
@@ -384,6 +489,9 @@ export const translations: Record<Language, Translations> = {
     buyData: "Zụta Data",
     transactionHistory: "Akụkọ Azụmaahịa",
     pointsAwarded: "Isi Akara Enyere",
+    redemptionHistory: "Akụkọ Mgbapụta",
+    airtimeTopUp: "Mejupụta Airtime",
+    dataTopUp: "Mejupụta Data",
     
     // Profile
     myProfile: "Profaịlụ M",
@@ -509,7 +617,6 @@ export const translations: Record<Language, Translations> = {
     login: "Shiga",
     register: "Yi Rajista",
     logout: "Fita",
-    profile: "Bayani",
     settings: "Saitunan",
     back: "Koma Baya",
     submit: "Aika",
@@ -521,17 +628,51 @@ export const translations: Record<Language, Translations> = {
     error: "Kuskure",
     success: "Nasara",
     
-    // Navigation
+    // Navigation - Core
     dashboard: "Allon Sarrafawa",
-    campaigns: "Yaƙin Neman Zaɓe",
-    elections: "Zaɓe",
-    events: "Abubuwan da Suka Faru",
+    profile: "Bayani",
     news: "Labarai",
+    search: "Nema",
+    
+    // Navigation - Points & Rewards
+    myPoints: "Maki Na",
+    purchasePoints: "Sayi Maki",
+    pointConversion: "Canza Maki",
+    userTasks: "Ayyukan Mai Amfani",
+    referrals: "Turawa",
+    
+    // Navigation - Engagement
+    tasksAndJobs: "Ayyuka & Aiki",
+    rewardsAndBadges: "Lada & Tambura",
     leaderboard: "Allon Matsayi",
-    points: "Maki",
-    tasks: "Ayyuka",
-    volunteers: "Masu Aikin Sa Kai",
+    inviteAndEarn: "Gayyata & Sami",
+    
+    // Navigation - Political
+    electionsAndVoting: "Zaɓe & Jefa Ƙuri'a",
+    campaigns: "Yaƙin Neman Zaɓe",
+    volunteerTasks: "Ayyukan Masu Aikin Sa Kai",
+    
+    // Navigation - Community
+    events: "Abubuwan da Suka Faru",
+    ideasHub: "Cibiyar Tunani",
     donations: "Gudummawa",
+    duesPayment: "Biyan Kuɗi",
+    
+    // Navigation - Knowledge
+    politicalLiteracy: "Ilimin Siyasa",
+    knowledgeBase: "Harshen Ilimi",
+    aboutAPC: "Game da APC",
+    
+    // Navigation - Monitoring
+    situationRoom: "Dakin Yanayi",
+    eventsGallery: "Gallery Abubuwa",
+    leadership: "Jagoranci",
+    
+    // Navigation - Settings
+    notificationSettings: "Saitunan Sanarwa",
+    
+    // Navigation - Admin
+    analytics: "Bincike",
     
     // Dashboard
     welcomeBack: "Barka da Dawowa",
@@ -543,7 +684,7 @@ export const translations: Record<Language, Translations> = {
     upcomingEvents: "Abubuwan da Ke Zuwa",
     latestNews: "Sabbin Labarai",
     
-    // Points & Rewards
+    // Points & Rewards Pages
     redeemPoints: "Karɓi Maki",
     pointBalance: "Ma'aunin Maki",
     earnPoints: "Sami Maki",
@@ -551,6 +692,9 @@ export const translations: Record<Language, Translations> = {
     buyData: "Sayi Data",
     transactionHistory: "Tarihin Ciniki",
     pointsAwarded: "An Ba da Maki",
+    redemptionHistory: "Tarihin Fansar",
+    airtimeTopUp: "Ƙara Airtime",
+    dataTopUp: "Ƙara Data",
     
     // Profile
     myProfile: "Bayanina",
@@ -676,7 +820,6 @@ export const translations: Record<Language, Translations> = {
     login: "Wọle",
     register: "Forukọsilẹ",
     logout: "Jade",
-    profile: "Profaili",
     settings: "Eto",
     back: "Pada Sẹyin",
     submit: "Firanṣẹ",
@@ -688,17 +831,51 @@ export const translations: Record<Language, Translations> = {
     error: "Aṣiṣe",
     success: "Aṣeyọri",
     
-    // Navigation
+    // Navigation - Core
     dashboard: "Pátákó Iṣakoso",
-    campaigns: "Awọn Ipolongo",
-    elections: "Idibo",
-    events: "Awọn Iṣẹlẹ",
+    profile: "Profaili",
     news: "Iroyin",
+    search: "Wa",
+    
+    // Navigation - Points & Rewards
+    myPoints: "Awọn Aami Mi",
+    purchasePoints: "Ra Aami",
+    pointConversion: "Iyipada Aami",
+    userTasks: "Awọn Iṣẹ Olumulo",
+    referrals: "Awọn Itọkasi",
+    
+    // Navigation - Engagement
+    tasksAndJobs: "Awọn Iṣẹ & Iṣẹ",
+    rewardsAndBadges: "Awọn Ẹsan & Ami",
     leaderboard: "Pátákó Ipele",
-    points: "Awọn Aami",
-    tasks: "Awọn Iṣẹ",
-    volunteers: "Awọn Olùrànlọ́wọ́",
+    inviteAndEarn: "Pe & Jere",
+    
+    // Navigation - Political
+    electionsAndVoting: "Idibo & Dibo",
+    campaigns: "Awọn Ipolongo",
+    volunteerTasks: "Awọn Iṣẹ Oluranlọwọ",
+    
+    // Navigation - Community
+    events: "Awọn Iṣẹlẹ",
+    ideasHub: "Ile-iṣẹ Imọ",
     donations: "Awọn Ẹbun",
+    duesPayment: "Sisanwo Owo",
+    
+    // Navigation - Knowledge
+    politicalLiteracy: "Imọ Iṣelu",
+    knowledgeBase: "Ipilẹ Imọ",
+    aboutAPC: "Nipa APC",
+    
+    // Navigation - Monitoring
+    situationRoom: "Yara Ipo",
+    eventsGallery: "Galari Awọn Iṣẹlẹ",
+    leadership: "Idari",
+    
+    // Navigation - Settings
+    notificationSettings: "Eto Ifitọnileti",
+    
+    // Navigation - Admin
+    analytics: "Itupalẹ",
     
     // Dashboard
     welcomeBack: "Káàbọ̀",
@@ -710,7 +887,7 @@ export const translations: Record<Language, Translations> = {
     upcomingEvents: "Awọn Iṣẹlẹ Ti Nbọ",
     latestNews: "Iroyin Tuntun",
     
-    // Points & Rewards
+    // Points & Rewards Pages
     redeemPoints: "Ra Awọn Aami Pada",
     pointBalance: "Iwọntunwọnsi Aami",
     earnPoints: "Jere Awọn Aami",
@@ -718,6 +895,9 @@ export const translations: Record<Language, Translations> = {
     buyData: "Ra Data",
     transactionHistory: "Itan-akọọlẹ Iṣowo",
     pointsAwarded: "Awọn Aami Ti A Fun",
+    redemptionHistory: "Itan Ipada",
+    airtimeTopUp: "Fikun Airtime",
+    dataTopUp: "Fikun Data",
     
     // Profile
     myProfile: "Profaili Mi",
