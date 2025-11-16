@@ -4,6 +4,8 @@ import { motion, useInView } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LandingHeader } from "@/components/landing-header";
 import { 
   UserPlus, 
   Scale, 
@@ -157,6 +159,7 @@ function FloatingBadge({ icon: Icon, text, delay, style }: {
 
 export default function Landing() {
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const { t } = useLanguage();
 
   // Testimonial carousel setup
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true }, [
@@ -220,47 +223,47 @@ export default function Landing() {
   const features = [
     {
       icon: UserPlus,
-      title: "Join the Party, Your Way",
+      title: t.featureJoinTitle,
       points: [
-        "Sign up with NIN verification in minutes",
-        "Pay dues securely via mobile money or card",
-        "Get your digital APC ID card for instant recognition"
+        t.featureJoinPoint1,
+        t.featureJoinPoint2,
+        t.featureJoinPoint3
       ]
     },
     {
       icon: Scale,
-      title: "Shape the Future with Inclusive Governance",
+      title: t.featureShapeTitle,
       points: [
-        "Share ideas and vote on policies that matter to you",
-        "Track elected officials' promises and hold them accountable",
-        "Participate in transparent electronic primaries"
+        t.featureShapePoint1,
+        t.featureShapePoint2,
+        t.featureShapePoint3
       ]
     },
     {
       icon: Megaphone,
-      title: "Mobilize Like Never Before",
+      title: t.featureMobilizeTitle,
       points: [
-        "Share campaigns on X, WhatsApp, and Instagram with one tap",
-        "Lead local events and rallies with easy-to-use tools",
-        "Earn rewards for completing micro-tasks like inviting friends"
+        t.featureMobilizePoint1,
+        t.featureMobilizePoint2,
+        t.featureMobilizePoint3
       ]
     },
     {
       icon: ClipboardCheck,
-      title: "Power Up for Elections",
+      title: t.featureElectionsTitle,
       points: [
-        "Organize voter registration drives and canvassing",
-        "Vote securely in primaries with blockchain technology",
-        "Monitor elections in real-time with our situation room"
+        t.featureElectionsPoint1,
+        t.featureElectionsPoint2,
+        t.featureElectionsPoint3
       ]
     },
     {
       icon: GraduationCap,
-      title: "Engage as a Young Leader",
+      title: t.featureYouthTitle,
       points: [
-        "Learn about APC and Nigerian politics through fun quizzes",
-        "Connect with mentors and volunteer for campaigns",
-        "Climb leaderboards and earn badges for your impact"
+        t.featureYouthPoint1,
+        t.featureYouthPoint2,
+        t.featureYouthPoint3
       ]
     }
   ];
@@ -269,28 +272,28 @@ export default function Landing() {
   const steps = [
     {
       number: "01",
-      title: "Sign Up",
-      description: "Register with your NIN and join your local ward"
+      title: t.stepSignUpTitle,
+      description: t.stepSignUpDesc
     },
     {
       number: "02",
-      title: "Engage",
-      description: "Explore events, share ideas, and volunteer for tasks"
+      title: t.stepEngageTitle,
+      description: t.stepEngageDesc
     },
     {
       number: "03",
-      title: "Pay Dues",
-      description: "Stay active with easy, secure payments"
+      title: t.stepPayDuesTitle,
+      description: t.stepPayDuesDesc
     },
     {
       number: "04",
-      title: "Vote & Lead",
-      description: "Participate in primaries and shape APC's future"
+      title: t.stepVoteTitle,
+      description: t.stepVoteDesc
     },
     {
       number: "05",
-      title: "Mobilize",
-      description: "Rally your community and track your impact"
+      title: t.stepMobilizeTitle,
+      description: t.stepMobilizeDesc
     }
   ];
 
@@ -363,9 +366,11 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen">
+      <LandingHeader />
+      
       {/* Hero Section */}
       <section 
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16"
       >
         {/* Static Background */}
         <div 
@@ -423,12 +428,12 @@ export default function Landing() {
             </motion.div>
             
             <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-white mb-6 tracking-tight leading-[1.1]" data-testid="text-hero-title">
-              <span className="block mb-2">Empower Nigeria's Future</span>
-              <span className="block text-primary drop-shadow-[0_0_30px_rgba(20,83,45,0.5)]">Join APC Connect</span>
+              <span className="block mb-2">{t.heroTitle}</span>
+              <span className="block text-primary drop-shadow-[0_0_30px_rgba(20,83,45,0.5)]">{t.heroSubtitle}</span>
             </h1>
             
             <p className="text-lg sm:text-xl md:text-2xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
-              Your all-in-one digital platform to engage, vote, and shape democracy across all 774 LGAs in Nigeria.
+              {t.heroDescription}
             </p>
             
             <motion.div 
@@ -443,7 +448,7 @@ export default function Landing() {
                   className="text-lg px-10 py-7 bg-primary hover:bg-primary/90 border-2 border-primary-border shadow-2xl hover:shadow-primary/50 transition-all duration-300 hover:scale-105"
                   data-testid="button-get-started"
                 >
-                  Get Started Now
+                  {t.getStarted}
                   <ArrowRight className="ml-2 h-6 w-6" />
                 </Button>
               </Link>
@@ -455,7 +460,7 @@ export default function Landing() {
                 data-testid="button-download-app"
               >
                 <Download className="mr-2 h-6 w-6" />
-                Download the App
+                {t.downloadApp}
               </Button>
             </motion.div>
 
@@ -641,7 +646,7 @@ export default function Landing() {
       </section>
 
       {/* Features Section - Enhanced with Stagger Animations */}
-      <section className="py-24 bg-muted/30">
+      <section id="features" className="py-24 bg-muted/30">
         <div className="container mx-auto px-4">
           <motion.div
             initial="initial"
@@ -710,7 +715,7 @@ export default function Landing() {
       </section>
 
       {/* How It Works - 5 Steps */}
-      <section className="py-24 bg-muted/30">
+      <section id="how-it-works" className="py-24 bg-muted/30">
         <div className="container mx-auto px-4">
           <motion.div
             initial="initial"
@@ -726,7 +731,7 @@ export default function Landing() {
                 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
                 data-testid="text-how-it-works-title"
               >
-                How It Works
+                {t.howItWorks}
               </h2>
               <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto">
                 Get started with APC Connect in five simple steps
@@ -1071,7 +1076,7 @@ export default function Landing() {
       </section>
 
       {/* Impact Section with Enhanced Visuals */}
-      <section className="py-24 bg-primary text-primary-foreground relative overflow-hidden">
+      <section id="impact" className="py-24 bg-primary text-primary-foreground relative overflow-hidden">
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{
@@ -1092,7 +1097,7 @@ export default function Landing() {
                 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
                 data-testid="text-impact-title"
               >
-                Together, We Build a Stronger Nigeria
+                {t.ourImpact}
               </h2>
               <p className="text-primary-foreground/90 text-lg md:text-xl max-w-3xl mx-auto">
                 Our platform connects young Nigerians with democratic processes across all 774 LGAs
