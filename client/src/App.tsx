@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageProvider } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
@@ -191,6 +193,7 @@ function AppContent() {
                   3
                 </Badge>
               </Button>
+              <LanguageSelector />
               <ThemeToggle />
             </div>
           </header>
@@ -249,11 +252,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <AppContent />
-            <Toaster />
-            <PWAInstallPrompt />
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <AppContent />
+              <Toaster />
+              <PWAInstallPrompt />
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
