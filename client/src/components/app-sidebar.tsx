@@ -28,6 +28,7 @@ import {
   Coins,
   ShoppingCart,
   Gift,
+  Smartphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -79,6 +80,11 @@ const pointsItems = [
     title: "Purchase Points",
     url: "/purchase-points",
     icon: ShoppingCart,
+  },
+  {
+    title: "Point Conversion",
+    url: "/redeem-points",
+    icon: Smartphone,
   },
   {
     title: "User Tasks",
