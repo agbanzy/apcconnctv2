@@ -1418,7 +1418,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        message: "Password reset initiated successfully",
         ...result
       });
     } catch (error: any) {
@@ -2268,10 +2267,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verify recurring dues setup and save authorization
   app.post("/api/dues/recurring/verify", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { reference, transaction_id } = req.body;
+      const { reference } = req.body;
 
-      // Verify transaction with Flutterwave
-      const verifyResponse = await fetch(`${FLW_BASE_URL}/transactions/${transaction_id}/verify`, {
+      if (!reference) {
+        return res.status(400).json({ success: false, error: "Payment reference is required" });
+      }
+
+      // Verify transaction with Flutterwave using verify_by_reference
+      const verifyResponse = await fetch(`${FLW_BASE_URL}/transactions/verify_by_reference?tx_ref=${reference}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${FLW_SECRET_KEY}`,
@@ -2280,63 +2283,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const verification = await verifyResponse.json();
 
-      if (verification.status === 'success' && verification.data.status === 'successful') {
-        const { meta, customer } = verification.data;
-
-        const member = await db.query.members.findFirst({
-          where: eq(schema.members.userId, req.user!.id)
-        });
-
-        if (!member) {
-          return res.status(404).json({ success: false, error: "Member not found" });
-        }
-
-        // Calculate next payment date
-        const nextDate = new Date();
-        switch (meta.frequency) {
-          case "monthly":
-            nextDate.setMonth(nextDate.getMonth() + 1);
-            break;
-          case "quarterly":
-            nextDate.setMonth(nextDate.getMonth() + 3);
-            break;
-          case "yearly":
-            nextDate.setFullYear(nextDate.getFullYear() + 1);
-            break;
-        }
-
-        // Create or update recurring dues record
-        const [recurringDues] = await db.insert(schema.recurringMembershipDues).values({
-          memberId: member.id,
-          amount: String(meta.amount),
-          frequency: meta.frequency,
-          status: "active",
-          nextPaymentDate: nextDate,
-          lastPaymentDate: new Date(),
-          paystackAuthorizationCode: null,
-          paystackCustomerCode: customer.email || null,
-        }).returning();
-
-        // Also create a dues payment record
-        await db.insert(schema.membershipDues).values({
-          memberId: member.id,
-          amount: String(metadata.amount), // Store in naira, not kobo
-          paymentMethod: "paystack",
-          paystackReference: reference,
-          paymentStatus: "completed",
-          dueDate: new Date(),
-          paidAt: new Date(),
-        });
-
-        // Update member status to active
-        await db.update(schema.members)
-          .set({ status: "active" })
-          .where(eq(schema.members.id, member.id));
-
-        res.json({ success: true, data: recurringDues });
-      } else {
-        res.status(400).json({ success: false, error: "Payment verification failed" });
+      if (verification.status !== 'success' || verification.data.status !== 'successful') {
+        return res.status(400).json({ success: false, error: "Payment verification failed" });
       }
+
+      const { meta, customer, amount, charged_amount } = verification.data;
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      // Verify member ID matches
+      if (meta.member_id !== member.id) {
+        return res.status(403).json({ success: false, error: "Payment belongs to different member" });
+      }
+
+      // Calculate next payment date
+      const nextDate = new Date();
+      switch (meta.frequency) {
+        case "monthly":
+          nextDate.setMonth(nextDate.getMonth() + 1);
+          break;
+        case "quarterly":
+          nextDate.setMonth(nextDate.getMonth() + 3);
+          break;
+        case "yearly":
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+          break;
+      }
+
+      // Create or update recurring dues record with Flutterwave data
+      const [recurringDues] = await db.insert(schema.recurringMembershipDues).values({
+        memberId: member.id,
+        amount: String(meta.amount),
+        frequency: meta.frequency,
+        status: "active",
+        nextPaymentDate: nextDate,
+        lastPaymentDate: new Date(),
+        paystackAuthorizationCode: verification.data.id.toString(),
+        paystackCustomerCode: customer.email || verification.data.tx_ref,
+      }).returning();
+
+      // Also create a dues payment record with Flutterwave reference
+      await db.insert(schema.membershipDues).values({
+        memberId: member.id,
+        amount: String(meta.amount),
+        paymentMethod: "flutterwave",
+        paystackReference: verification.data.tx_ref,
+        paymentStatus: "completed",
+        dueDate: new Date(),
+        paidAt: new Date(),
+      });
+
+      // Update member status to active
+      await db.update(schema.members)
+        .set({ status: "active" })
+        .where(eq(schema.members.id, member.id));
+
+      res.json({ success: true, data: recurringDues });
+
     } catch (error: any) {
       console.error("Recurring dues verification error:", error);
       res.status(500).json({ success: false, error: "Failed to verify recurring payment" });
@@ -3882,7 +3891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/incidents", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/api/incidents", requireAuth, upload.array("files", 5), async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({
         where: eq(schema.members.userId, req.user!.id)
@@ -3892,18 +3901,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      // Parse coordinates if provided
+      let coordinates = null;
+      if (req.body.coordinates) {
+        try {
+          coordinates = JSON.parse(req.body.coordinates);
+        } catch (e) {
+          console.error("Failed to parse coordinates:", e);
+        }
+      }
+
       const incidentData = schema.insertIncidentSchema.parse({
-        ...req.body,
-        reporterId: member.id
+        title: req.body.title,
+        description: req.body.description,
+        severity: req.body.severity,
+        location: req.body.location,
+        coordinates: coordinates ? JSON.stringify(coordinates) : null,
+        pollingUnit: req.body.pollingUnit,
+        reporterId: member.id,
       });
 
       const [incident] = await db.insert(schema.incidents).values(incidentData).returning();
 
+      // Handle file uploads if any
+      const files = req.files as Express.Multer.File[];
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const mediaUrl = `/uploads/${Date.now()}-${file.originalname}`;
+          const mediaType = file.mimetype.startsWith("video") ? "video" : "image";
+
+          await db.insert(schema.incidentMedia).values({
+            incidentId: incident.id,
+            mediaUrl,
+            mediaType,
+          });
+        }
+      }
+
       io.emit("incident:new", incident);
 
       res.json({ success: true, data: incident });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Failed to report incident" });
+    } catch (error: any) {
+      console.error("Incident report error:", error);
+      res.status(400).json({ success: false, error: error.message || "Failed to report incident" });
     }
   });
 
@@ -6108,7 +6148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (campaign) {
             await db.update(schema.donationCampaigns)
               .set({
-                currentAmount: campaign.currentAmount + donation.amount
+                currentAmount: (campaign.currentAmount || 0) + donation.amount
               })
               .where(eq(schema.donationCampaigns.id, donation.campaignId));
           }
@@ -6388,22 +6428,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ success: false, error: "Can only refund completed donations" });
       }
 
-      // Process Paystack refund if payment was via Paystack
-      if (donation.paymentMethod === "paystack" && donation.paystackReference) {
+      // Process Flutterwave refund if payment was via Flutterwave
+      if ((donation.paymentMethod === "flutterwave" || donation.paymentMethod === "paystack") && donation.paystackReference) {
         try {
-          await paystack.refund.create({
-            transaction: donation.paystackReference,
-            amount: donation.amount, // amount in kobo
+          // First, get transaction ID from reference
+          const verifyResponse = await fetch(`${FLW_BASE_URL}/transactions/verify_by_reference?tx_ref=${donation.paystackReference}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+            },
           });
-        } catch (paystackError: any) {
-          console.error("Paystack refund error:", paystackError);
-          return res.status(400).json({ success: false, error: "Paystack refund failed: " + paystackError.message });
+
+          const verifyData = await verifyResponse.json();
+          
+          if (verifyData.status !== 'success') {
+            throw new Error('Could not verify transaction for refund');
+          }
+
+          const transactionId = verifyData.data.id;
+
+          // Now process refund using transaction ID
+          const refundResponse = await fetch(`${FLW_BASE_URL}/transactions/${transactionId}/refund`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              amount: donation.amount,
+            }),
+          });
+
+          const refundData = await refundResponse.json();
+
+          if (refundData.status !== 'success') {
+            throw new Error(refundData.message || 'Refund failed');
+          }
+        } catch (refundError: any) {
+          console.error("Flutterwave refund error:", refundError);
+          return res.status(400).json({ success: false, error: "Refund failed: " + refundError.message });
         }
-      } else if (donation.paymentMethod !== "paystack") {
+      } else if (donation.paymentMethod !== "flutterwave" && donation.paymentMethod !== "paystack") {
         // For bank transfers or other payment methods, manual refund required
         return res.status(400).json({ 
           success: false, 
-          error: "Automated refunds only available for Paystack payments. Please process manual refund." 
+          error: "Automated refunds only available for Flutterwave payments. Please process manual refund." 
         });
       } else {
         return res.status(400).json({ success: false, error: "No payment reference found for refund" });
