@@ -230,14 +230,14 @@ export function AppSidebar() {
         >
           <img src={apcLogo} alt="APC Logo" className="h-10 w-10 object-contain" />
           <div>
-            <h2 className="font-display text-lg font-bold text-primary">APC Connect</h2>
+            <h2 className="font-display text-lg font-bold text-primary">{t.appName}</h2>
             <p className="text-xs text-muted-foreground">apcng.org</p>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionCore}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {coreMenuItems.map((item) => (
@@ -255,7 +255,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Points & Rewards</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionPointsRewards}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {pointsItems.map((item) => (
@@ -273,7 +273,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Engagement</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionEngagement}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {engagementItems.map((item) => (
@@ -291,7 +291,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Political Action</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionPolitical}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {politicalItems.map((item) => (
@@ -309,7 +309,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Community</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionCommunity}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {communityItems.map((item) => (
@@ -327,7 +327,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Learn</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionKnowledge}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {knowledgeItems.map((item) => (
@@ -345,7 +345,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionMonitoring}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {monitoringItems.map((item) => (
@@ -363,7 +363,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Settings</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.sectionSettings}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {settingsItems.map((item) => (
@@ -382,14 +382,14 @@ export function AppSidebar() {
 
         {(user?.role === "admin" || user?.role === "coordinator") && (
           <SidebarGroup>
-            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupLabel>{t.sectionAdmin}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.startsWith('/admin')}>
                     <Link href="/admin/dashboard" data-testid="link-admin-panel">
                       <Settings className="h-4 w-4" />
-                      <span>Admin Panel</span>
+                      <span>{t.adminPanel}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -418,7 +418,7 @@ export function AppSidebar() {
             data-testid="button-logout"
           >
             <LogOut className="h-4 w-4 mr-2" />
-            Logout
+            {t.logout}
           </Button>
         )}
         <div className="text-xs text-muted-foreground text-center">

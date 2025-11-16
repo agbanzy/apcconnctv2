@@ -268,6 +268,18 @@ export const translations: Record<Language, Translations> = {
     // Navigation - Admin
     analytics: "Analytics",
     
+    // Sidebar Section Labels
+    sectionCore: "Core",
+    sectionPointsRewards: "Points & Rewards",
+    sectionEngagement: "Engagement",
+    sectionPolitical: "Political",
+    sectionCommunity: "Community",
+    sectionKnowledge: "Knowledge",
+    sectionMonitoring: "Monitoring",
+    sectionSettings: "Settings",
+    sectionAdmin: "Administration",
+    adminPanel: "Admin Panel",
+    
     // Dashboard
     welcomeBack: "Welcome back",
     yourPoints: "Your Points",
@@ -470,6 +482,18 @@ export const translations: Record<Language, Translations> = {
     
     // Navigation - Admin
     analytics: "Nyocha",
+    
+    // Sidebar Section Labels
+    sectionCore: "Isi",
+    sectionPointsRewards: "Isi Akara & Ụgwọ Ọrụ",
+    sectionEngagement: "Itinye Aka",
+    sectionPolitical: "Ndọrọ Ndọrọ Ọchịchị",
+    sectionCommunity: "Obodo",
+    sectionKnowledge: "Ihe Ọmụma",
+    sectionMonitoring: "Nlekota",
+    sectionSettings: "Ntọala",
+    sectionAdmin: "Nchịkwa",
+    adminPanel: "Pánélụ Nchịkwa",
     
     // Dashboard
     welcomeBack: "Nnọọ",
@@ -674,6 +698,18 @@ export const translations: Record<Language, Translations> = {
     // Navigation - Admin
     analytics: "Bincike",
     
+    // Sidebar Section Labels
+    sectionCore: "Tushe",
+    sectionPointsRewards: "Maki & Lada",
+    sectionEngagement: "Shiga",
+    sectionPolitical: "Siyasa",
+    sectionCommunity: "Al'umma",
+    sectionKnowledge: "Ilimi",
+    sectionMonitoring: "Sa ido",
+    sectionSettings: "Saitunan",
+    sectionAdmin: "Gudanarwa",
+    adminPanel: "Panelin Gudanarwa",
+    
     // Dashboard
     welcomeBack: "Barka da Dawowa",
     yourPoints: "Makin Ka",
@@ -876,6 +912,18 @@ export const translations: Record<Language, Translations> = {
     
     // Navigation - Admin
     analytics: "Itupalẹ",
+    
+    // Sidebar Section Labels
+    sectionCore: "Ipilẹ",
+    sectionPointsRewards: "Awọn Aami & Ẹsan",
+    sectionEngagement: "Ikopa",
+    sectionPolitical: "Iṣelu",
+    sectionCommunity: "Agbegbe",
+    sectionKnowledge: "Imọ",
+    sectionMonitoring: "Iṣakoso",
+    sectionSettings: "Eto",
+    sectionAdmin: "Iṣakoso",
+    adminPanel: "Panẹli Iṣakoso",
     
     // Dashboard
     welcomeBack: "Káàbọ̀",
