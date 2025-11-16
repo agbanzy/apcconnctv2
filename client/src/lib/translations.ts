@@ -101,12 +101,62 @@ export interface Translations {
   realTimeUpdates: string;
   blockchainSecured: string;
   
-  // Features
+  // Features Section
   features: string;
   ninVerification: string;
   electronicVoting: string;
   membershipDues: string;
   gamification: string;
+  
+  // Feature 1: Join the Party
+  featureJoinTitle: string;
+  featureJoinPoint1: string;
+  featureJoinPoint2: string;
+  featureJoinPoint3: string;
+  
+  // Feature 2: Shape Future
+  featureShapeTitle: string;
+  featureShapePoint1: string;
+  featureShapePoint2: string;
+  featureShapePoint3: string;
+  
+  // Feature 3: Mobilize
+  featureMobilizeTitle: string;
+  featureMobilizePoint1: string;
+  featureMobilizePoint2: string;
+  featureMobilizePoint3: string;
+  
+  // Feature 4: Elections
+  featureElectionsTitle: string;
+  featureElectionsPoint1: string;
+  featureElectionsPoint2: string;
+  featureElectionsPoint3: string;
+  
+  // Feature 5: Youth
+  featureYouthTitle: string;
+  featureYouthPoint1: string;
+  featureYouthPoint2: string;
+  featureYouthPoint3: string;
+  
+  // How It Works
+  howItWorks: string;
+  stepSignUpTitle: string;
+  stepSignUpDesc: string;
+  stepEngageTitle: string;
+  stepEngageDesc: string;
+  stepPayDuesTitle: string;
+  stepPayDuesDesc: string;
+  stepVoteTitle: string;
+  stepVoteDesc: string;
+  stepMobilizeTitle: string;
+  stepMobilizeDesc: string;
+  
+  // Sections
+  whatMembersSay: string;
+  testimonials: string;
+  ourImpact: string;
+  selectYourState: string;
+  joinYourState: string;
   
   // Footer
   aboutUs: string;
@@ -219,12 +269,62 @@ export const translations: Record<Language, Translations> = {
     realTimeUpdates: "Real-time Updates",
     blockchainSecured: "Blockchain Secured",
     
-    // Features
+    // Features Section
     features: "Features",
     ninVerification: "NIN Verification",
     electronicVoting: "Electronic Voting",
     membershipDues: "Membership Dues",
     gamification: "Gamification",
+    
+    // Feature 1: Join the Party
+    featureJoinTitle: "Join the Party, Your Way",
+    featureJoinPoint1: "Sign up with NIN verification in minutes",
+    featureJoinPoint2: "Pay dues securely via mobile money or card",
+    featureJoinPoint3: "Get your digital APC ID card for instant recognition",
+    
+    // Feature 2: Shape Future
+    featureShapeTitle: "Shape the Future with Inclusive Governance",
+    featureShapePoint1: "Share ideas and vote on policies that matter to you",
+    featureShapePoint2: "Track elected officials' promises and hold them accountable",
+    featureShapePoint3: "Participate in transparent electronic primaries",
+    
+    // Feature 3: Mobilize
+    featureMobilizeTitle: "Mobilize Like Never Before",
+    featureMobilizePoint1: "Share campaigns on X, WhatsApp, and Instagram with one tap",
+    featureMobilizePoint2: "Lead local events and rallies with easy-to-use tools",
+    featureMobilizePoint3: "Earn rewards for completing micro-tasks like inviting friends",
+    
+    // Feature 4: Elections
+    featureElectionsTitle: "Power Up for Elections",
+    featureElectionsPoint1: "Organize voter registration drives and canvassing",
+    featureElectionsPoint2: "Vote securely in primaries with blockchain technology",
+    featureElectionsPoint3: "Monitor elections in real-time with our situation room",
+    
+    // Feature 5: Youth
+    featureYouthTitle: "Engage as a Young Leader",
+    featureYouthPoint1: "Learn about APC and Nigerian politics through fun quizzes",
+    featureYouthPoint2: "Connect with mentors and volunteer for campaigns",
+    featureYouthPoint3: "Climb leaderboards and earn badges for your impact",
+    
+    // How It Works
+    howItWorks: "How It Works",
+    stepSignUpTitle: "Sign Up",
+    stepSignUpDesc: "Register with your NIN and join your local ward",
+    stepEngageTitle: "Engage",
+    stepEngageDesc: "Explore events, share ideas, and volunteer for tasks",
+    stepPayDuesTitle: "Pay Dues",
+    stepPayDuesDesc: "Stay active with easy, secure payments",
+    stepVoteTitle: "Vote & Lead",
+    stepVoteDesc: "Participate in primaries and shape APC's future",
+    stepMobilizeTitle: "Mobilize",
+    stepMobilizeDesc: "Rally your community and track your impact",
+    
+    // Sections
+    whatMembersSay: "What Our Members Say",
+    testimonials: "Testimonials",
+    ourImpact: "Our Impact Across Nigeria",
+    selectYourState: "Select Your State",
+    joinYourState: "Join Your State",
     
     // Footer
     aboutUs: "About Us",
@@ -336,12 +436,62 @@ export const translations: Record<Language, Translations> = {
     realTimeUpdates: "Mmelite Oge N'ezie",
     blockchainSecured: "Blockchain Echekwara",
     
-    // Features
+    // Features Section
     features: "Njirimara",
     ninVerification: "Nkwenye NIN",
     electronicVoting: "Ntuli Aka Eletrọniki",
     membershipDues: "Ụgwọ Ndị Otu",
     gamification: "Egwuregwu",
+    
+    // Feature 1: Join the Party
+    featureJoinTitle: "Sonye na Pati, N'ụzọ Gị",
+    featureJoinPoint1: "Debanye aha site na nkwenye NIN n'ime nkeji ole na ole",
+    featureJoinPoint2: "Kwụọ ụgwọ n'enweghị nsogbu site na ego ekwentị ma ọ bụ kaadị",
+    featureJoinPoint3: "Nweta kaadị ID APC dijitalụ gị maka njirimara ozugbo",
+    
+    // Feature 2: Shape Future
+    featureShapeTitle: "Mepụta Ọdịnihu Site na Ọchịchị Onye Kwuo Uche Ya",
+    featureShapePoint1: "Kesaa echiche ma votu na iwu ndị dị gị mkpa",
+    featureShapePoint2: "Soro nkwa ndị e mere a họpụtara ma mee ka ha rụọ ọrụ",
+    featureShapePoint3: "Tinye aka na ntuli aka eletrọniki doro anya",
+    
+    // Feature 3: Mobilize
+    featureMobilizeTitle: "Chịkọtaa Ndị Mmadụ N'ụzọ E Mejughị Mbụ",
+    featureMobilizePoint1: "Kesaa mkpọsa na X, WhatsApp na Instagram n'otu aka",
+    featureMobilizePoint2: "Duru mmemme na mkpọkọta mpaghara site na ngwaọrụ dị mfe iji",
+    featureMobilizePoint3: "Nweta ụgwọ ọrụ maka imecha ọrụ ndị dị obere dịka ịkpọ ndị enyi",
+    
+    // Feature 4: Elections
+    featureElectionsTitle: "Gbakwunye Ike Maka Ntuli Aka",
+    featureElectionsPoint1: "Hazie mmemme ndebanye aha ndị ntuli aka na mkpọsa",
+    featureElectionsPoint2: "Votu n'enweghị nsogbu na ntuli aka mbụ site na teknụzụ blockchain",
+    featureElectionsPoint3: "Soro ntuli aka n'oge n'ezie site n'ụlọ ọnọdụ anyị",
+    
+    // Feature 5: Youth
+    featureYouthTitle: "Tinye aka Dịka Onye Ndu Nwa Okorobịa",
+    featureYouthPoint1: "Mụta banyere APC na ndọrọ ndọrọ ọchịchị Naịjirịa site na ajụjụ na-atọ ụtọ",
+    featureYouthPoint2: "Jikọọ na ndị nkuzi ma tinye aka na mkpọsa",
+    featureYouthPoint3: "Rigo bọọdụ ndekọ ọkwa ma nweta badges maka mmetụta gị",
+    
+    // How It Works
+    howItWorks: "Otu Ọ Si Arụ Ọrụ",
+    stepSignUpTitle: "Debanye Aha",
+    stepSignUpDesc: "Debanye aha gị site na NIN gị ma sonye na ward mpaghara gị",
+    stepEngageTitle: "Tinye Aka",
+    stepEngageDesc: "Nyochaa mmemme, kesaa echiche ma tinye aka na ọrụ",
+    stepPayDuesTitle: "Kwụọ Ụgwọ",
+    stepPayDuesDesc: "Nọrọ na-arụ ọrụ site na ịkwụ ụgwọ dị mfe na nchekwa",
+    stepVoteTitle: "Votu & Duru",
+    stepVoteDesc: "Tinye aka na ntuli aka mbụ ma mepụta ọdịnihu APC",
+    stepMobilizeTitle: "Chịkọtaa",
+    stepMobilizeDesc: "Kpọkọtaa obodo gị ma soro mmetụta gị",
+    
+    // Sections
+    whatMembersSay: "Ihe Ndị Otu Anyị Na-ekwu",
+    testimonials: "Ama",
+    ourImpact: "Mmetụta Anyị N'ofe Naịjirịa",
+    selectYourState: "Họrọ Steeti Gị",
+    joinYourState: "Sonye na Steeti Gị",
     
     // Footer
     aboutUs: "Gbasara Anyị",
@@ -453,12 +603,62 @@ export const translations: Record<Language, Translations> = {
     realTimeUpdates: "Sabuntawa Na Ainihi",
     blockchainSecured: "An Kare da Blockchain",
     
-    // Features
+    // Features Section
     features: "Fasaloli",
     ninVerification: "Tabbatar da NIN",
     electronicVoting: "Zaɓen Lantarki",
     membershipDues: "Kuɗin Memba",
     gamification: "Wasan Kwaikwayo",
+    
+    // Feature 1: Join the Party
+    featureJoinTitle: "Shiga Jam'iyya, Ta Hanyarka",
+    featureJoinPoint1: "Yi rajista tare da tabbatar da NIN cikin 'yan mintuna",
+    featureJoinPoint2: "Biya kuɗin memba cikin aminci ta hanyar kuɗin wayar hannu ko kati",
+    featureJoinPoint3: "Sami katin ID na APC na dijital don shaidar kai take",
+    
+    // Feature 2: Shape Future
+    featureShapeTitle: "Tsara Makoma Ta Hanyar Mulkin Da Ya Dace",
+    featureShapePoint1: "Raba ra'ayoyi kuma ku zaɓa manufofin da suke da mahimmanci a gare ku",
+    featureShapePoint2: "Bi alkawuran jami'an da aka zaɓa kuma ku riƙe su da alhakin",
+    featureShapePoint3: "Shiga cikin zaɓe na farko na lantarki mai bayyananniya",
+    
+    // Feature 3: Mobilize
+    featureMobilizeTitle: "Tattara Jama'a Kamar Ba A Taɓa Ganin Ba",
+    featureMobilizePoint1: "Raba yaƙin neman zaɓe akan X, WhatsApp, da Instagram da danna ɗaya",
+    featureMobilizePoint2: "Jagorance abubuwan da suka faru na gida da tarurruka da kayan aiki masu sauƙin amfani",
+    featureMobilizePoint3: "Sami lada don kammala ƙananan ayyuka kamar gayyatar abokai",
+    
+    // Feature 4: Elections
+    featureElectionsTitle: "Ƙara Ƙarfi Don Zaɓe",
+    featureElectionsPoint1: "Shirya shirye-shiryen rajistar masu zaɓe da yaƙin neman zaɓe",
+    featureElectionsPoint2: "Yi zaɓe cikin aminci a zaɓe na farko tare da fasahar blockchain",
+    featureElectionsPoint3: "Lura da zaɓe a ainihin lokacin tare da ɗakin yanayi namu",
+    
+    // Feature 5: Youth
+    featureYouthTitle: "Shiga Matsayin Jagoran Matasa",
+    featureYouthPoint1: "Koyi game da APC da siyasar Najeriya ta hanyar tambayoyin ban sha'awa",
+    featureYouthPoint2: "Haɗu da masu koyarwa kuma ku yi aikin sa kai don yaƙin neman zaɓe",
+    featureYouthPoint3: "Hau allunan matsayi kuma ku sami lambobin yabo don tasirinku",
+    
+    // How It Works
+    howItWorks: "Yadda Yake Aiki",
+    stepSignUpTitle: "Yi Rajista",
+    stepSignUpDesc: "Yi rajista tare da NIN ɗinka kuma ku shiga unguwanni na gida",
+    stepEngageTitle: "Shiga",
+    stepEngageDesc: "Bincika abubuwan da suka faru, raba ra'ayoyi, kuma ku yi aikin sa kai don ayyuka",
+    stepPayDuesTitle: "Biya Kuɗi",
+    stepPayDuesDesc: "Kasance mai aiki tare da sauƙi, biyan kuɗi cikin aminci",
+    stepVoteTitle: "Zaɓa & Jagoranci",
+    stepVoteDesc: "Shiga zaɓe na farko kuma ku tsara makomar APC",
+    stepMobilizeTitle: "Tattara",
+    stepMobilizeDesc: "Tattara al'ummarku kuma ku bi tasirinku",
+    
+    // Sections
+    whatMembersSay: "Abin da Membobinmu Suke Faɗi",
+    testimonials: "Shaidun",
+    ourImpact: "Tasirinmu A Duk Najeriya",
+    selectYourState: "Zaɓi Jihar Ka",
+    joinYourState: "Shiga Jihar Ka",
     
     // Footer
     aboutUs: "Game da Mu",
@@ -570,12 +770,62 @@ export const translations: Record<Language, Translations> = {
     realTimeUpdates: "Awọn Imudojuiwọn Akoko Gidi",
     blockchainSecured: "Blockchain Ti Daabobo",
     
-    // Features
+    // Features Section
     features: "Awọn Ẹya",
     ninVerification: "Ijẹrisi NIN",
     electronicVoting: "Idibo Itanna",
     membershipDues: "Gbese Ọmọ Ẹgbẹ",
     gamification: "Ere Idaraya",
+    
+    // Feature 1: Join the Party
+    featureJoinTitle: "Darapọ Ẹgbẹ, Ni Ọna Tirẹ",
+    featureJoinPoint1: "Forukọsilẹ pẹlu ijẹrisi NIN laarin iṣẹju diẹ",
+    featureJoinPoint2: "San gbese ni aabo nipasẹ owo foonu tabi kaadi",
+    featureJoinPoint3: "Gba kaadi ID APC oni-nọmba rẹ fun idanimọ lẹsẹkẹsẹ",
+    
+    // Feature 2: Shape Future
+    featureShapeTitle: "Ṣe Ọjọ Iwaju Pẹlu Ijọba Ti O Peye",
+    featureShapePoint1: "Pin awọn ero ki o si dibo lori awọn ilana ti o ṣe pataki si ọ",
+    featureShapePoint2: "Tọpa awọn ileri awọn aṣofin ti a yan ki o si mu wọn ni iduroṣinṣin",
+    featureShapePoint3: "Kopa ninu awọn idibo akọkọ itanna ti o han gbangba",
+    
+    // Feature 3: Mobilize
+    featureMobilizeTitle: "Gbe Awọn Eniyan Bi Ko Ti Ṣẹlẹ Tẹlẹ",
+    featureMobilizePoint1: "Pin awọn ipolongo lori X, WhatsApp, ati Instagram pẹlu titẹ kan",
+    featureMobilizePoint2: "Ṣaṣaju awọn iṣẹlẹ agbegbe ati awọn ipade pẹlu awọn irinṣẹ ti o rọrun lati lo",
+    featureMobilizePoint3: "Jere awọn ẹbun fun ipari awọn iṣẹ kekere bi pipe awọn ọrẹ",
+    
+    // Feature 4: Elections
+    featureElectionsTitle: "Mu Agbara Fun Awọn Idibo",
+    featureElectionsPoint1: "Ṣeto awọn ikojọpọ iforukọsilẹ olùdìbò ati ipolongo",
+    featureElectionsPoint2: "Dibo ni aabo ninu awọn idibo akọkọ pẹlu imọ-ẹrọ blockchain",
+    featureElectionsPoint3: "Ṣe abojuto awọn idibo ni akoko gidi pẹlu yara ipo wa",
+    
+    // Feature 5: Youth
+    featureYouthTitle: "Kopa Bi Oludari Ọdọ",
+    featureYouthPoint1: "Kọ ẹkọ nipa APC ati iṣelu Naijiria nipasẹ awọn ibeere igbadun",
+    featureYouthPoint2: "Sopọ pẹlu awọn olùkọ ati ṣiṣẹ ifọwọsi fun awọn ipolongo",
+    featureYouthPoint3: "Gun awọn pátákó ipele ki o si jere awọn ami fun ipa rẹ",
+    
+    // How It Works
+    howItWorks: "Bawo Ni O Ṣe N Ṣiṣẹ",
+    stepSignUpTitle: "Forukọsilẹ",
+    stepSignUpDesc: "Forukọsilẹ pẹlu NIN rẹ ki o si darapọ adagba agbegbe rẹ",
+    stepEngageTitle: "Kopa",
+    stepEngageDesc: "Ṣawari awọn iṣẹlẹ, pin awọn ero, ki o si ṣe ifọwọsi fun awọn iṣẹ",
+    stepPayDuesTitle: "San Gbese",
+    stepPayDuesDesc: "Duro ni iṣẹ pẹlu isanwo ti o rọrun ati aabo",
+    stepVoteTitle: "Dibo & Ṣaṣaju",
+    stepVoteDesc: "Kopa ninu awọn idibo akọkọ ki o si ṣe ọjọ iwaju APC",
+    stepMobilizeTitle: "Gbe Awọn Eniyan",
+    stepMobilizeDesc: "Pe agbegbe rẹ pọ ki o si tọpa ipa rẹ",
+    
+    // Sections
+    whatMembersSay: "Ohun Ti Awọn Ọmọ Ẹgbẹ Wa N Sọ",
+    testimonials: "Awọn Ẹri",
+    ourImpact: "Ipa Wa Ni Gbogbo Naijiria",
+    selectYourState: "Yan Ipinlẹ Rẹ",
+    joinYourState: "Darapọ Ipinlẹ Rẹ",
     
     // Footer
     aboutUs: "Nipa Wa",
