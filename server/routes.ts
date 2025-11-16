@@ -2217,26 +2217,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = Array.isArray(member.user) ? member.user[0] : member.user;
       
-      // Initialize first payment with Paystack
-      const paystackResponse = await paystack.transaction.initialize({
-        email: user?.email || "",
-        amount: amount * 100, // Paystack expects kobo
-        callback_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/recurring/verify`,
-        metadata: {
-          member_id: member.id,
-          type: "recurring_dues_setup",
-          frequency,
-          amount,
+      // Initialize first payment with Flutterwave
+      const flwResponse = await fetch(`${FLW_BASE_URL}/payments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+          'Content-Type': 'application/json',
         },
-        channels: ["card"], // Only card for recurring payments
+        body: JSON.stringify({
+          tx_ref: `DUES_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          amount,
+          currency: 'NGN',
+          redirect_url: `${process.env.VITE_BASE_URL || "http://localhost:5000"}/dues/recurring/verify`,
+          customer: {
+            email: user?.email || "",
+            name: `${user?.firstName} ${user?.lastName}`,
+          },
+          customizations: {
+            title: 'APC Recurring Membership Dues',
+            description: `${frequency} dues payment`,
+          },
+          meta: {
+            member_id: member.id,
+            type: "recurring_dues_setup",
+            frequency,
+            amount,
+          },
+        }),
       });
+
+      const flwData = await flwResponse.json();
+
+      if (flwData.status !== 'success') {
+        throw new Error(flwData.message || 'Failed to initialize Flutterwave payment');
+      }
 
       res.json({
         success: true,
         data: {
-          authorization_url: paystackResponse.data.authorization_url,
-          access_code: paystackResponse.data.access_code,
-          reference: paystackResponse.data.reference,
+          authorization_url: flwData.data.link,
+          reference: flwData.data.tx_ref,
         }
       });
     } catch (error) {
@@ -2248,12 +2268,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verify recurring dues setup and save authorization
   app.post("/api/dues/recurring/verify", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { reference } = req.body;
+      const { reference, transaction_id } = req.body;
 
-      const verification = await paystack.transaction.verify(reference);
+      // Verify transaction with Flutterwave
+      const verifyResponse = await fetch(`${FLW_BASE_URL}/transactions/${transaction_id}/verify`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET_KEY}`,
+        },
+      });
 
-      if (verification.data.status === "success") {
-        const { metadata, authorization } = verification.data;
+      const verification = await verifyResponse.json();
+
+      if (verification.status === 'success' && verification.data.status === 'successful') {
+        const { meta, customer } = verification.data;
 
         const member = await db.query.members.findFirst({
           where: eq(schema.members.userId, req.user!.id)
@@ -2265,7 +2293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Calculate next payment date
         const nextDate = new Date();
-        switch (metadata.frequency) {
+        switch (meta.frequency) {
           case "monthly":
             nextDate.setMonth(nextDate.getMonth() + 1);
             break;
@@ -2280,13 +2308,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create or update recurring dues record
         const [recurringDues] = await db.insert(schema.recurringMembershipDues).values({
           memberId: member.id,
-          amount: String(metadata.amount), // Store in naira, not kobo
-          frequency: metadata.frequency,
+          amount: String(meta.amount),
+          frequency: meta.frequency,
           status: "active",
           nextPaymentDate: nextDate,
           lastPaymentDate: new Date(),
-          paystackAuthorizationCode: authorization.authorization_code,
-          paystackCustomerCode: authorization.customer_code || verification.data.customer.customer_code,
+          paystackAuthorizationCode: null,
+          paystackCustomerCode: customer.email || null,
         }).returning();
 
         // Also create a dues payment record
