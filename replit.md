@@ -15,6 +15,7 @@ Preferred communication style: Simple, everyday language.
 - **Routing**: Wouter for lightweight client-side routing.
 - **PWA**: Service worker-based offline functionality (network-first for API, cache-first for assets).
 - **Theme System**: Custom dark/light mode with HSL-based APC brand colors.
+- **Multi-Language Support**: Translation system supporting English, Igbo, Hausa, and Yoruba with localStorage persistence, SSR-safe implementation, and fallback handling.
 
 ### Backend
 - **Runtime & Framework**: Node.js with Express.js (TypeScript).
@@ -54,6 +55,7 @@ Preferred communication style: Simple, everyday language.
 - **Interactive Map**: Displays real-time, state-level analytics for members, events, and campaigns.
 - **Custom Point Purchases**: Flexible system allowing users to buy custom amounts of points with configurable exchange rates.
 - **Task Approval System**: Workflow for image-based micro-tasks requiring admin approval, with proof image uploads and status tracking.
+- **Multi-Language Translation**: Comprehensive translation infrastructure supporting English, Igbo (ig), Hausa (ha), and Yoruba (yo) via `useLanguage()` hook. Translation keys defined in `client/src/lib/translations.ts`, language selector in app header with localStorage persistence.
 
 ## External Dependencies
 - **Payment Processing**: Flutterwave for membership dues, point purchases, and donations.
