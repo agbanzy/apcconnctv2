@@ -683,13 +683,15 @@ router.post("/redeem/airtime", requireAuth, async (req: AuthRequest, res: Respon
     
     const validationResult = await db.transaction(async (tx) => {
       // IDEMPOTENCY: Check for duplicate
-      const [duplicateCheck] = await tx.execute<{ count: number }>(sql`
+      const duplicateResult = await tx.execute(sql`
         SELECT COUNT(*) as count 
         FROM ${schema.pointRedemptions} 
         WHERE ${schema.pointRedemptions.metadata}->>'idempotencyKey' = ${idempotencyKey}
       `);
 
-      if (duplicateCheck && Number(duplicateCheck.count) > 0) {
+      const duplicateRows = duplicateResult.rows as Array<{count: string}>;
+      const duplicateCount = duplicateRows?.[0]?.count || 0;
+      if (Number(duplicateCount) > 0) {
         throw new Error("Duplicate redemption request detected.");
       }
 
@@ -889,13 +891,15 @@ router.post("/redeem/data", requireAuth, async (req: AuthRequest, res: Response)
     
     const validationResult = await db.transaction(async (tx) => {
       // IDEMPOTENCY: Check for duplicate
-      const [duplicateCheck] = await tx.execute<{ count: number }>(sql`
+      const duplicateResult = await tx.execute(sql`
         SELECT COUNT(*) as count 
         FROM ${schema.pointRedemptions} 
         WHERE ${schema.pointRedemptions.metadata}->>'idempotencyKey' = ${idempotencyKey}
       `);
 
-      if (duplicateCheck && Number(duplicateCheck.count) > 0) {
+      const duplicateRows = duplicateResult.rows as Array<{count: string}>;
+      const duplicateCount = duplicateRows?.[0]?.count || 0;
+      if (Number(duplicateCount) > 0) {
         throw new Error("Duplicate redemption request detected.");
       }
 
@@ -1066,6 +1070,278 @@ router.post("/redeem/data", requireAuth, async (req: AuthRequest, res: Response)
   } catch (error: any) {
     console.error("Redeem data error:", error);
     res.status(500).json({ success: false, error: error.message || "Failed to redeem data" });
+  }
+});
+
+// Get Nigerian banks list for cash withdrawal
+router.get("/banks", requireAuth, async (_req: AuthRequest, res: Response) => {
+  try {
+    const banks = await flutterwaveBillsService.getNigerianBanks();
+    res.json({ success: true, banks });
+  } catch (error: any) {
+    console.error("Get banks error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to get banks" });
+  }
+});
+
+// Verify bank account
+router.post("/verify-bank", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { accountNumber, bankCode } = req.body;
+    
+    if (!accountNumber || !bankCode) {
+      return res.status(400).json({ success: false, error: "Account number and bank code required" });
+    }
+
+    const account = await flutterwaveBillsService.verifyBankAccount(accountNumber, bankCode);
+    res.json({ success: true, account });
+  } catch (error: any) {
+    console.error("Verify bank error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to verify bank account" });
+  }
+});
+
+// Redeem points as cash (bank transfer)
+router.post("/redeem/cash", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { pointsAmount, accountNumber, bankCode } = req.body;
+
+    // Validate input - accountName is NOT trusted from client, we verify server-side
+    if (!pointsAmount || !accountNumber || !bankCode) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Points amount, account number, and bank code are required" 
+      });
+    }
+
+    // Validate account number format
+    if (!/^\d{10}$/.test(accountNumber)) {
+      return res.status(400).json({ success: false, error: "Invalid account number format" });
+    }
+
+    const userMember = await db.query.members.findFirst({
+      where: eq(schema.members.userId, req.user!.id),
+    });
+
+    if (!userMember) {
+      return res.status(404).json({ success: false, error: "Member profile not found" });
+    }
+
+    // Get cash redemption settings
+    const cashSettings = await db.query.redemptionSettings.findFirst({
+      where: and(
+        eq(schema.redemptionSettings.redemptionType, "cash"),
+        eq(schema.redemptionSettings.isActive, true)
+      ),
+    });
+
+    if (!cashSettings) {
+      return res.status(400).json({ success: false, error: "Cash redemption is not available" });
+    }
+
+    // Validate points range
+    const points = Number(pointsAmount);
+    if (isNaN(points) || points < cashSettings.minPoints || points > cashSettings.maxPoints) {
+      return res.status(400).json({
+        success: false,
+        error: `Points must be between ${cashSettings.minPoints} and ${cashSettings.maxPoints}`,
+      });
+    }
+
+    // Calculate Naira amount
+    const nairaAmount = Math.floor(points * parseFloat(cashSettings.pointToNairaRate));
+
+    // Apply minimum transfer threshold (banks often have minimums)
+    const MIN_TRANSFER_AMOUNT = 100;
+    if (nairaAmount < MIN_TRANSFER_AMOUNT) {
+      return res.status(400).json({
+        success: false,
+        error: `Minimum withdrawal is ₦${MIN_TRANSFER_AMOUNT}`,
+      });
+    }
+
+    // CRITICAL: Server-side bank account verification - never trust client-supplied accountName
+    let verifiedAccountName: string;
+    try {
+      const verificationResult = await flutterwaveBillsService.verifyBankAccount(accountNumber, bankCode);
+      verifiedAccountName = verificationResult.account_name;
+    } catch (verifyError: any) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Bank account verification failed: ${verifyError.message}` 
+      });
+    }
+
+    // Generate reference and idempotency key
+    const reference = `cash_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+    const idempotencyKey = `cash:${userMember.id}:${accountNumber}:${bankCode}:${points}:${Math.floor(Date.now() / 60000)}`;
+
+    let redemption: any;
+
+    // PHASE 1: Validation and create durable redemption record (Transaction 1)
+    const validationResult = await db.transaction(async (tx) => {
+      // IDEMPOTENCY: Check for duplicate
+      const duplicateResult = await tx.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM ${schema.pointRedemptions} 
+        WHERE ${schema.pointRedemptions.metadata}->>'idempotencyKey' = ${idempotencyKey}
+      `);
+
+      const duplicateRows = duplicateResult.rows as Array<{count: string}>;
+      const duplicateCount = duplicateRows?.[0]?.count || 0;
+      if (Number(duplicateCount) > 0) {
+        throw new Error("Duplicate redemption request detected. Please wait before retrying.");
+      }
+
+      // STATE VALIDATION: Check member status
+      const currentMember = await tx.query.members.findFirst({
+        where: eq(schema.members.id, userMember.id),
+      });
+
+      if (!currentMember || currentMember.status !== "active") {
+        throw new Error("Account is not active");
+      }
+
+      // BALANCE CHECK: Verify sufficient points
+      const currentBalanceInTx = await pointLedgerService.getBalanceWithClient(tx, userMember.id);
+      if (currentBalanceInTx < points) {
+        throw new Error(`Insufficient points. You have ${currentBalanceInTx} points but need ${points}`);
+      }
+
+      // DURABLE RECORD: Create redemption before external call
+      const [record] = await tx.insert(schema.pointRedemptions).values({
+        memberId: userMember.id,
+        redemptionType: "cash",
+        pointsUsed: points,
+        nairaValue: nairaAmount.toString(),
+        status: "pending",
+        metadata: {
+          accountNumber,
+          bankCode,
+          accountName: verifiedAccountName,
+          reference,
+          idempotencyKey,
+          initiatedBy: req.user!.email,
+        },
+      }).returning();
+
+      return { redemption: record };
+    });
+
+    redemption = validationResult.redemption;
+
+    // PHASE 2: External Flutterwave call (OUTSIDE transaction - if this succeeds, we have reference for reconciliation)
+    let flwResponse;
+    try {
+      flwResponse = await flutterwaveBillsService.initiateBankTransfer({
+        account_bank: bankCode,
+        account_number: accountNumber,
+        amount: nairaAmount,
+        currency: "NGN",
+        reference,
+        narration: `APC Connect Point Withdrawal - ${points} pts`,
+        beneficiary_name: verifiedAccountName,
+      });
+
+      // VERIFICATION: Validate Flutterwave response
+      if (!flwResponse.data || !flwResponse.data.id) {
+        throw new Error("Invalid Flutterwave response - missing transfer ID");
+      }
+    } catch (flwError: any) {
+      // Mark redemption as failed (separate transaction for durability)
+      await db.update(schema.pointRedemptions)
+        .set({
+          status: "failed",
+          errorMessage: flwError.message,
+        })
+        .where(eq(schema.pointRedemptions.id, redemption.id));
+      
+      throw flwError;
+    }
+
+    // PHASE 3A: Persist Flutterwave success (separate update for durability)
+    await db.update(schema.pointRedemptions)
+      .set({
+        flutterwaveReference: reference,
+        metadata: {
+          ...(redemption.metadata as any || {}),
+          flwTransferId: flwResponse.data.id,
+          flwRef: flwResponse.data.reference,
+          transferStatus: flwResponse.data.status,
+        },
+      })
+      .where(eq(schema.pointRedemptions.id, redemption.id));
+
+    // PHASE 3B: Deduct points (Transaction 2)
+    try {
+      await db.transaction(async (tx) => {
+        // Final balance check before deduction
+        const finalBalance = await pointLedgerService.getBalanceWithClient(tx, userMember.id);
+        if (finalBalance < points) {
+          throw new Error("Insufficient points at final check");
+        }
+
+        // Deduct points
+        const newBalance = finalBalance - points;
+        await tx.insert(schema.userPoints).values({
+          memberId: userMember.id,
+          transactionType: "spend",
+          source: "cash_redemption",
+          amount: -points,
+          balanceAfter: newBalance,
+          referenceType: "cash_redemption",
+          referenceId: redemption.id,
+          metadata: {
+            accountNumber,
+            bankCode,
+            accountName: verifiedAccountName,
+            nairaValue: nairaAmount,
+            flwRef: flwResponse.data.reference,
+          },
+        });
+      });
+
+      // PHASE 3C: Mark completed (separate update for maximum durability)
+      await db.update(schema.pointRedemptions)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+        })
+        .where(eq(schema.pointRedemptions.id, redemption.id));
+
+    } catch (phase3Error: any) {
+      // Phase 3 failed - mark as FAILED for proper reconciliation (Flutterwave succeeded but point deduction failed)
+      await db.update(schema.pointRedemptions)
+        .set({
+          status: "failed",
+          errorMessage: `Phase 3 failed: ${phase3Error.message}`,
+          metadata: {
+            ...(redemption.metadata as any || {}),
+            phase3Error: phase3Error.message,
+            phase3FailedAt: new Date().toISOString(),
+            flutterwaveSucceeded: true,
+          },
+        })
+        .where(eq(schema.pointRedemptions.id, redemption.id));
+      
+      throw new Error(`Flutterwave succeeded but point deduction failed. Redemption ID: ${redemption.id}. Please contact support for manual reconciliation.`);
+    }
+
+    res.json({
+      success: true,
+      message: `₦${nairaAmount.toLocaleString()} transfer initiated to ${accountNumber} (${verifiedAccountName})`,
+      redemption: {
+        id: redemption.id,
+        status: "completed",
+        flutterwaveReference: reference,
+        accountName: verifiedAccountName,
+        pointsUsed: points,
+        nairaValue: nairaAmount,
+      },
+    });
+  } catch (error: any) {
+    console.error("Cash redemption error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to process cash withdrawal" });
   }
 });
 

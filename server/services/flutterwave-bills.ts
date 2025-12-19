@@ -58,6 +58,40 @@ export interface BillPaymentResponse {
   };
 }
 
+export interface BankTransferRequest {
+  account_bank: string; // Bank code (e.g., "044" for Access Bank)
+  account_number: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  narration?: string;
+  beneficiary_name?: string;
+}
+
+export interface BankTransferResponse {
+  status: string;
+  message: string;
+  data: {
+    id: number;
+    account_number: string;
+    bank_code: string;
+    full_name: string;
+    amount: number;
+    currency: string;
+    reference: string;
+    status: string;
+    complete_message: string;
+    fee: number;
+    created_at: string;
+  };
+}
+
+export interface NigerianBank {
+  id: number;
+  code: string;
+  name: string;
+}
+
 class FlutterwaveBillsService {
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${FLW_BASE_URL}${endpoint}`;
@@ -203,6 +237,67 @@ class FlutterwaveBillsService {
     if (nineMobilePrefixes.includes(prefix)) return '9MOBILE';
 
     return null;
+  }
+
+  // Bank Transfer Methods for Cash Withdrawals
+  async getNigerianBanks(): Promise<NigerianBank[]> {
+    const response = await this.makeRequest<{ data: NigerianBank[] }>('/banks/NG');
+    return response.data;
+  }
+
+  async verifyBankAccount(accountNumber: string, bankCode: string): Promise<{
+    account_number: string;
+    account_name: string;
+  }> {
+    const response = await this.makeRequest<{
+      data: {
+        account_number: string;
+        account_name: string;
+      };
+    }>(`/accounts/resolve?account_number=${accountNumber}&account_bank=${bankCode}`);
+    return response.data;
+  }
+
+  async initiateBankTransfer(request: BankTransferRequest): Promise<BankTransferResponse> {
+    const payload = {
+      account_bank: request.account_bank,
+      account_number: request.account_number,
+      amount: request.amount,
+      currency: request.currency || 'NGN',
+      reference: request.reference,
+      narration: request.narration || 'APC Connect Point Withdrawal',
+      beneficiary_name: request.beneficiary_name,
+    };
+
+    return await this.makeRequest<BankTransferResponse>('/transfers', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getTransferStatus(transferId: number): Promise<{
+    id: number;
+    status: string;
+    reference: string;
+    amount: number;
+    fee: number;
+    currency: string;
+    complete_message: string;
+    created_at: string;
+  }> {
+    const response = await this.makeRequest<{
+      data: {
+        id: number;
+        status: string;
+        reference: string;
+        amount: number;
+        fee: number;
+        currency: string;
+        complete_message: string;
+        created_at: string;
+      };
+    }>(`/transfers/${transferId}`);
+    return response.data;
   }
 }
 

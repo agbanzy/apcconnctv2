@@ -58,7 +58,7 @@ Preferred communication style: Simple, everyday language.
 - **Multi-Language Translation**: Comprehensive translation infrastructure supporting English, Igbo (ig), Hausa (ha), and Yoruba (yo) via `useLanguage()` hook. Translation keys defined in `client/src/lib/translations.ts`, language selector in app header with localStorage persistence.
 
 ## External Dependencies
-- **Payment Processing**: Flutterwave for membership dues, point purchases, and donations.
+- **Payment Processing**: Flutterwave for membership dues, point purchases, donations, airtime/data redemption, and bank transfers for cash withdrawals.
 - **Geolocation**: Mapbox (planned) for event navigation and ward assignment.
 - **Blockchain**: For election vote audit trails (planned).
 - **Google Fonts**: Inter, Plus Jakarta Sans, JetBrains Mono (via CDN).

@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Smartphone, Wifi, ArrowLeft, Zap, Info, TrendingUp, History, Coins } from "lucide-react";
+import { Smartphone, Wifi, ArrowLeft, Zap, Info, TrendingUp, History, Coins, Banknote, Building2, CheckCircle, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ function generateIdempotencyKey(): string {
 export default function RedeemPoints() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"airtime" | "data">("airtime");
+  const [activeTab, setActiveTab] = useState<"airtime" | "data" | "cash">("airtime");
 
   // Airtime form state
   const [airtimePhone, setAirtimePhone] = useState("");
@@ -30,6 +31,13 @@ export default function RedeemPoints() {
   // Data form state
   const [dataPhone, setDataPhone] = useState("");
   const [dataPoints, setDataPoints] = useState("");
+
+  // Cash withdrawal form state
+  const [cashBankCode, setCashBankCode] = useState("");
+  const [cashAccountNumber, setCashAccountNumber] = useState("");
+  const [cashAccountName, setCashAccountName] = useState("");
+  const [cashPoints, setCashPoints] = useState("");
+  const [isAccountVerified, setIsAccountVerified] = useState(false);
 
   // Fetch user's member profile for balance
   const { data: memberData } = useQuery<any>({
@@ -60,6 +68,13 @@ export default function RedeemPoints() {
 
   const airtimeSettings = settingsData?.settings?.find((s: any) => s.productType === "airtime");
   const dataSettings = settingsData?.settings?.find((s: any) => s.productType === "data");
+  const cashSettings = settingsData?.settings?.find((s: any) => s.productType === "cash");
+
+  // Fetch Nigerian banks
+  const { data: banksData, isLoading: banksLoading } = useQuery<any>({
+    queryKey: ["/api/points/banks"],
+    enabled: activeTab === "cash",
+  });
 
   const calculateNaira = (points: string, productType: "airtime" | "data") => {
     const pointsNum = parseInt(points);
@@ -132,6 +147,77 @@ export default function RedeemPoints() {
       toast({
         title: "Redemption Failed",
         description: error.message || "Failed to redeem data",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Verify bank account mutation
+  const verifyBankMutation = useMutation({
+    mutationFn: async (data: { accountNumber: string; bankCode: string }) => {
+      const response = await fetch("/api/points/verify-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to verify account");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCashAccountName(data.account?.account_name || "");
+      setIsAccountVerified(true);
+      toast({
+        title: "Account Verified",
+        description: `Account Name: ${data.account?.account_name}`,
+      });
+    },
+    onError: (error: any) => {
+      setIsAccountVerified(false);
+      setCashAccountName("");
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Could not verify bank account",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Redeem cash mutation - accountName is verified server-side for security
+  const redeemCashMutation = useMutation({
+    mutationFn: async (data: { pointsAmount: number; accountNumber: string; bankCode: string }) => {
+      const response = await fetch("/api/points/redeem/cash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to process withdrawal");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Withdrawal Initiated!",
+        description: data.message,
+      });
+      setCashBankCode("");
+      setCashAccountNumber("");
+      setCashAccountName("");
+      setCashPoints("");
+      setIsAccountVerified(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/points/balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/redemptions"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Withdrawal Failed",
+        description: error.message || "Failed to process withdrawal",
         variant: "destructive",
       });
     },
@@ -216,8 +302,76 @@ export default function RedeemPoints() {
     });
   };
 
+  const handleVerifyBank = () => {
+    if (!cashBankCode || !cashAccountNumber) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a bank and enter account number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (cashAccountNumber.length !== 10) {
+      toast({
+        title: "Invalid Account Number",
+        description: "Account number must be 10 digits",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    verifyBankMutation.mutate({
+      accountNumber: cashAccountNumber,
+      bankCode: cashBankCode,
+    });
+  };
+
+  const handleCashSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pointsNum = parseInt(cashPoints);
+
+    if (!isAccountVerified || !cashAccountName) {
+      toast({
+        title: "Account Not Verified",
+        description: "Please verify your bank account first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const minPoints = cashSettings?.minPoints || 500;
+    const maxPoints = cashSettings?.maxPoints || 50000;
+
+    if (pointsNum < minPoints || pointsNum > maxPoints) {
+      toast({
+        title: "Invalid Points Amount",
+        description: `Please enter between ${minPoints} and ${maxPoints} points`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (balanceData && pointsNum > balanceData.balance) {
+      toast({
+        title: "Insufficient Points",
+        description: `You only have ${balanceData.balance} points available`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    redeemCashMutation.mutate({
+      pointsAmount: pointsNum,
+      accountNumber: cashAccountNumber,
+      bankCode: cashBankCode,
+    });
+  };
+
   const airtimeNaira = calculateNaira(airtimePoints, "airtime");
   const dataNaira = calculateNaira(dataPoints, "data");
+  const cashNaira = cashPoints ? parseInt(cashPoints) * (cashSettings ? parseFloat(cashSettings.baseRate) : 1.0) : 0;
+  const cashProgress = (cashPoints && balance > 0) ? Math.min((parseInt(cashPoints) / balance) * 100, 100) : 0;
   const balance = balanceData?.balance || 0;
   const conversionRate = airtimeSettings ? parseFloat(airtimeSettings.baseRate) : 1.0;
   const airtimeProgress = (airtimePoints && balance > 0) ? Math.min((parseInt(airtimePoints) / balance) * 100, 100) : 0;
@@ -237,7 +391,7 @@ export default function RedeemPoints() {
         <div className="flex-1">
           <h1 className="text-3xl font-bold" data-testid="text-redeem-title">Redeem Points</h1>
           <p className="text-muted-foreground">
-            Convert your points to airtime or data instantly
+            Convert your points to airtime, data, or cash instantly
           </p>
         </div>
       </div>
@@ -298,8 +452,8 @@ export default function RedeemPoints() {
       </div>
 
       {/* Redemption Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "airtime" | "data")}>
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "airtime" | "data" | "cash")}>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="airtime" data-testid="tab-airtime">
             <Smartphone className="h-4 w-4 mr-2" />
             Airtime
@@ -307,6 +461,10 @@ export default function RedeemPoints() {
           <TabsTrigger value="data" data-testid="tab-data">
             <Wifi className="h-4 w-4 mr-2" />
             Data
+          </TabsTrigger>
+          <TabsTrigger value="cash" data-testid="tab-cash">
+            <Banknote className="h-4 w-4 mr-2" />
+            Cash
           </TabsTrigger>
         </TabsList>
 
@@ -452,6 +610,136 @@ export default function RedeemPoints() {
                   data-testid="button-redeem-data"
                 >
                   {redeemDataMutation.isPending ? "Processing..." : `Redeem ${dataPoints ? `₦${dataNaira.toLocaleString()}` : ""} Data`}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cash">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="h-5 w-5 text-primary" />
+                Withdraw to Bank
+              </CardTitle>
+              <CardDescription>
+                Transfer your points as cash to any Nigerian bank account
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCashSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="cash-bank">Select Bank</Label>
+                  <Select
+                    value={cashBankCode}
+                    onValueChange={(value) => {
+                      setCashBankCode(value);
+                      setIsAccountVerified(false);
+                      setCashAccountName("");
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-bank">
+                      <SelectValue placeholder={banksLoading ? "Loading banks..." : "Select your bank"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banksData?.banks?.map((bank: any) => (
+                        <SelectItem key={bank.code} value={bank.code}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cash-account">Account Number</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="cash-account"
+                      data-testid="input-cash-account"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="0123456789"
+                      value={cashAccountNumber}
+                      onChange={(e) => {
+                        setCashAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10));
+                        setIsAccountVerified(false);
+                        setCashAccountName("");
+                      }}
+                      className="text-lg flex-1"
+                      maxLength={10}
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleVerifyBank}
+                      disabled={verifyBankMutation.isPending || cashAccountNumber.length !== 10 || !cashBankCode}
+                      data-testid="button-verify-bank"
+                    >
+                      {verifyBankMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Verify"
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enter your 10-digit account number
+                  </p>
+                </div>
+
+                {isAccountVerified && cashAccountName && (
+                  <Alert className="border-primary/20 bg-primary/5">
+                    <CheckCircle className="h-4 w-4 text-primary" />
+                    <AlertDescription className="flex items-center gap-2">
+                      <span className="font-medium">Account Name:</span>
+                      <span data-testid="text-account-name">{cashAccountName}</span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-3">
+                  <Label htmlFor="cash-points">Points to Withdraw</Label>
+                  <Input
+                    id="cash-points"
+                    data-testid="input-cash-points"
+                    type="number"
+                    placeholder={cashSettings ? `${cashSettings.minPoints} - ${cashSettings.maxPoints}` : "500 - 50000"}
+                    value={cashPoints}
+                    onChange={(e) => setCashPoints(e.target.value)}
+                    min={cashSettings?.minPoints || 500}
+                    max={cashSettings?.maxPoints || 50000}
+                    className="text-lg"
+                    disabled={!isAccountVerified}
+                    required
+                  />
+                  {cashPoints && (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">You'll Receive</span>
+                        <span className="font-bold text-lg text-primary">
+                          ₦{cashNaira.toLocaleString()}
+                        </span>
+                      </div>
+                      <Progress value={cashProgress} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{parseInt(cashPoints).toLocaleString()} pts</span>
+                        <span>{balance > 0 ? ((parseInt(cashPoints) / balance) * 100).toFixed(1) : "0"}% of balance</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-base"
+                  disabled={redeemCashMutation.isPending || !isAccountVerified}
+                  data-testid="button-redeem-cash"
+                >
+                  {redeemCashMutation.isPending ? "Processing..." : `Withdraw ${cashPoints ? `₦${cashNaira.toLocaleString()}` : ""}`}
                 </Button>
               </form>
             </CardContent>
