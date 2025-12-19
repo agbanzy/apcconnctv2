@@ -1,9 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-// Using simple text icons for now - you can replace with proper icon libraries
-function TabBarIcon({ name, color }: { name: string; color: string }) {
-  return null; // Icons can be added later with expo-vector-icons or similar
+type IconName = 'home' | 'home-outline' | 'calendar' | 'calendar-outline' | 
+                'checkmark-circle' | 'checkmark-circle-outline' | 
+                'newspaper' | 'newspaper-outline' | 'person' | 'person-outline';
+
+function TabBarIcon({ name, color, size }: { name: IconName; color: string; size: number }) {
+  return <Ionicons name={name} size={size} color={color} />;
 }
 
 export default function TabLayout() {
@@ -17,10 +21,11 @@ export default function TabLayout() {
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
           paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+          paddingTop: 8,
           height: Platform.OS === 'ios' ? 88 : 64,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
         },
         headerStyle: {
@@ -29,6 +34,7 @@ export default function TabLayout() {
         headerTintColor: '#FFFFFF',
         headerTitleStyle: {
           fontWeight: '600',
+          fontSize: 18,
         },
       }}
     >
@@ -37,6 +43,27 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           headerTitle: 'APC Connect',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon 
+              name={focused ? 'home' : 'home-outline'} 
+              color={color} 
+              size={24} 
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: 'News',
+          headerTitle: 'Party News',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon 
+              name={focused ? 'newspaper' : 'newspaper-outline'} 
+              color={color} 
+              size={24} 
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -44,6 +71,13 @@ export default function TabLayout() {
         options={{
           title: 'Events',
           headerTitle: 'Events',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon 
+              name={focused ? 'calendar' : 'calendar-outline'} 
+              color={color} 
+              size={24} 
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -51,6 +85,13 @@ export default function TabLayout() {
         options={{
           title: 'Elections',
           headerTitle: 'Elections',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon 
+              name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} 
+              color={color} 
+              size={24} 
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -58,6 +99,13 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           headerTitle: 'My Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon 
+              name={focused ? 'person' : 'person-outline'} 
+              color={color} 
+              size={24} 
+            />
+          ),
         }}
       />
     </Tabs>
