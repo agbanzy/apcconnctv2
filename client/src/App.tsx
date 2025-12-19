@@ -70,6 +70,7 @@ import Rewards from "@/pages/rewards";
 import NotificationSettings from "@/pages/notification-settings";
 import IdCardVerify from "@/pages/id-card-verify";
 import { AdminSidebar } from "@/components/admin-sidebar";
+import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import PointsPage from "@/pages/points";
 import PurchasePointsPage from "@/pages/purchase-points";
 import UserTasksPage from "@/pages/user-tasks";
@@ -197,7 +198,7 @@ function AppContent() {
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-4 md:p-6 pb-20 md:pb-6">
             <Switch>
               <Route path="/login" component={() => <Redirect to="/dashboard" />} />
               <Route path="/register" component={() => <Redirect to="/dashboard" />} />
@@ -241,6 +242,7 @@ function AppContent() {
           </main>
           <Footer />
         </div>
+        <MobileBottomNav />
       </div>
       <ChatbotWidget />
     </SidebarProvider>
