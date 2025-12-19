@@ -1127,29 +1127,22 @@ router.post("/redeem/cash", requireAuth, async (req: AuthRequest, res: Response)
       return res.status(404).json({ success: false, error: "Member profile not found" });
     }
 
-    // Get cash redemption settings
-    const cashSettings = await db.query.redemptionSettings.findFirst({
-      where: and(
-        eq(schema.redemptionSettings.redemptionType, "cash"),
-        eq(schema.redemptionSettings.isActive, true)
-      ),
-    });
-
-    if (!cashSettings) {
-      return res.status(400).json({ success: false, error: "Cash redemption is not available" });
-    }
+    // Cash redemption settings (hardcoded, matching airtime/data pattern)
+    const minPoints = 500;
+    const maxPoints = 50000;
+    const baseRate = 1.0; // 1 point = ₦1
 
     // Validate points range
     const points = Number(pointsAmount);
-    if (isNaN(points) || points < cashSettings.minPoints || points > cashSettings.maxPoints) {
+    if (isNaN(points) || points < minPoints || points > maxPoints) {
       return res.status(400).json({
         success: false,
-        error: `Points must be between ${cashSettings.minPoints} and ${cashSettings.maxPoints}`,
+        error: `Points must be between ${minPoints} and ${maxPoints}`,
       });
     }
 
     // Calculate Naira amount
-    const nairaAmount = Math.floor(points * parseFloat(cashSettings.pointToNairaRate));
+    const nairaAmount = Math.floor(points * baseRate);
 
     // Apply minimum transfer threshold (banks often have minimums)
     const MIN_TRANSFER_AMOUNT = 100;
@@ -1203,7 +1196,7 @@ router.post("/redeem/cash", requireAuth, async (req: AuthRequest, res: Response)
       }
 
       // BALANCE CHECK: Verify sufficient points
-      const currentBalanceInTx = await pointLedgerService.getBalanceWithClient(tx, userMember.id);
+      const currentBalanceInTx = await pointLedgerService.getBalance(userMember.id, tx);
       if (currentBalanceInTx < points) {
         throw new Error(`Insufficient points. You have ${currentBalanceInTx} points but need ${points}`);
       }
@@ -1211,9 +1204,11 @@ router.post("/redeem/cash", requireAuth, async (req: AuthRequest, res: Response)
       // DURABLE RECORD: Create redemption before external call
       const [record] = await tx.insert(schema.pointRedemptions).values({
         memberId: userMember.id,
-        redemptionType: "cash",
-        pointsUsed: points,
+        phoneNumber: "BANK_TRANSFER",
+        carrier: bankCode,
+        productType: "cash",
         nairaValue: nairaAmount.toString(),
+        pointsDebited: points,
         status: "pending",
         metadata: {
           accountNumber,
@@ -1276,7 +1271,7 @@ router.post("/redeem/cash", requireAuth, async (req: AuthRequest, res: Response)
     try {
       await db.transaction(async (tx) => {
         // Final balance check before deduction
-        const finalBalance = await pointLedgerService.getBalanceWithClient(tx, userMember.id);
+        const finalBalance = await pointLedgerService.getBalance(userMember.id, tx);
         if (finalBalance < points) {
           throw new Error("Insufficient points at final check");
         }
