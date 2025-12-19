@@ -119,7 +119,7 @@ class FlutterwaveBillsService {
     };
 
     if (this.proxyAgent) {
-      fetchOptions.agent = this.proxyAgent;
+      fetchOptions.dispatcher = this.proxyAgent;
     }
 
     const response = await fetch(url, fetchOptions);

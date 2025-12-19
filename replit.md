@@ -59,6 +59,7 @@ Preferred communication style: Simple, everyday language.
 
 ## External Dependencies
 - **Payment Processing**: Flutterwave for membership dues, point purchases, donations, airtime/data redemption, and bank transfers for cash withdrawals.
+- **Static IP Proxy**: Fixie proxy service for Flutterwave API calls (required for IP whitelisting). Set `FIXIE_URL` environment variable with your Fixie proxy URL. Uses `https-proxy-agent` with Node 18's `dispatcher` option.
 - **Geolocation**: Mapbox (planned) for event navigation and ward assignment.
 - **Blockchain**: For election vote audit trails (planned).
 - **Google Fonts**: Inter, Plus Jakarta Sans, JetBrains Mono (via CDN).
