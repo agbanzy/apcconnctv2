@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 const FLW_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY as string;
 const FLW_BASE_URL = "https://api.flutterwave.com/v3";
+const FIXIE_URL = process.env.FIXIE_URL;
 
 export interface BillCategory {
   id: number;
@@ -93,17 +95,34 @@ export interface NigerianBank {
 }
 
 class FlutterwaveBillsService {
+  private proxyAgent: HttpsProxyAgent<string> | undefined;
+
+  constructor() {
+    if (FIXIE_URL) {
+      this.proxyAgent = new HttpsProxyAgent(FIXIE_URL);
+      console.log('🌐 Flutterwave: Using Fixie proxy for static IP');
+    } else {
+      console.log('⚠️ Flutterwave: No proxy configured (FIXIE_URL not set)');
+    }
+  }
+
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${FLW_BASE_URL}${endpoint}`;
     
-    const response = await fetch(url, {
+    const fetchOptions: any = {
       ...options,
       headers: {
         'Authorization': `Bearer ${FLW_SECRET_KEY}`,
         'Content-Type': 'application/json',
         ...options.headers,
       },
-    });
+    };
+
+    if (this.proxyAgent) {
+      fetchOptions.agent = this.proxyAgent;
+    }
+
+    const response = await fetch(url, fetchOptions);
 
     const data = await response.json();
 
