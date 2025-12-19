@@ -73,7 +73,7 @@ export default function AdminMembers() {
   
   const dialogs = useMemberManagementDialogs();
 
-  const { data: membersData, isLoading } = useQuery({
+  const { data: membersData, isLoading } = useQuery<{ success: boolean; data: any[] }>({
     queryKey: ["/api/members"],
   });
 
