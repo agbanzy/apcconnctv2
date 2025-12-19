@@ -57,6 +57,22 @@ Preferred communication style: Simple, everyday language.
 - **Task Approval System**: Workflow for image-based micro-tasks requiring admin approval, with proof image uploads and status tracking.
 - **Multi-Language Translation**: Comprehensive translation infrastructure supporting English, Igbo (ig), Hausa (ha), and Yoruba (yo) via `useLanguage()` hook. Translation keys defined in `client/src/lib/translations.ts`, language selector in app header with localStorage persistence.
 
+### Mobile App (React Native / Expo)
+- **Technology Stack**: React Native with Expo SDK 52, TypeScript, Expo Router v4.
+- **Navigation**: Tab-based navigation with 5 tabs (Dashboard, News, Events, Elections, Profile).
+- **State Management**: TanStack Query for server state, React hooks for local state.
+- **Authentication**: JWT-based auth with expo-secure-store for token persistence.
+- **Icons**: @expo/vector-icons (Ionicons) bundled with Expo.
+- **Features Implemented**:
+  - Dashboard: Time-based greetings, member stats, rank display, news/events previews, quick actions grid.
+  - News: Category filtering, like/share functionality, featured news highlighting.
+  - Events: Full RSVP functionality, event details modal, cancel RSVP, online meeting support.
+  - Elections: Candidate selection, vote confirmation, results display with progress bars.
+  - Profile: Edit profile modal, NIN verification, badges display, user stats.
+  - Registration: Modal-based state/LGA/ward cascading picker with search.
+  - Login: Password visibility toggle, forgot password option.
+- **Mobile Files**: Located in `mobile/` directory with Expo Router file-based routing.
+
 ## External Dependencies
 - **Payment Processing**: Flutterwave for membership dues, point purchases, donations, airtime/data redemption, and bank transfers for cash withdrawals.
 - **Static IP Proxy**: Fixie proxy service for Flutterwave API calls (required for IP whitelisting). Set `FIXIE_URL` environment variable with your Fixie proxy URL. Uses `https-proxy-agent` with Node 18's `dispatcher` option.
