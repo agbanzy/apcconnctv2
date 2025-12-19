@@ -1,0 +1,5 @@
+id,title,description,position,stateId,lgaId,wardId,status,startDate,endDate,totalVotes,createdAt
+f9dd506d-b83c-437e-873d-11d4dab56d55,Kano LGA Chairman Election,Election for party chairman in Kano Municipal LGA,LGA Chairman,a4b78471-cc75-4459-9640-9e787ac7e2b3,,,ongoing,"""2025-10-12T19:08:29.680Z""","""2025-10-22T19:08:29.680Z""",0,"""2025-10-17T19:08:29.698Z"""
+c7ab2974-f1a0-4d0a-beab-e07eb9f740fc,FCT Women Leader Election,Election for FCT Women Leader position,Women Leader,991fb7b0-5eea-467d-a6f9-1e1e2a6475ea,,,upcoming,"""2025-10-27T19:08:29.820Z""","""2025-11-06T19:08:29.820Z""",0,"""2025-10-17T19:08:29.837Z"""
+52e2d8a8-5ce4-4e0a-b497-3fa9ec8b591d,Lagos State Youth Leader Election,Election for APC Youth Leader position in Lagos State,State Youth Leader,630a0133-5e3f-4b64-b33b-833971dad2a3,,,completed,"""2024-11-01T00:00:00.000Z""","""2024-11-15T00:00:00.000Z""",43,"""2025-10-17T19:08:29.555Z"""
+237d0ad2-7723-4797-9fdf-c66ec707f89a,National Organizing Secretary Election,National level election for organizing secretary,National Organizing Secretary,,,,upcoming,"""2025-10-27T19:08:29.955Z""","""2025-11-06T19:08:29.955Z""",1,"""2025-10-17T19:08:29.973Z"""
