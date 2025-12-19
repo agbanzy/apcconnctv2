@@ -51,6 +51,7 @@
       "typedRoutes": true
     },
     "extra": {
+      "apiUrl": "https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev",
       "router": {
         "origin": false
       },

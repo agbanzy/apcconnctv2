@@ -54,7 +54,7 @@ Before you begin, ensure you have the following installed:
    
    Update the `.env` file with your backend API URL:
    ```env
-   API_URL=https://your-replit-url.replit.dev
+   API_URL=https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev
    ```
    
    For local development:
@@ -275,7 +275,7 @@ The app supports the following environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `API_URL` | Backend API base URL | `https://your-replit-url.replit.dev` |
+| `API_URL` | Backend API base URL | `https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev` |
 
 Environment variables are accessed via `expo-constants`:
 
