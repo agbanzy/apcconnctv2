@@ -1417,8 +1417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       res.json({ 
-        success: true, 
-        ...result
+        success: true,
+        data: result
       });
     } catch (error: any) {
       console.error("[POST /api/members/:id/reset-password] Error:", error);
