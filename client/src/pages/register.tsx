@@ -207,7 +207,7 @@ export default function Register() {
                 <SelectContent>
                   {wards.map((ward) => (
                     <SelectItem key={ward.id} value={ward.id}>
-                      {ward.name} (Ward {ward.wardNumber})
+                      {ward.name}{ward.wardNumber ? ` (Ward ${ward.wardNumber})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
