@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb, decimal, doublePrecision, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -598,6 +598,8 @@ export const pollingUnits = pgTable("polling_units", {
   name: text("name").notNull(),
   unitCode: text("unit_code").notNull().unique(),
   wardId: varchar("ward_id").notNull().references(() => wards.id),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
   status: pollingUnitStatusEnum("status").default("active"),
   votes: integer("votes").default(0),
   lastUpdate: timestamp("last_update").defaultNow(),
