@@ -23,6 +23,7 @@ import {
   Award,
   GraduationCap,
   UserPlus,
+  BarChart3,
   Search,
   Bell,
   Coins,
@@ -132,6 +133,11 @@ export function AppSidebar() {
       title: t.electionsAndVoting,
       url: "/elections",
       icon: Vote,
+    },
+    {
+      title: "General Elections",
+      url: "/general-elections",
+      icon: BarChart3,
     },
     {
       title: t.campaigns,

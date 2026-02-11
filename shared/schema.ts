@@ -605,6 +605,72 @@ export const pollingUnits = pgTable("polling_units", {
   lastUpdate: timestamp("last_update").defaultNow(),
 });
 
+// General Elections (National/State elections - separate from party primaries)
+export const generalElectionPositionEnum = pgEnum("general_election_position", [
+  "presidential", "governorship", "senatorial", "house_of_reps", "state_assembly"
+]);
+export const generalElectionStatusEnum = pgEnum("general_election_status", [
+  "upcoming", "ongoing", "completed", "cancelled"
+]);
+
+export const parties = pgTable("parties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  abbreviation: text("abbreviation").notNull().unique(),
+  logoUrl: text("logo_url"),
+  color: text("color").notNull(),
+  chairman: text("chairman"),
+  founded: integer("founded"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const generalElections = pgTable("general_elections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  electionYear: integer("election_year").notNull(),
+  electionDate: timestamp("election_date").notNull(),
+  position: generalElectionPositionEnum("position").notNull(),
+  stateId: varchar("state_id").references(() => states.id),
+  senatorialDistrictId: varchar("senatorial_district_id").references(() => senatorialDistricts.id),
+  constituency: text("constituency"),
+  status: generalElectionStatusEnum("status").default("upcoming"),
+  totalRegisteredVoters: integer("total_registered_voters").default(0),
+  totalAccreditedVoters: integer("total_accredited_voters").default(0),
+  totalVotesCast: integer("total_votes_cast").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const generalElectionCandidates = pgTable("general_election_candidates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  electionId: varchar("election_id").notNull().references(() => generalElections.id),
+  partyId: varchar("party_id").notNull().references(() => parties.id),
+  name: text("name").notNull(),
+  runningMate: text("running_mate"),
+  imageUrl: text("image_url"),
+  totalVotes: integer("total_votes").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const pollingUnitResults = pgTable("polling_unit_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  electionId: varchar("election_id").notNull().references(() => generalElections.id),
+  pollingUnitId: varchar("polling_unit_id").notNull().references(() => pollingUnits.id),
+  candidateId: varchar("candidate_id").notNull().references(() => generalElectionCandidates.id),
+  partyId: varchar("party_id").notNull().references(() => parties.id),
+  votes: integer("votes").notNull().default(0),
+  registeredVoters: integer("registered_voters").default(0),
+  accreditedVoters: integer("accredited_voters").default(0),
+  isVerified: boolean("is_verified").default(false),
+  reportedBy: varchar("reported_by").references(() => members.id),
+  reportedAt: timestamp("reported_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueResult: unique().on(table.electionId, table.pollingUnitId, table.candidateId),
+}));
+
 export const incidents = pgTable("incidents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   pollingUnitId: varchar("polling_unit_id").references(() => pollingUnits.id),
@@ -1176,6 +1242,56 @@ export const pollingUnitsRelations = relations(pollingUnits, ({ one, many }) => 
     references: [wards.id],
   }),
   incidents: many(incidents),
+  results: many(pollingUnitResults),
+}));
+
+export const partiesRelations = relations(parties, ({ many }) => ({
+  candidates: many(generalElectionCandidates),
+  results: many(pollingUnitResults),
+}));
+
+export const generalElectionsRelations = relations(generalElections, ({ one, many }) => ({
+  state: one(states, {
+    fields: [generalElections.stateId],
+    references: [states.id],
+  }),
+  candidates: many(generalElectionCandidates),
+  results: many(pollingUnitResults),
+}));
+
+export const generalElectionCandidatesRelations = relations(generalElectionCandidates, ({ one, many }) => ({
+  election: one(generalElections, {
+    fields: [generalElectionCandidates.electionId],
+    references: [generalElections.id],
+  }),
+  party: one(parties, {
+    fields: [generalElectionCandidates.partyId],
+    references: [parties.id],
+  }),
+  results: many(pollingUnitResults),
+}));
+
+export const pollingUnitResultsRelations = relations(pollingUnitResults, ({ one }) => ({
+  election: one(generalElections, {
+    fields: [pollingUnitResults.electionId],
+    references: [generalElections.id],
+  }),
+  pollingUnit: one(pollingUnits, {
+    fields: [pollingUnitResults.pollingUnitId],
+    references: [pollingUnits.id],
+  }),
+  candidate: one(generalElectionCandidates, {
+    fields: [pollingUnitResults.candidateId],
+    references: [generalElectionCandidates.id],
+  }),
+  party: one(parties, {
+    fields: [pollingUnitResults.partyId],
+    references: [parties.id],
+  }),
+  reporter: one(members, {
+    fields: [pollingUnitResults.reportedBy],
+    references: [members.id],
+  }),
 }));
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
@@ -1475,6 +1591,10 @@ export const insertPointConversionSettingSchema = createInsertSchema(pointConver
 export const insertPointRedemptionSchema = createInsertSchema(pointRedemptions).omit({ id: true, createdAt: true, completedAt: true });
 export const insertFraudDetectionLogSchema = createInsertSchema(fraudDetectionLogs).omit({ id: true, createdAt: true });
 export const insertAccountSuspensionSchema = createInsertSchema(accountSuspensions).omit({ id: true, suspendedAt: true });
+export const insertPartySchema = createInsertSchema(parties).omit({ id: true, createdAt: true });
+export const insertGeneralElectionSchema = createInsertSchema(generalElections).omit({ id: true, createdAt: true, updatedAt: true, totalVotesCast: true, totalRegisteredVoters: true, totalAccreditedVoters: true });
+export const insertGeneralElectionCandidateSchema = createInsertSchema(generalElectionCandidates).omit({ id: true, createdAt: true, totalVotes: true });
+export const insertPollingUnitResultSchema = createInsertSchema(pollingUnitResults).omit({ id: true, reportedAt: true, updatedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1589,3 +1709,11 @@ export type InsertFraudDetectionLog = z.infer<typeof insertFraudDetectionLogSche
 export type FraudDetectionLog = typeof fraudDetectionLogs.$inferSelect;
 export type InsertAccountSuspension = z.infer<typeof insertAccountSuspensionSchema>;
 export type AccountSuspension = typeof accountSuspensions.$inferSelect;
+export type InsertParty = z.infer<typeof insertPartySchema>;
+export type Party = typeof parties.$inferSelect;
+export type InsertGeneralElection = z.infer<typeof insertGeneralElectionSchema>;
+export type GeneralElection = typeof generalElections.$inferSelect;
+export type InsertGeneralElectionCandidate = z.infer<typeof insertGeneralElectionCandidateSchema>;
+export type GeneralElectionCandidate = typeof generalElectionCandidates.$inferSelect;
+export type InsertPollingUnitResult = z.infer<typeof insertPollingUnitResultSchema>;
+export type PollingUnitResult = typeof pollingUnitResults.$inferSelect;

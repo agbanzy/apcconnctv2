@@ -42,6 +42,7 @@ import EventsGallery from "@/pages/events-gallery";
 import LeadershipBoard from "@/pages/leadership-board";
 import Tasks from "@/pages/tasks";
 import InviteEarn from "@/pages/invite-earn";
+import GeneralElections from "@/pages/general-elections";
 import SearchPage from "@/pages/search";
 import NotFound from "@/pages/not-found";
 import { ChatbotWidget } from "@/components/chatbot-widget";
@@ -215,6 +216,7 @@ function AppContent() {
               <Route path="/campaigns" component={() => <ProtectedRoute component={Campaigns} />} />
               <Route path="/leaderboard" component={() => <ProtectedRoute component={Leaderboard} />} />
               <Route path="/micro-tasks" component={() => <ProtectedRoute component={MicroTasks} />} />
+              <Route path="/general-elections" component={() => <ProtectedRoute component={GeneralElections} />} />
               <Route path="/situation-room" component={() => <ProtectedRoute component={SituationRoom} />} />
               <Route path="/news/:id" component={() => <ProtectedRoute component={NewsDetail} />} />
               <Route path="/news" component={() => <ProtectedRoute component={News} />} />

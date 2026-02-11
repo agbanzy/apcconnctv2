@@ -8927,6 +8927,281 @@ Be friendly, informative, and politically neutral when discussing governance. En
   app.use("/api/referrals", referralsRouter);
   app.use("/api/leaderboards", leaderboardsRouter);
 
+  // ==========================================
+  // GENERAL ELECTIONS & LIVE RESULTS
+  // ==========================================
+
+  app.get("/api/parties", async (_req: Request, res: Response) => {
+    try {
+      const allParties = await db.query.parties.findMany({
+        orderBy: asc(schema.parties.name),
+      });
+      res.json({ success: true, data: allParties });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch parties" });
+    }
+  });
+
+  app.post("/api/parties", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const partyData = schema.insertPartySchema.parse(req.body);
+      const [party] = await db.insert(schema.parties).values(partyData).returning();
+      res.json({ success: true, data: party });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to create party" });
+    }
+  });
+
+  app.get("/api/general-elections", async (req: Request, res: Response) => {
+    try {
+      const { status, position, year } = req.query;
+      let conditions: any[] = [];
+      if (status) conditions.push(eq(schema.generalElections.status, status as any));
+      if (position) conditions.push(eq(schema.generalElections.position, position as any));
+      if (year) conditions.push(eq(schema.generalElections.electionYear, parseInt(year as string)));
+
+      const elections = await db.query.generalElections.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        with: {
+          state: true,
+          candidates: {
+            with: { party: true },
+          },
+        },
+        orderBy: desc(schema.generalElections.electionDate),
+      });
+      res.json({ success: true, data: elections });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch general elections" });
+    }
+  });
+
+  app.get("/api/general-elections/:id", async (req: Request, res: Response) => {
+    try {
+      const election = await db.query.generalElections.findFirst({
+        where: eq(schema.generalElections.id, req.params.id),
+        with: {
+          state: true,
+          candidates: {
+            with: { party: true },
+          },
+        },
+      });
+      if (!election) return res.status(404).json({ success: false, error: "Election not found" });
+      res.json({ success: true, data: election });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch election" });
+    }
+  });
+
+  app.post("/api/general-elections", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const electionData = schema.insertGeneralElectionSchema.parse(req.body);
+      const [election] = await db.insert(schema.generalElections).values(electionData).returning();
+      res.json({ success: true, data: election });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to create election" });
+    }
+  });
+
+  app.patch("/api/general-elections/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [updated] = await db.update(schema.generalElections)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(schema.generalElections.id, req.params.id))
+        .returning();
+      io.emit("general-election:updated", updated);
+      res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/general-elections/:id/candidates", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const candidateData = schema.insertGeneralElectionCandidateSchema.parse({
+        ...req.body,
+        electionId: req.params.id,
+      });
+      const [candidate] = await db.insert(schema.generalElectionCandidates).values(candidateData).returning();
+      res.json({ success: true, data: candidate });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to add candidate" });
+    }
+  });
+
+  app.post("/api/general-elections/:id/results", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const resultEntrySchema = z.object({
+        candidateId: z.string().min(1),
+        partyId: z.string().min(1),
+        votes: z.number().int().min(0),
+        registeredVoters: z.number().int().min(0).optional(),
+        accreditedVoters: z.number().int().min(0).optional(),
+      });
+      const bodySchema = z.object({
+        pollingUnitId: z.string().min(1),
+        results: z.array(resultEntrySchema).min(1),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: "Invalid results data", details: parsed.error.issues });
+      }
+      const { pollingUnitId, results } = parsed.data;
+
+      const electionId = req.params.id;
+      const memberId = (req as any).user?.member?.id;
+      const insertedResults = [];
+
+      for (const r of results) {
+        const [result] = await db.insert(schema.pollingUnitResults).values({
+          electionId,
+          pollingUnitId,
+          candidateId: r.candidateId,
+          partyId: r.partyId,
+          votes: r.votes,
+          registeredVoters: r.registeredVoters || 0,
+          accreditedVoters: r.accreditedVoters || 0,
+          reportedBy: memberId,
+        }).onConflictDoUpdate({
+          target: [schema.pollingUnitResults.electionId, schema.pollingUnitResults.pollingUnitId, schema.pollingUnitResults.candidateId],
+          set: {
+            votes: r.votes,
+            registeredVoters: r.registeredVoters || 0,
+            accreditedVoters: r.accreditedVoters || 0,
+            updatedAt: new Date(),
+          },
+        }).returning();
+        insertedResults.push(result);
+      }
+
+      io.emit("general-election:result-updated", {
+        electionId,
+        pollingUnitId,
+        results: insertedResults,
+      });
+
+      res.json({ success: true, data: insertedResults });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to submit results" });
+    }
+  });
+
+  app.get("/api/general-elections/:id/results/summary", async (req: Request, res: Response) => {
+    try {
+      const electionId = req.params.id;
+      const { level, stateId, lgaId } = req.query;
+
+      const candidateTotals = await db.execute(sql`
+        SELECT 
+          gec.id as candidate_id,
+          gec.name as candidate_name,
+          gec.running_mate,
+          gec.image_url,
+          p.id as party_id,
+          p.name as party_name,
+          p.abbreviation as party_abbreviation,
+          p.color as party_color,
+          COALESCE(SUM(pur.votes), 0)::int as total_votes
+        FROM general_election_candidates gec
+        JOIN parties p ON gec.party_id = p.id
+        LEFT JOIN polling_unit_results pur ON pur.candidate_id = gec.id AND pur.election_id = gec.election_id
+        ${stateId ? sql`LEFT JOIN polling_units pu ON pur.polling_unit_id = pu.id
+        LEFT JOIN wards w ON pu.ward_id = w.id
+        LEFT JOIN lgas l ON w.lga_id = l.id` : sql``}
+        WHERE gec.election_id = ${electionId}
+        ${stateId ? sql`AND l.state_id = ${stateId as string}` : sql``}
+        ${lgaId ? sql`AND l.id = ${lgaId as string}` : sql``}
+        GROUP BY gec.id, gec.name, gec.running_mate, gec.image_url, p.id, p.name, p.abbreviation, p.color
+        ORDER BY total_votes DESC
+      `);
+
+      const totalPUsReported = await db.execute(sql`
+        SELECT COUNT(DISTINCT polling_unit_id)::int as count
+        FROM polling_unit_results
+        WHERE election_id = ${electionId}
+      `);
+
+      const totalPUs = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM polling_units
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          candidates: candidateTotals.rows,
+          totalPollingUnitsReported: totalPUsReported.rows[0]?.count || 0,
+          totalPollingUnits: totalPUs.rows[0]?.count || 0,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch results" });
+    }
+  });
+
+  app.get("/api/general-elections/:id/results/by-state", async (req: Request, res: Response) => {
+    try {
+      const electionId = req.params.id;
+
+      const stateResults = await db.execute(sql`
+        SELECT 
+          s.id as state_id,
+          s.name as state_name,
+          p.abbreviation as party,
+          p.color as party_color,
+          COALESCE(SUM(pur.votes), 0)::int as votes,
+          COUNT(DISTINCT pur.polling_unit_id)::int as pus_reported
+        FROM polling_unit_results pur
+        JOIN polling_units pu ON pur.polling_unit_id = pu.id
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        JOIN parties p ON pur.party_id = p.id
+        WHERE pur.election_id = ${electionId}
+        GROUP BY s.id, s.name, p.abbreviation, p.color
+        ORDER BY s.name, votes DESC
+      `);
+
+      res.json({ success: true, data: stateResults.rows });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch state results" });
+    }
+  });
+
+  app.get("/api/general-elections/:id/results/live-feed", async (req: Request, res: Response) => {
+    try {
+      const electionId = req.params.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      const recentResults = await db.execute(sql`
+        SELECT 
+          pur.reported_at,
+          pu.name as polling_unit_name,
+          w.name as ward_name,
+          l.name as lga_name,
+          s.name as state_name,
+          p.abbreviation as party,
+          p.color as party_color,
+          gec.name as candidate_name,
+          pur.votes
+        FROM polling_unit_results pur
+        JOIN polling_units pu ON pur.polling_unit_id = pu.id
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        JOIN parties p ON pur.party_id = p.id
+        JOIN general_election_candidates gec ON pur.candidate_id = gec.id
+        WHERE pur.election_id = ${electionId}
+        ORDER BY pur.reported_at DESC
+        LIMIT ${limit}
+      `);
+
+      res.json({ success: true, data: recentResults.rows });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Apply error handler middleware (must be last)
   app.use(errorHandler);
 
