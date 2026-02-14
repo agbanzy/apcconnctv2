@@ -605,6 +605,27 @@ export const pollingUnits = pgTable("polling_units", {
   lastUpdate: timestamp("last_update").defaultNow(),
 });
 
+export const pollingAgentStatusEnum = pgEnum("polling_agent_status", [
+  "assigned", "active", "checked_in", "completed", "revoked"
+]);
+
+export const pollingAgents = pgTable("polling_agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  pollingUnitId: varchar("polling_unit_id").notNull().references(() => pollingUnits.id),
+  electionId: varchar("election_id").references(() => generalElections.id),
+  agentCode: text("agent_code").notNull().unique(),
+  agentPin: text("agent_pin").notNull(),
+  status: pollingAgentStatusEnum("status").default("assigned"),
+  assignedBy: varchar("assigned_by").notNull().references(() => users.id),
+  checkedInAt: timestamp("checked_in_at"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+}, (table) => ({
+  uniqueAssignment: unique().on(table.memberId, table.pollingUnitId, table.electionId),
+}));
+
 // General Elections (National/State elections - separate from party primaries)
 export const generalElectionPositionEnum = pgEnum("general_election_position", [
   "presidential", "governorship", "senatorial", "house_of_reps", "state_assembly"
@@ -664,9 +685,13 @@ export const pollingUnitResults = pgTable("polling_unit_results", {
   registeredVoters: integer("registered_voters").default(0),
   accreditedVoters: integer("accredited_voters").default(0),
   isVerified: boolean("is_verified").default(false),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  verificationNotes: text("verification_notes"),
   reportedBy: varchar("reported_by").references(() => members.id),
   reportedAt: timestamp("reported_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  deviceInfo: jsonb("device_info").$type<{ userAgent?: string; ip?: string; timestamp?: string }>(),
 }, (table) => ({
   uniqueResult: unique().on(table.electionId, table.pollingUnitId, table.candidateId),
 }));
@@ -1271,6 +1296,25 @@ export const generalElectionCandidatesRelations = relations(generalElectionCandi
   results: many(pollingUnitResults),
 }));
 
+export const pollingAgentsRelations = relations(pollingAgents, ({ one }) => ({
+  member: one(members, {
+    fields: [pollingAgents.memberId],
+    references: [members.id],
+  }),
+  pollingUnit: one(pollingUnits, {
+    fields: [pollingAgents.pollingUnitId],
+    references: [pollingUnits.id],
+  }),
+  election: one(generalElections, {
+    fields: [pollingAgents.electionId],
+    references: [generalElections.id],
+  }),
+  assignedByUser: one(users, {
+    fields: [pollingAgents.assignedBy],
+    references: [users.id],
+  }),
+}));
+
 export const pollingUnitResultsRelations = relations(pollingUnitResults, ({ one }) => ({
   election: one(generalElections, {
     fields: [pollingUnitResults.electionId],
@@ -1595,6 +1639,7 @@ export const insertPartySchema = createInsertSchema(parties).omit({ id: true, cr
 export const insertGeneralElectionSchema = createInsertSchema(generalElections).omit({ id: true, createdAt: true, updatedAt: true, totalVotesCast: true, totalRegisteredVoters: true, totalAccreditedVoters: true });
 export const insertGeneralElectionCandidateSchema = createInsertSchema(generalElectionCandidates).omit({ id: true, createdAt: true, totalVotes: true });
 export const insertPollingUnitResultSchema = createInsertSchema(pollingUnitResults).omit({ id: true, reportedAt: true, updatedAt: true });
+export const insertPollingAgentSchema = createInsertSchema(pollingAgents).omit({ id: true, assignedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1717,3 +1762,5 @@ export type InsertGeneralElectionCandidate = z.infer<typeof insertGeneralElectio
 export type GeneralElectionCandidate = typeof generalElectionCandidates.$inferSelect;
 export type InsertPollingUnitResult = z.infer<typeof insertPollingUnitResultSchema>;
 export type PollingUnitResult = typeof pollingUnitResults.$inferSelect;
+export type InsertPollingAgent = z.infer<typeof insertPollingAgentSchema>;
+export type PollingAgent = typeof pollingAgents.$inferSelect;

@@ -9202,6 +9202,477 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // ============================================================
+  // POLLING AGENTS - Admin assignment & Agent operations
+  // ============================================================
+
+  app.post("/api/admin/polling-agents", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { memberId, pollingUnitId, electionId, notes } = req.body;
+
+      if (!memberId || !pollingUnitId) {
+        return res.status(400).json({ success: false, error: "Member ID and Polling Unit ID are required" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.id, memberId),
+        with: { user: true }
+      });
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const unit = await db.query.pollingUnits.findFirst({
+        where: eq(schema.pollingUnits.id, pollingUnitId)
+      });
+      if (!unit) {
+        return res.status(404).json({ success: false, error: "Polling unit not found" });
+      }
+
+      const agentCode = `AGT-${unit.unitCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const agentPin = Math.floor(1000 + Math.random() * 9000).toString();
+
+      const [agent] = await db.insert(schema.pollingAgents).values({
+        memberId,
+        pollingUnitId,
+        electionId: electionId || null,
+        agentCode,
+        agentPin,
+        assignedBy: req.user!.id,
+        notes: notes || null,
+        status: "assigned",
+      }).returning();
+
+      res.json({ success: true, data: { ...agent, agentCode, agentPin } });
+    } catch (error: any) {
+      if (error.code === "23505") {
+        return res.status(409).json({ success: false, error: "Agent already assigned to this polling unit for this election" });
+      }
+      res.status(500).json({ success: false, error: "Failed to assign polling agent" });
+    }
+  });
+
+  app.get("/api/admin/polling-agents", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { electionId, status } = req.query;
+      let agents;
+
+      const conditions: any[] = [];
+      if (electionId) conditions.push(eq(schema.pollingAgents.electionId, electionId as string));
+      if (status) conditions.push(eq(schema.pollingAgents.status, status as any));
+
+      agents = await db.query.pollingAgents.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        with: {
+          member: { with: { user: true } },
+          pollingUnit: true,
+          election: true,
+        },
+        orderBy: desc(schema.pollingAgents.assignedAt),
+      });
+
+      res.json({ success: true, data: agents });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch polling agents" });
+    }
+  });
+
+  app.patch("/api/admin/polling-agents/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, notes } = req.body;
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (notes !== undefined) updateData.notes = notes;
+      if (status === "revoked") updateData.completedAt = new Date();
+
+      const [agent] = await db.update(schema.pollingAgents)
+        .set(updateData)
+        .where(eq(schema.pollingAgents.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, data: agent });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update polling agent" });
+    }
+  });
+
+  app.post("/api/agent/login", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin } = req.body;
+
+      if (!agentCode || !agentPin) {
+        return res.status(400).json({ success: false, error: "Agent code and PIN are required" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+        with: {
+          member: { with: { user: true } },
+          pollingUnit: true,
+          election: true,
+        }
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid agent code or PIN" });
+      }
+
+      if (agent.status === "revoked") {
+        return res.status(403).json({ success: false, error: "Agent access has been revoked" });
+      }
+
+      if (agent.status === "assigned") {
+        await db.update(schema.pollingAgents)
+          .set({ status: "checked_in", checkedInAt: new Date() })
+          .where(eq(schema.pollingAgents.id, agent.id));
+      }
+
+      const ward = await db.query.wards.findFirst({
+        where: eq(schema.wards.id, agent.pollingUnit.wardId)
+      });
+      const lga = ward ? await db.query.lgas.findFirst({ where: eq(schema.lgas.id, ward.lgaId) }) : null;
+      const state = lga ? await db.query.states.findFirst({ where: eq(schema.states.id, lga.stateId) }) : null;
+
+      const candidates = agent.electionId ? await db.query.generalElectionCandidates.findMany({
+        where: eq(schema.generalElectionCandidates.electionId, agent.electionId),
+        with: { party: true }
+      }) : [];
+
+      res.json({
+        success: true,
+        data: {
+          agent: {
+            id: agent.id,
+            agentCode: agent.agentCode,
+            status: agent.status === "assigned" ? "checked_in" : agent.status,
+            memberId: agent.memberId,
+            memberName: `${agent.member.user.firstName} ${agent.member.user.lastName}`,
+          },
+          pollingUnit: {
+            id: agent.pollingUnit.id,
+            name: agent.pollingUnit.name,
+            unitCode: agent.pollingUnit.unitCode,
+            status: agent.pollingUnit.status,
+          },
+          location: {
+            ward: ward?.name || "",
+            lga: lga?.name || "",
+            state: state?.name || "",
+          },
+          election: agent.election ? {
+            id: agent.election.id,
+            title: agent.election.title,
+            position: agent.election.position,
+            status: agent.election.status,
+          } : null,
+          candidates: candidates.map(c => ({
+            id: c.id,
+            name: c.name,
+            party: c.party.abbreviation,
+            partyColor: c.party.color,
+            partyId: c.partyId,
+          })),
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to authenticate agent" });
+    }
+  });
+
+  app.post("/api/agent/submit-results", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin, electionId, pollingUnitId, results, registeredVoters, accreditedVoters } = req.body;
+
+      if (!agentCode || !agentPin || !electionId || !pollingUnitId || !results || !Array.isArray(results)) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+        with: { member: true }
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid agent credentials" });
+      }
+
+      if (agent.status === "revoked") {
+        return res.status(403).json({ success: false, error: "Agent access has been revoked" });
+      }
+
+      if (agent.pollingUnitId !== pollingUnitId) {
+        return res.status(403).json({ success: false, error: "You are not assigned to this polling unit" });
+      }
+
+      const deviceInfo = {
+        userAgent: req.headers["user-agent"] || "",
+        ip: req.ip || "",
+        timestamp: new Date().toISOString(),
+      };
+
+      const submittedResults = [];
+      for (const result of results) {
+        const { candidateId, partyId, votes } = result;
+        if (!candidateId || !partyId || votes === undefined) continue;
+
+        const existing = await db.query.pollingUnitResults.findFirst({
+          where: and(
+            eq(schema.pollingUnitResults.electionId, electionId),
+            eq(schema.pollingUnitResults.pollingUnitId, pollingUnitId),
+            eq(schema.pollingUnitResults.candidateId, candidateId)
+          )
+        });
+
+        if (existing) {
+          const [updated] = await db.update(schema.pollingUnitResults)
+            .set({
+              votes: parseInt(votes),
+              registeredVoters: registeredVoters ? parseInt(registeredVoters) : existing.registeredVoters,
+              accreditedVoters: accreditedVoters ? parseInt(accreditedVoters) : existing.accreditedVoters,
+              reportedBy: agent.memberId,
+              updatedAt: new Date(),
+              deviceInfo,
+            })
+            .where(eq(schema.pollingUnitResults.id, existing.id))
+            .returning();
+          submittedResults.push(updated);
+        } else {
+          const [inserted] = await db.insert(schema.pollingUnitResults).values({
+            electionId,
+            pollingUnitId,
+            candidateId,
+            partyId,
+            votes: parseInt(votes),
+            registeredVoters: registeredVoters ? parseInt(registeredVoters) : 0,
+            accreditedVoters: accreditedVoters ? parseInt(accreditedVoters) : 0,
+            reportedBy: agent.memberId,
+            deviceInfo,
+          }).returning();
+          submittedResults.push(inserted);
+        }
+      }
+
+      await db.update(schema.pollingAgents)
+        .set({ status: "active" })
+        .where(eq(schema.pollingAgents.id, agent.id));
+
+      io.emit("general-election:result-updated", { electionId, pollingUnitId });
+
+      res.json({
+        success: true,
+        data: {
+          submitted: submittedResults.length,
+          pollingUnitId,
+          electionId,
+          reportedBy: agent.memberId,
+          timestamp: new Date().toISOString(),
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to submit results" });
+    }
+  });
+
+  app.post("/api/admin/polling-unit-results/:id/verify", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { notes } = req.body;
+
+      const [result] = await db.update(schema.pollingUnitResults)
+        .set({
+          isVerified: true,
+          verifiedBy: req.user!.id,
+          verifiedAt: new Date(),
+          verificationNotes: notes || null,
+        })
+        .where(eq(schema.pollingUnitResults.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to verify result" });
+    }
+  });
+
+  // Enhanced Situation Room - Polling Units with hierarchy
+  app.get("/api/situation-room/polling-units-enhanced", async (req: Request, res: Response) => {
+    try {
+      const { stateId, lgaId, wardId, status, search, page = "1", limit = "50" } = req.query;
+      const pageNum = parseInt(page as string);
+      const limitNum = Math.min(parseInt(limit as string), 100);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereClause = sql`1=1`;
+
+      if (stateId) {
+        whereClause = sql`${whereClause} AND s.id = ${stateId}`;
+      }
+      if (lgaId) {
+        whereClause = sql`${whereClause} AND l.id = ${lgaId}`;
+      }
+      if (wardId) {
+        whereClause = sql`${whereClause} AND w.id = ${wardId}`;
+      }
+      if (status && status !== "all") {
+        whereClause = sql`${whereClause} AND pu.status = ${status}`;
+      }
+      if (search) {
+        whereClause = sql`${whereClause} AND (pu.name ILIKE ${'%' + search + '%'} OR pu.unit_code ILIKE ${'%' + search + '%'})`;
+      }
+
+      const unitsResult = await db.execute(sql`
+        SELECT 
+          pu.id,
+          pu.name,
+          pu.unit_code as "unitCode",
+          pu.status,
+          pu.votes,
+          pu.last_update as "lastUpdate",
+          w.id as "wardId",
+          w.name as "wardName",
+          l.id as "lgaId",
+          l.name as "lgaName",
+          s.id as "stateId",
+          s.name as "stateName",
+          (SELECT COUNT(*) FROM polling_unit_results pur WHERE pur.polling_unit_id = pu.id) as "resultsCount",
+          (SELECT COUNT(*) FROM polling_unit_results pur WHERE pur.polling_unit_id = pu.id AND pur.is_verified = true) as "verifiedResults",
+          (SELECT json_agg(json_build_object(
+            'agentId', pa.id,
+            'agentCode', pa.agent_code,
+            'status', pa.status,
+            'memberName', u.first_name || ' ' || u.last_name,
+            'checkedInAt', pa.checked_in_at
+          )) FROM polling_agents pa 
+          JOIN members m2 ON pa.member_id = m2.id
+          JOIN users u ON m2.user_id = u.id
+          WHERE pa.polling_unit_id = pu.id AND pa.status != 'revoked') as agents
+        FROM polling_units pu
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE ${whereClause}
+        ORDER BY s.name, l.name, w.name, pu.name
+        LIMIT ${limitNum} OFFSET ${offset}
+      `);
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*) as total
+        FROM polling_units pu
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE ${whereClause}
+      `);
+
+      const total = Number((countResult.rows as any[])[0]?.total) || 0;
+
+      res.json({
+        success: true,
+        data: unitsResult.rows,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch polling units" });
+    }
+  });
+
+  app.get("/api/situation-room/polling-units/:id/traceability", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const results = await db.execute(sql`
+        SELECT 
+          pur.id,
+          pur.votes,
+          pur.registered_voters as "registeredVoters",
+          pur.accredited_voters as "accreditedVoters",
+          pur.is_verified as "isVerified",
+          pur.verified_at as "verifiedAt",
+          pur.verification_notes as "verificationNotes",
+          pur.reported_at as "reportedAt",
+          pur.updated_at as "updatedAt",
+          pur.device_info as "deviceInfo",
+          p.name as "partyName",
+          p.abbreviation as "partyAbbreviation",
+          p.color as "partyColor",
+          gec.candidate_name as "candidateName",
+          ge.title as "electionTitle",
+          CASE WHEN pur.reported_by IS NOT NULL THEN
+            json_build_object(
+              'memberId', m.id,
+              'memberCode', m.member_id,
+              'name', u.first_name || ' ' || u.last_name,
+              'email', u.email,
+              'phone', u.phone
+            )
+          ELSE NULL END as reporter,
+          CASE WHEN pur.verified_by IS NOT NULL THEN
+            json_build_object(
+              'userId', uv.id,
+              'name', uv.first_name || ' ' || uv.last_name,
+              'email', uv.email
+            )
+          ELSE NULL END as verifier
+        FROM polling_unit_results pur
+        JOIN parties p ON pur.party_id = p.id
+        JOIN general_election_candidates gec ON pur.candidate_id = gec.id
+        JOIN general_elections ge ON pur.election_id = ge.id
+        LEFT JOIN members m ON pur.reported_by = m.id
+        LEFT JOIN users u ON m.user_id = u.id
+        LEFT JOIN users uv ON pur.verified_by = uv.id
+        WHERE pur.polling_unit_id = ${req.params.id}
+        ORDER BY ge.title, p.abbreviation
+      `);
+
+      const agents = await db.execute(sql`
+        SELECT 
+          pa.id,
+          pa.agent_code as "agentCode",
+          pa.status,
+          pa.checked_in_at as "checkedInAt",
+          pa.completed_at as "completedAt",
+          pa.assigned_at as "assignedAt",
+          pa.notes,
+          u.first_name || ' ' || u.last_name as "agentName",
+          u.email as "agentEmail",
+          u.phone as "agentPhone",
+          m.member_id as "memberCode",
+          ge.title as "electionTitle"
+        FROM polling_agents pa
+        JOIN members m ON pa.member_id = m.id
+        JOIN users u ON m.user_id = u.id
+        LEFT JOIN general_elections ge ON pa.election_id = ge.id
+        WHERE pa.polling_unit_id = ${req.params.id}
+        ORDER BY pa.assigned_at DESC
+      `);
+
+      const incidents = await db.query.incidents.findMany({
+        where: eq(schema.incidents.pollingUnitId, req.params.id),
+        with: { reporter: { with: { user: true } }, media: true },
+        orderBy: desc(schema.incidents.createdAt),
+      });
+
+      res.json({
+        success: true,
+        data: {
+          results: results.rows,
+          agents: agents.rows,
+          incidents,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch traceability data" });
+    }
+  });
+
   // Apply error handler middleware (must be last)
   app.use(errorHandler);
 

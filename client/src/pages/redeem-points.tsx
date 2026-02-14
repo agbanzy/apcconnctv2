@@ -370,9 +370,9 @@ export default function RedeemPoints() {
 
   const airtimeNaira = calculateNaira(airtimePoints, "airtime");
   const dataNaira = calculateNaira(dataPoints, "data");
+  const balance = balanceData?.balance || 0;
   const cashNaira = cashPoints ? parseInt(cashPoints) * (cashSettings ? parseFloat(cashSettings.baseRate) : 1.0) : 0;
   const cashProgress = (cashPoints && balance > 0) ? Math.min((parseInt(cashPoints) / balance) * 100, 100) : 0;
-  const balance = balanceData?.balance || 0;
   const conversionRate = airtimeSettings ? parseFloat(airtimeSettings.baseRate) : 1.0;
   const airtimeProgress = (airtimePoints && balance > 0) ? Math.min((parseInt(airtimePoints) / balance) * 100, 100) : 0;
   const dataProgress = (dataPoints && balance > 0) ? Math.min((parseInt(dataPoints) / balance) * 100, 100) : 0;
@@ -433,7 +433,10 @@ export default function RedeemPoints() {
             <div>
               <p className="font-medium mb-1">Redemption Limits</p>
               <p className="text-sm text-muted-foreground">
-                Min: {airtimeSettings?.minPoints || 100} pts • Max: {airtimeSettings?.maxPoints?.toLocaleString() || "10,000"} pts
+                Airtime/Data: {airtimeSettings?.minPoints || 100} - {(airtimeSettings?.maxPoints || 10000).toLocaleString()} pts
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Cash: 500 - 50,000 pts (Min ₦100 transfer)
               </p>
             </div>
           </CardContent>
@@ -442,9 +445,9 @@ export default function RedeemPoints() {
           <CardContent className="pt-6 flex items-start gap-3">
             <Zap className="h-5 w-5 text-yellow-500 mt-0.5" />
             <div>
-              <p className="font-medium mb-1">Instant Processing</p>
+              <p className="font-medium mb-1">Processing Speed</p>
               <p className="text-sm text-muted-foreground">
-                Airtime & data delivered within seconds
+                Airtime & data: Instant | Cash: 1-24 hours
               </p>
             </div>
           </CardContent>
