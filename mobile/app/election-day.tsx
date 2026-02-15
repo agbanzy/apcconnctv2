@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 
 const AGENT_STORAGE_KEY = 'apc_agent_session';
 
@@ -385,7 +386,6 @@ export default function ElectionDayScreen() {
 
   const handlePickResultSheet = async (electionId: string) => {
     try {
-      const ImagePicker = await import('expo-image-picker');
       const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permResult.granted) {
         const cameraResult = await ImagePicker.requestCameraPermissionsAsync();
