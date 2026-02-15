@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ErrorState } from '@/components/ui/ErrorState';
 import { auth } from '@/lib/auth';
 import { storage } from '@/lib/storage';
 import { api } from '@/lib/api';
@@ -86,6 +88,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/profile'],
     queryFn: async () => {
       const response = await api.get('/api/profile');
+      if (!response.success) throw new Error(response.error || 'Failed to load profile');
       return response.data as UserProfile;
     },
   });
@@ -94,6 +97,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/profile/badges'],
     queryFn: async () => {
       const response = await api.get('/api/profile/badges');
+      if (!response.success) throw new Error(response.error || 'Failed to load badges');
       return response.data as Badge[];
     },
   });
@@ -102,6 +106,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/analytics/member-overview'],
     queryFn: async () => {
       const response = await api.get('/api/analytics/member-overview');
+      if (!response.success) throw new Error(response.error || 'Failed to load stats');
       return response.data;
     },
   });
@@ -193,7 +198,8 @@ export default function ProfileScreen() {
   if (!displayData) {
     return (
       <View style={styles.centerContainer}>
-        <Text variant="body">Loading profile...</Text>
+        <ActivityIndicator size="large" color="#00A86B" />
+        <Text variant="body" style={{ marginTop: 12, color: '#6B7280' }}>Loading profile...</Text>
       </View>
     );
   }

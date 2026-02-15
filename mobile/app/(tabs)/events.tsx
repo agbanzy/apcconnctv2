@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity, Alert, Modal, Linking } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ErrorState } from '@/components/ui/ErrorState';
 import { api } from '@/lib/api';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -42,13 +44,14 @@ export default function EventsScreen() {
     { key: 'meeting', label: 'Meetings' },
   ];
 
-  const { data: events, isLoading, refetch } = useQuery({
+  const { data: events, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/events', selectedCategory],
     queryFn: async () => {
       const url = selectedCategory === 'all' 
         ? '/api/events' 
         : `/api/events?category=${selectedCategory}`;
       const response = await api.get(url);
+      if (!response.success) throw new Error(response.error || 'Failed to load events');
       return response.data as Event[];
     },
   });
@@ -164,9 +167,14 @@ export default function EventsScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <Text variant="body">Loading events...</Text>
+        <ActivityIndicator size="large" color="#00A86B" />
+        <Text variant="body" style={{ marginTop: 12, color: '#6B7280' }}>Loading events...</Text>
       </View>
     );
+  }
+
+  if (error) {
+    return <ErrorState message="Could not load events" onRetry={() => refetch()} />;
   }
 
   return (

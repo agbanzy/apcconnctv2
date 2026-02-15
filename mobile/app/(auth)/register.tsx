@@ -57,6 +57,7 @@ export default function RegisterScreen() {
     queryKey: ['/api/states'],
     queryFn: async () => {
       const response = await api.get('/api/states');
+      if (!response.success) throw new Error(response.error || 'Failed to load states');
       return response.data as State[];
     },
   });
@@ -66,6 +67,7 @@ export default function RegisterScreen() {
     queryFn: async () => {
       if (!selectedState?.id) return [];
       const response = await api.get(`/api/lgas?stateId=${selectedState.id}`);
+      if (!response.success) throw new Error(response.error || 'Failed to load LGAs');
       return response.data as LGA[];
     },
     enabled: !!selectedState?.id,
@@ -76,6 +78,7 @@ export default function RegisterScreen() {
     queryFn: async () => {
       if (!selectedLga?.id) return [];
       const response = await api.get(`/api/wards?lgaId=${selectedLga.id}`);
+      if (!response.success) throw new Error(response.error || 'Failed to load wards');
       return response.data as Ward[];
     },
     enabled: !!selectedLga?.id,

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
@@ -57,6 +57,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/analytics/member-overview'],
     queryFn: async () => {
       const response = await api.get('/api/analytics/member-overview');
+      if (!response.success) throw new Error(response.error || 'Failed to load stats');
       return response.data as MemberStats;
     },
   });
@@ -65,6 +66,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/news', 'recent'],
     queryFn: async () => {
       const response = await api.get('/api/news?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load news');
       return response.data as RecentNews[];
     },
   });
@@ -73,6 +75,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/events', 'upcoming'],
     queryFn: async () => {
       const response = await api.get('/api/events?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load events');
       return response.data as UpcomingEvent[];
     },
   });
@@ -81,6 +84,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/micro-tasks', 'active'],
     queryFn: async () => {
       const response = await api.get('/api/micro-tasks?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load tasks');
       return response.data as ActiveTask[];
     },
   });
@@ -158,15 +162,17 @@ export default function DashboardScreen() {
       </View>
 
       <View style={styles.statsGrid}>
-        <Card style={styles.statCard}>
-          <Ionicons name="trophy" size={24} color="#00A86B" />
-          <Text variant="h2" style={styles.statValue}>
-            {stats?.points?.toLocaleString() || 0}
-          </Text>
-          <Text variant="caption" style={styles.statLabel}>
-            Points
-          </Text>
-        </Card>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/rewards')} style={{ flex: 1 }}>
+          <Card style={styles.statCard}>
+            <Ionicons name="trophy" size={24} color="#00A86B" />
+            <Text variant="h2" style={styles.statValue}>
+              {stats?.points?.toLocaleString() || 0}
+            </Text>
+            <Text variant="caption" style={styles.statLabel}>
+              Points
+            </Text>
+          </Card>
+        </TouchableOpacity>
 
         <Card style={styles.statCard}>
           <Ionicons name="ribbon" size={24} color="#8B5CF6" />
@@ -308,11 +314,11 @@ export default function DashboardScreen() {
             <Text variant="caption" style={styles.quickActionLabel}>News</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/profile')}>
-            <View style={[styles.quickActionIcon, { backgroundColor: '#F3E8FF' }]}>
-              <Ionicons name="person-outline" size={28} color="#8B5CF6" />
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/rewards')}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="gift-outline" size={28} color="#F59E0B" />
             </View>
-            <Text variant="caption" style={styles.quickActionLabel}>Profile</Text>
+            <Text variant="caption" style={styles.quickActionLabel}>Rewards</Text>
           </TouchableOpacity>
         </View>
       </View>
