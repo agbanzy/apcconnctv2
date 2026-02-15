@@ -5215,6 +5215,270 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/dashboard", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const totalMembers = await db.select({ count: sql<number>`count(*)` }).from(schema.members);
+      const activeMembers = await db.select({ count: sql<number>`count(*)` }).from(schema.members).where(eq(schema.members.status, "active"));
+      const activeElections = await db.select({ count: sql<number>`count(*)` }).from(schema.elections).where(sql`${schema.elections.status} = 'ongoing'`);
+      const upcomingEvents = await db.select({ count: sql<number>`count(*)` }).from(schema.events).where(gte(schema.events.date, new Date()));
+      const duesCollected = await db.select({ total: sql<number>`COALESCE(SUM(CAST(${schema.membershipDues.amount} AS NUMERIC)), 0)` }).from(schema.membershipDues).where(eq(schema.membershipDues.paymentStatus, "completed"));
+      const totalDonations = await db.select({ total: sql<number>`COALESCE(SUM(CAST(${schema.donations.amount} AS NUMERIC)), 0)` }).from(schema.donations).where(eq(schema.donations.paymentStatus, "completed"));
+
+      const totalRsvps = await db.select({ count: sql<number>`count(*)` }).from(schema.eventRsvps);
+      const totalQuizAttempts = await db.select({ count: sql<number>`count(*)` }).from(schema.quizAttempts);
+      const totalVotes = await db.select({ count: sql<number>`count(*)` }).from(schema.votes);
+      const totalTaskApps = await db.select({ count: sql<number>`count(*)` }).from(schema.taskApplications);
+      const totalEngagement = Number(totalRsvps[0]?.count || 0) + Number(totalQuizAttempts[0]?.count || 0) + Number(totalVotes[0]?.count || 0) + Number(totalTaskApps[0]?.count || 0);
+      const memberCount = Number(totalMembers[0]?.count || 1);
+      const engagementRate = memberCount > 0 ? Math.min(Math.round((totalEngagement / memberCount) * 100), 100) : 0;
+
+      const monthlyMembers = await db.select({
+        month: sql<string>`TO_CHAR(${schema.members.joinDate}, 'Mon')`,
+        monthNum: sql<number>`EXTRACT(MONTH FROM ${schema.members.joinDate})`,
+        count: sql<number>`count(*)`
+      }).from(schema.members)
+        .where(sql`${schema.members.joinDate} >= NOW() - INTERVAL '6 months'`)
+        .groupBy(sql`TO_CHAR(${schema.members.joinDate}, 'Mon')`, sql`EXTRACT(MONTH FROM ${schema.members.joinDate})`)
+        .orderBy(sql`EXTRACT(MONTH FROM ${schema.members.joinDate})`);
+
+      const monthlyDues = await db.select({
+        month: sql<string>`TO_CHAR(${schema.membershipDues.createdAt}, 'Mon')`,
+        monthNum: sql<number>`EXTRACT(MONTH FROM ${schema.membershipDues.createdAt})`,
+        total: sql<number>`COALESCE(SUM(CAST(${schema.membershipDues.amount} AS NUMERIC)), 0)`
+      }).from(schema.membershipDues)
+        .where(and(
+          eq(schema.membershipDues.paymentStatus, "completed"),
+          sql`${schema.membershipDues.createdAt} >= NOW() - INTERVAL '6 months'`
+        ))
+        .groupBy(sql`TO_CHAR(${schema.membershipDues.createdAt}, 'Mon')`, sql`EXTRACT(MONTH FROM ${schema.membershipDues.createdAt})`)
+        .orderBy(sql`EXTRACT(MONTH FROM ${schema.membershipDues.createdAt})`);
+
+      const recentLogs = await db.select({
+        id: schema.auditLogs.id,
+        action: schema.auditLogs.action,
+        createdAt: schema.auditLogs.createdAt,
+        status: schema.auditLogs.status,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+      })
+        .from(schema.auditLogs)
+        .leftJoin(schema.users, eq(schema.auditLogs.userId, schema.users.id))
+        .orderBy(desc(schema.auditLogs.createdAt))
+        .limit(10);
+
+      const recentActivity = recentLogs.map((log) => ({
+        id: log.id,
+        action: log.action.replace(/_/g, ' '),
+        user: log.firstName ? `${log.firstName} ${log.lastName}` : 'System',
+        time: log.createdAt ? new Date(log.createdAt).toISOString() : null,
+        status: log.status,
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          totalMembers: Number(totalMembers[0]?.count) || 0,
+          activeMembers: Number(activeMembers[0]?.count) || 0,
+          activeElections: Number(activeElections[0]?.count) || 0,
+          upcomingEvents: Number(upcomingEvents[0]?.count) || 0,
+          duesCollected: Number(duesCollected[0]?.total) || 0,
+          totalDonations: Number(totalDonations[0]?.total) || 0,
+          engagementRate,
+          monthlyMembers: monthlyMembers.map(m => ({ month: m.month, members: Number(m.count) })),
+          monthlyDues: monthlyDues.map(m => ({ month: m.month, revenue: Number(m.total) })),
+          recentActivity,
+        }
+      });
+    } catch (error) {
+      console.error("Dashboard analytics error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch dashboard analytics" });
+    }
+  });
+
+  app.get("/api/admin/system-config", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const configKeys = ["maintenance_mode", "member_registration", "election_voting", "campaign_creation", "email_notifications"];
+      const settings = await db.select()
+        .from(schema.appSettings)
+        .where(sql`${schema.appSettings.key} = ANY(${configKeys})`);
+      
+      const config: Record<string, boolean> = {};
+      for (const key of configKeys) {
+        const setting = settings.find(s => s.key === key);
+        config[key] = setting ? (setting.value as any) === true : key !== "maintenance_mode";
+      }
+      
+      res.json({ success: true, data: config });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch system config" });
+    }
+  });
+
+  app.put("/api/admin/system-config", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const allowedKeys = ["maintenance_mode", "member_registration", "election_voting", "campaign_creation", "email_notifications"];
+      const updates = req.body;
+      
+      for (const [key, value] of Object.entries(updates)) {
+        if (!allowedKeys.includes(key)) continue;
+        await db.insert(schema.appSettings)
+          .values({ key, value: value as any, updatedBy: req.user!.id, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: schema.appSettings.key,
+            set: { value: value as any, updatedBy: req.user!.id, updatedAt: new Date() }
+          });
+      }
+
+      if (req.user) {
+        await logAudit({
+          userId: req.user.id,
+          action: AuditActions.ADMIN_UPDATE,
+          resourceType: "system_config",
+          resourceId: "system-config",
+          details: updates,
+          status: "success",
+        });
+      }
+      
+      res.json({ success: true, message: "System configuration updated" });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update system config" });
+    }
+  });
+
+  app.get("/api/admin/system-health", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      let dbStatus = "operational";
+      try {
+        await db.execute(sql`SELECT 1`);
+      } catch {
+        dbStatus = "error";
+      }
+
+      const memberCount = await db.select({ count: sql<number>`count(*)` }).from(schema.members);
+      const eventCount = await db.select({ count: sql<number>`count(*)` }).from(schema.events);
+      const electionCount = await db.select({ count: sql<number>`count(*)` }).from(schema.elections);
+
+      res.json({
+        success: true,
+        data: {
+          api: "operational",
+          database: dbStatus,
+          websocket: "operational",
+          totalRecords: {
+            members: Number(memberCount[0]?.count) || 0,
+            events: Number(eventCount[0]?.count) || 0,
+            elections: Number(electionCount[0]?.count) || 0,
+          },
+          uptime: process.uptime(),
+          memoryUsage: Math.round((process.memoryUsage().heapUsed / process.memoryUsage().heapTotal) * 100),
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to check system health" });
+    }
+  });
+
+  app.delete("/api/badges/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [deleted] = await db.delete(schema.badges).where(eq(schema.badges.id, req.params.id)).returning();
+      if (!deleted) return res.status(404).json({ success: false, error: "Badge not found" });
+      res.json({ success: true, data: deleted });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete badge" });
+    }
+  });
+
+  app.post("/api/badges/:id/award", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { memberId } = req.body;
+      if (!memberId) return res.status(400).json({ success: false, error: "Member ID required" });
+      
+      const badge = await db.query.badges.findFirst({ where: eq(schema.badges.id, req.params.id) });
+      if (!badge) return res.status(404).json({ success: false, error: "Badge not found" });
+      
+      const member = await db.query.members.findFirst({ where: eq(schema.members.id, memberId) });
+      if (!member) return res.status(404).json({ success: false, error: "Member not found" });
+
+      const existing = await db.query.userBadges.findFirst({
+        where: and(
+          eq(schema.userBadges.memberId, memberId),
+          eq(schema.userBadges.badgeId, req.params.id)
+        )
+      });
+      if (existing) return res.status(400).json({ success: false, error: "Member already has this badge" });
+
+      const [awarded] = await db.insert(schema.userBadges).values({
+        memberId,
+        badgeId: req.params.id,
+      }).returning();
+
+      res.json({ success: true, data: awarded });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to award badge" });
+    }
+  });
+
+  app.post("/api/notifications/broadcast", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { title, message, recipients } = req.body;
+      if (!title || !message) return res.status(400).json({ success: false, error: "Title and message required" });
+
+      let members;
+      if (recipients === "active") {
+        members = await db.query.members.findMany({ where: eq(schema.members.status, "active") });
+      } else {
+        members = await db.query.members.findMany();
+      }
+
+      const notifications = members.map(m => ({
+        memberId: m.id,
+        title,
+        message,
+        type: "broadcast" as const,
+      }));
+
+      if (notifications.length > 0) {
+        await db.insert(schema.notifications).values(notifications);
+      }
+
+      if (req.user) {
+        await logAudit({
+          userId: req.user.id,
+          action: AuditActions.ADMIN_ACTION,
+          resourceType: "notification",
+          resourceId: "broadcast",
+          details: { title, recipientCount: notifications.length, recipients },
+          status: "success",
+        });
+      }
+
+      res.json({ success: true, message: `Notification sent to ${notifications.length} members` });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to broadcast notification" });
+    }
+  });
+
+  app.get("/api/admin/recent-notifications", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const recentNotifications = await db.select({
+        title: schema.notifications.title,
+        message: schema.notifications.message,
+        type: schema.notifications.type,
+        createdAt: schema.notifications.createdAt,
+        count: sql<number>`count(*)`
+      })
+        .from(schema.notifications)
+        .groupBy(schema.notifications.title, schema.notifications.message, schema.notifications.type, schema.notifications.createdAt)
+        .orderBy(desc(schema.notifications.createdAt))
+        .limit(10);
+
+      res.json({ success: true, data: recentNotifications });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch recent notifications" });
+    }
+  });
+
   app.get("/api/notifications", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({

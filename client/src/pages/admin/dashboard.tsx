@@ -2,18 +2,27 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { formatDistanceToNow } from "date-fns";
 import { 
   Users, 
   Vote, 
   Calendar, 
   DollarSign, 
   TrendingUp,
-  Plus,
   FileText,
   Activity,
-  Download
+  Download,
+  Database,
+  Radio,
+  Server,
+  HardDrive,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { 
   LineChart, 
@@ -34,12 +43,18 @@ const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [exportingMembers, setExportingMembers] = useState(false);
   const [exportingVotes, setExportingVotes] = useState(false);
   const [exportingDonations, setExportingDonations] = useState(false);
 
-  const { data: overview, isLoading } = useQuery({
-    queryKey: ["/api/analytics/overview"],
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ["/api/analytics/dashboard"],
+  });
+
+  const { data: healthData } = useQuery({
+    queryKey: ["/api/admin/system-health"],
+    refetchInterval: 30000,
   });
 
   const handleExport = async (type: 'members' | 'votes' | 'donations') => {
@@ -90,76 +105,46 @@ export default function AdminDashboard() {
     }
   };
 
-  const membersTrendData = [
-    { month: 'Jan', members: 850 },
-    { month: 'Feb', members: 920 },
-    { month: 'Mar', members: 1050 },
-    { month: 'Apr', members: 1180 },
-    { month: 'May', members: 1320 },
-    { month: 'Jun', members: 1450 },
-  ];
-
-  const revenueData = [
-    { month: 'Jan', revenue: 125000 },
-    { month: 'Feb', revenue: 138000 },
-    { month: 'Mar', revenue: 157500 },
-    { month: 'Apr', revenue: 177000 },
-    { month: 'May', revenue: 198000 },
-    { month: 'Jun', revenue: 217500 },
-  ];
+  const stats = (dashboardData as any)?.data || {};
+  const membersTrendData = stats.monthlyMembers || [];
+  const revenueData = stats.monthlyDues || [];
+  const recentActivity = stats.recentActivity || [];
+  const health = (healthData as any)?.data || {};
 
   const engagementData = [
-    { name: 'Active', value: 68 },
-    { name: 'Moderate', value: 22 },
-    { name: 'Low', value: 10 },
+    { name: 'Engagement', value: stats.engagementRate || 0 },
+    { name: 'Remaining', value: 100 - (stats.engagementRate || 0) },
   ];
-
-  const recentActivity = [
-    { id: 1, action: 'New member registered', user: 'John Doe', time: '5 minutes ago' },
-    { id: 2, action: 'Election created', user: 'Admin', time: '15 minutes ago' },
-    { id: 3, action: 'Event published', user: 'Coordinator', time: '1 hour ago' },
-    { id: 4, action: 'Campaign approved', user: 'Admin', time: '2 hours ago' },
-    { id: 5, action: 'Incident reported', user: 'Member', time: '3 hours ago' },
-    { id: 6, action: 'News post published', user: 'Admin', time: '4 hours ago' },
-    { id: 7, action: 'Task completed', user: 'Volunteer', time: '5 hours ago' },
-    { id: 8, action: 'Quiz attempted', user: 'Member', time: '6 hours ago' },
-    { id: 9, action: 'Dues payment received', user: 'Member', time: '7 hours ago' },
-    { id: 10, action: 'RSVP confirmed', user: 'Member', time: '8 hours ago' },
-  ];
-
-  const stats = (overview as any)?.data || {
-    totalMembers: 1450,
-    activeElections: 3,
-    upcomingEvents: 8,
-    duesCollected: 217500,
-    engagementRate: 68
-  };
 
   if (isLoading) {
-    return <div className="p-6">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <BreadcrumbNav items={[{ label: 'Admin', href: '/admin/dashboard' }, { label: 'Dashboard' }]} />
       
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="font-display text-3xl font-bold" data-testid="text-admin-dashboard-title">Admin Dashboard</h1>
           <p className="text-muted-foreground mt-1">Overview of platform metrics and recent activity</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" data-testid="button-create-election">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => navigate('/admin/elections')} data-testid="button-create-election">
             <Vote className="h-4 w-4 mr-2" />
-            Create Election
+            Elections
           </Button>
-          <Button variant="outline" data-testid="button-create-event">
+          <Button variant="outline" onClick={() => navigate('/admin/events')} data-testid="button-create-event">
             <Calendar className="h-4 w-4 mr-2" />
-            Create Event
+            Events
           </Button>
-          <Button data-testid="button-create-news">
+          <Button onClick={() => navigate('/admin/content')} data-testid="button-create-news">
             <FileText className="h-4 w-4 mr-2" />
-            Create News
+            Content
           </Button>
         </div>
       </div>
@@ -171,8 +156,8 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-members">{stats.totalMembers?.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">+12% from last month</p>
+            <div className="text-2xl font-bold" data-testid="text-total-members">{(stats.totalMembers || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">{stats.activeMembers || 0} active</p>
           </CardContent>
         </Card>
 
@@ -182,7 +167,7 @@ export default function AdminDashboard() {
             <Vote className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-active-elections">{stats.activeElections}</div>
+            <div className="text-2xl font-bold" data-testid="text-active-elections">{stats.activeElections || 0}</div>
             <p className="text-xs text-muted-foreground mt-1">Currently ongoing</p>
           </CardContent>
         </Card>
@@ -193,7 +178,7 @@ export default function AdminDashboard() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-upcoming-events">{stats.upcomingEvents}</div>
+            <div className="text-2xl font-bold" data-testid="text-upcoming-events">{stats.upcomingEvents || 0}</div>
             <p className="text-xs text-muted-foreground mt-1">Next 30 days</p>
           </CardContent>
         </Card>
@@ -204,8 +189,10 @@ export default function AdminDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-dues-collected">₦{(stats.duesCollected / 1000).toFixed(0)}K</div>
-            <p className="text-xs text-muted-foreground mt-1">This month</p>
+            <div className="text-2xl font-bold" data-testid="text-dues-collected">
+              {stats.duesCollected > 0 ? `₦${(stats.duesCollected / 1000).toFixed(0)}K` : '₦0'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Total completed</p>
           </CardContent>
         </Card>
 
@@ -215,8 +202,8 @@ export default function AdminDashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-engagement-rate">{stats.engagementRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Average activity</p>
+            <div className="text-2xl font-bold" data-testid="text-engagement-rate">{stats.engagementRate || 0}%</div>
+            <p className="text-xs text-muted-foreground mt-1">Activity ratio</p>
           </CardContent>
         </Card>
       </div>
@@ -224,35 +211,47 @@ export default function AdminDashboard() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card data-testid="card-members-trend">
           <CardHeader>
-            <CardTitle>Members Growth Trend</CardTitle>
+            <CardTitle>Members Growth (Last 6 Months)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={membersTrendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="members" stroke="hsl(var(--primary))" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            {membersTrendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={membersTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="members" stroke="hsl(var(--primary))" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No membership data available yet
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card data-testid="card-revenue-chart">
           <CardHeader>
-            <CardTitle>Dues Collection (₦)</CardTitle>
+            <CardTitle>Dues Collection (Last 6 Months)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-              </BarChart>
-            </ResponsiveContainer>
+            {revenueData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={revenueData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Revenue']} />
+                  <Bar dataKey="revenue" fill="hsl(var(--primary))" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No dues collection data available yet
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -280,7 +279,7 @@ export default function AdminDashboard() {
               >
                 {exportingMembers ? (
                   <>
-                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Exporting...
                   </>
                 ) : (
@@ -308,7 +307,7 @@ export default function AdminDashboard() {
               >
                 {exportingVotes ? (
                   <>
-                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Exporting...
                   </>
                 ) : (
@@ -336,7 +335,7 @@ export default function AdminDashboard() {
               >
                 {exportingDonations ? (
                   <>
-                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Exporting...
                   </>
                 ) : (
@@ -354,7 +353,7 @@ export default function AdminDashboard() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card data-testid="card-engagement-chart" className="md:col-span-1">
           <CardHeader>
-            <CardTitle>Member Engagement</CardTitle>
+            <CardTitle>Engagement Score</CardTitle>
           </CardHeader>
           <CardContent className="flex justify-center">
             <ResponsiveContainer width="100%" height={250}>
@@ -363,17 +362,15 @@ export default function AdminDashboard() {
                   data={engagementData}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}%`}
+                  innerRadius={60}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {engagementData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                  <Cell fill={COLORS[0]} />
+                  <Cell fill="hsl(var(--muted))" />
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value: number) => [`${value}%`, '']} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -385,18 +382,29 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between p-3 border rounded-md hover-elevate" data-testid={`activity-${activity.id}`}>
-                  <div className="flex items-center gap-3">
-                    <Activity className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">{activity.action}</p>
-                      <p className="text-xs text-muted-foreground">{activity.user}</p>
+              {recentActivity.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+              ) : (
+                recentActivity.map((activity: any) => (
+                  <div key={activity.id} className="flex items-center justify-between gap-2 p-3 border rounded-md" data-testid={`activity-${activity.id}`}>
+                    <div className="flex items-center gap-3">
+                      <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{activity.action}</p>
+                        <p className="text-xs text-muted-foreground">{activity.user}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={activity.status === 'success' ? 'default' : 'destructive'} className="text-[10px]">
+                        {activity.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {activity.time ? formatDistanceToNow(new Date(activity.time), { addSuffix: true }) : ''}
+                      </span>
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">{activity.time}</span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -409,34 +417,62 @@ export default function AdminDashboard() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <p className="text-sm font-medium">API Status</p>
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-sm text-muted-foreground">Operational</span>
+                <Server className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">API Status</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${health.api === 'operational' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">{health.api || 'Checking...'}</span>
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium">Database</p>
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-sm text-muted-foreground">Connected</span>
+                <Database className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Database</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${health.database === 'operational' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">{health.database || 'Checking...'}</span>
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium">WebSocket</p>
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-sm text-muted-foreground">Active</span>
+                <Radio className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">WebSocket</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${health.websocket === 'operational' ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                <span className="text-sm text-muted-foreground">{health.websocket || 'Checking...'}</span>
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium">Storage</p>
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-yellow-500" />
-                <span className="text-sm text-muted-foreground">78% Used</span>
+                <HardDrive className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Memory</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${(health.memoryUsage || 0) < 80 ? 'bg-green-500' : (health.memoryUsage || 0) < 90 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">{health.memoryUsage ? `${health.memoryUsage}% Used` : 'Checking...'}</span>
               </div>
             </div>
           </div>
+          {health.totalRecords && (
+            <div className="mt-4 pt-4 border-t grid gap-4 md:grid-cols-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold" data-testid="text-db-members">{health.totalRecords.members}</p>
+                <p className="text-xs text-muted-foreground">Members in DB</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold" data-testid="text-db-events">{health.totalRecords.events}</p>
+                <p className="text-xs text-muted-foreground">Events in DB</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold" data-testid="text-db-elections">{health.totalRecords.elections}</p>
+                <p className="text-xs text-muted-foreground">Elections in DB</p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
