@@ -89,6 +89,15 @@ export default function DashboardScreen() {
     },
   });
 
+  const { data: edmData, refetch: refetchEdm } = useQuery({
+    queryKey: ['/api/election-day-mode'],
+    queryFn: async () => {
+      const response = await api.get('/api/election-day-mode');
+      if (!response.success) return null;
+      return response.data as { active: boolean; message?: string; election?: { title: string; position: string } };
+    },
+  });
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
@@ -96,6 +105,7 @@ export default function DashboardScreen() {
       refetchNews(),
       refetchEvents(),
       refetchTasks(),
+      refetchEdm(),
       loadUserData(),
     ]);
     setRefreshing(false);
@@ -161,8 +171,32 @@ export default function DashboardScreen() {
         )}
       </View>
 
+      {edmData?.active && (
+        <TouchableOpacity
+          style={styles.edmBanner}
+          onPress={() => router.push('/election-day' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.edmBannerContent}>
+            <View style={styles.edmLiveIcon}>
+              <Ionicons name="radio" size={18} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="body" style={styles.edmBannerTitle}>Election Day is LIVE</Text>
+              <Text variant="caption" style={styles.edmBannerSub}>
+                {edmData.election?.title || 'Tap to access agent portal'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+          </View>
+          {edmData.message && (
+            <Text variant="caption" style={styles.edmMessage}>"{edmData.message}"</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
       <View style={styles.statsGrid}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/rewards')} style={{ flex: 1 }}>
+        <TouchableOpacity onPress={() => router.push('/rewards' as any)} style={{ flex: 1 }}>
           <Card style={styles.statCard}>
             <Ionicons name="trophy" size={24} color="#00A86B" />
             <Text variant="h2" style={styles.statValue}>
@@ -559,6 +593,40 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  edmBanner: {
+    backgroundColor: '#1E40AF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  edmBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  edmLiveIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  edmBannerTitle: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  edmBannerSub: {
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 1,
+  },
+  edmMessage: {
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 8,
+    fontStyle: 'italic',
+    paddingLeft: 48,
   },
   quickActionLabel: {
     color: '#374151',

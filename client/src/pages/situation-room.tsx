@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { SituationRoomDashboard } from "@/components/situation-room-dashboard";
 import { IncidentReportForm } from "@/components/incident-report-form";
@@ -11,7 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { queryClient } from "@/lib/queryClient";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   AlertTriangle,
   MapPin,
@@ -24,6 +28,8 @@ import {
   Clock,
   Shield,
   Eye,
+  Radio,
+  Power,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -98,17 +104,60 @@ type TraceabilityData = {
   incidents: any[];
 };
 
+type ElectionDayMode = {
+  active: boolean;
+  electionId: string | null;
+  activatedAt: string | null;
+  message: string | null;
+  election?: {
+    id: string;
+    title: string;
+    position: string;
+    status: string;
+    electionDate: string;
+  } | null;
+};
+
 export default function SituationRoom() {
   const { member, user } = useAuth();
+  const { toast } = useToast();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [edmElectionId, setEdmElectionId] = useState("");
+  const [edmMessage, setEdmMessage] = useState("");
 
   const [puSearch, setPuSearch] = useState("");
   const [puStateFilter, setPuStateFilter] = useState("all");
   const [puStatusFilter, setPuStatusFilter] = useState("all");
   const [puPage, setPuPage] = useState(1);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+
+  const { data: edmData } = useQuery<{ success: boolean; data: ElectionDayMode }>({
+    queryKey: ["/api/election-day-mode"],
+  });
+
+  const { data: electionsData } = useQuery<{ success: boolean; data: Array<{ id: string; title: string; position: string; status: string }> }>({
+    queryKey: ["/api/general-elections"],
+  });
+
+  const edmMutation = useMutation({
+    mutationFn: async (payload: { active: boolean; electionId?: string; message?: string }) => {
+      const res = await apiRequest("PUT", "/api/election-day-mode", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/election-day-mode"] });
+      toast({ title: "Election Day Mode updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const isAdmin = user?.role === "admin";
+  const edm = edmData?.data;
+  const elections = electionsData?.data || [];
 
   const { data: dashboardData, isLoading: isLoadingDashboard } = useQuery<{
     success: boolean;
@@ -301,6 +350,93 @@ export default function SituationRoom() {
           Real-time election monitoring and incident reporting
         </p>
       </div>
+
+      {isAdmin && (
+        <Card className={edm?.active ? "border-green-500 dark:border-green-700" : ""}>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${edm?.active ? "bg-green-100 dark:bg-green-900" : "bg-muted"}`}>
+                <Radio className={`h-5 w-5 ${edm?.active ? "text-green-600" : "text-muted-foreground"}`} />
+              </div>
+              <div>
+                <CardTitle className="text-base" data-testid="text-edm-title">Election Day Mode</CardTitle>
+                <CardDescription>
+                  {edm?.active
+                    ? `Active since ${new Date(edm.activatedAt!).toLocaleString()}`
+                    : "Activate to enable mobile agent reporting"}
+                </CardDescription>
+              </div>
+            </div>
+            {edm?.active ? (
+              <Badge variant="default" className="bg-green-600" data-testid="badge-edm-status">LIVE</Badge>
+            ) : (
+              <Badge variant="outline" data-testid="badge-edm-status">OFF</Badge>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {edm?.active ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 rounded-md">
+                  <div>
+                    <p className="font-medium text-sm" data-testid="text-edm-election">{edm.election?.title}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{edm.election?.position?.replace(/_/g, " ")}</p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => edmMutation.mutate({ active: false })}
+                    disabled={edmMutation.isPending}
+                    data-testid="button-deactivate-edm"
+                  >
+                    <Power className="h-4 w-4 mr-1" />
+                    Deactivate
+                  </Button>
+                </div>
+                {edm.message && (
+                  <p className="text-sm text-muted-foreground italic">"{edm.message}"</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="edm-election">Select Election</Label>
+                  <Select value={edmElectionId} onValueChange={setEdmElectionId}>
+                    <SelectTrigger data-testid="select-edm-election">
+                      <SelectValue placeholder="Choose an election..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {elections.filter(e => e.status === "upcoming" || e.status === "ongoing").map((e) => (
+                        <SelectItem key={e.id} value={e.id}>{e.title} ({e.position.replace(/_/g, " ")})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edm-message">Broadcast Message (optional)</Label>
+                  <Textarea
+                    id="edm-message"
+                    placeholder="Message to display to all agents..."
+                    value={edmMessage}
+                    onChange={(e) => setEdmMessage(e.target.value)}
+                    className="resize-none"
+                    rows={2}
+                    data-testid="input-edm-message"
+                  />
+                </div>
+                <Button
+                  onClick={() => edmMutation.mutate({ active: true, electionId: edmElectionId, message: edmMessage || undefined })}
+                  disabled={!edmElectionId || edmMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="button-activate-edm"
+                >
+                  <Power className="h-4 w-4 mr-1" />
+                  {edmMutation.isPending ? "Activating..." : "Activate Election Day Mode"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {dashboard && (
         <div className="grid gap-4 md:grid-cols-5">

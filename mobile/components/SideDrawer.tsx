@@ -18,6 +18,7 @@ interface DrawerItem {
 }
 
 const DRAWER_ITEMS: DrawerItem[] = [
+  { label: 'Election Day', icon: 'shield-checkmark-outline', route: '/election-day' },
   { label: 'Tasks', icon: 'clipboard-outline', route: '/tasks' },
   { label: 'Rewards', icon: 'gift-outline', route: '/rewards' },
   { label: 'Donations', icon: 'heart-outline', route: '/donations' },

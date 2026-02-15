@@ -744,6 +744,14 @@ export const incidentMedia = pgTable("incident_media", {
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
+// App Settings (key-value store for global config)
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+});
+
 // News Feed
 export const newsPosts = pgTable("news_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

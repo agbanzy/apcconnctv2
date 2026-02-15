@@ -10582,6 +10582,196 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // ===================== ELECTION DAY MODE =====================
+
+  app.get("/api/election-day-mode", async (req: Request, res: Response) => {
+    try {
+      const setting = await db.query.appSettings.findFirst({
+        where: eq(schema.appSettings.key, "election_day_mode"),
+      });
+
+      if (!setting) {
+        return res.json({
+          success: true,
+          data: { active: false, electionId: null, activatedAt: null, message: null },
+        });
+      }
+
+      const value = setting.value as any;
+      
+      let election = null;
+      if (value.active && value.electionId) {
+        election = await db.query.generalElections.findFirst({
+          where: eq(schema.generalElections.id, value.electionId),
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          active: value.active || false,
+          electionId: value.electionId || null,
+          activatedAt: value.activatedAt || null,
+          message: value.message || null,
+          election: election ? {
+            id: election.id,
+            title: election.title,
+            position: election.position,
+            status: election.status,
+            electionDate: election.electionDate,
+          } : null,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: "Failed to fetch election day mode" });
+    }
+  });
+
+  app.put("/api/election-day-mode", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { active, electionId, message } = req.body;
+
+      if (active && !electionId) {
+        return res.status(400).json({ success: false, error: "An election must be selected to activate Election Day Mode" });
+      }
+
+      if (active && electionId) {
+        const election = await db.query.generalElections.findFirst({
+          where: eq(schema.generalElections.id, electionId),
+        });
+        if (!election) {
+          return res.status(404).json({ success: false, error: "Election not found" });
+        }
+      }
+
+      const value = {
+        active: !!active,
+        electionId: active ? electionId : null,
+        message: message || null,
+        activatedAt: active ? new Date().toISOString() : null,
+      };
+
+      await db.insert(schema.appSettings)
+        .values({ key: "election_day_mode", value, updatedAt: new Date(), updatedBy: req.user!.id })
+        .onConflictDoUpdate({
+          target: schema.appSettings.key,
+          set: { value, updatedAt: new Date(), updatedBy: req.user!.id },
+        });
+
+      if (active) {
+        io.emit("election-day-mode:activated", value);
+      } else {
+        io.emit("election-day-mode:deactivated", {});
+      }
+
+      res.json({ success: true, data: value });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to update election day mode" });
+    }
+  });
+
+  app.post("/api/agent/check-in", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin, latitude, longitude } = req.body;
+
+      if (!agentCode || !agentPin) {
+        return res.status(400).json({ success: false, error: "Agent code and PIN required" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      await db.update(schema.pollingAgents)
+        .set({
+          status: "checked_in",
+          checkedInAt: new Date(),
+          notes: latitude && longitude ? `Location: ${latitude},${longitude}` : agent.notes,
+        })
+        .where(eq(schema.pollingAgents.id, agent.id));
+
+      io.emit("agent:checked-in", { agentId: agent.id, pollingUnitId: agent.pollingUnitId });
+
+      res.json({ success: true, data: { message: "Check-in successful" } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: "Check-in failed" });
+    }
+  });
+
+  app.post("/api/agent/report-incident", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin, severity, description, location, latitude, longitude } = req.body;
+
+      if (!agentCode || !agentPin || !severity || !description) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      const [incident] = await db.insert(schema.incidents).values({
+        pollingUnitId: agent.pollingUnitId,
+        reporterId: agent.memberId,
+        severity: severity as any,
+        description,
+        location: location || null,
+        coordinates: latitude && longitude ? { lat: parseFloat(latitude), lng: parseFloat(longitude) } : null,
+        status: "reported",
+      }).returning();
+
+      io.emit("incident:new", incident);
+
+      res.json({ success: true, data: incident });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to report incident" });
+    }
+  });
+
+  app.get("/api/agent/my-incidents", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin } = req.query;
+
+      if (!agentCode || !agentPin) {
+        return res.status(400).json({ success: false, error: "Agent credentials required" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, (agentCode as string).toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin as string)
+        ),
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      const incidents = await db.query.incidents.findMany({
+        where: eq(schema.incidents.reporterId, agent.memberId),
+        orderBy: desc(schema.incidents.createdAt),
+      });
+
+      res.json({ success: true, data: incidents });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: "Failed to fetch incidents" });
+    }
+  });
+
   // Apply error handler middleware (must be last)
   app.use(errorHandler);
 

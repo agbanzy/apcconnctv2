@@ -63,15 +63,21 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: TanStack Query for server state, React hooks for local state.
 - **Authentication**: JWT-based auth with expo-secure-store for token persistence.
 - **Icons**: @expo/vector-icons (Ionicons) bundled with Expo.
+- **Navigation**: Left side drawer for additional features (Donations, Referrals, Dues, Rewards, Election Day).
 - **Features Implemented**:
-  - Dashboard: Time-based greetings, member stats, rank display, news/events previews, quick actions grid.
+  - Dashboard: Time-based greetings, member stats, rank display, news/events previews, quick actions grid, Election Day Mode live banner.
   - News: Category filtering, like/share functionality, featured news highlighting.
   - Events: Full RSVP functionality, event details modal, cancel RSVP, online meeting support.
   - Elections: Candidate selection, vote confirmation, results display with progress bars.
   - Profile: Edit profile modal, NIN verification, badges display, user stats.
   - Registration: Modal-based state/LGA/ward cascading picker with search.
   - Login: Password visibility toggle, forgot password option.
+  - Donations: View and make donations with Flutterwave integration.
+  - Referrals: Referral tracking and sharing.
+  - Dues: Membership dues payment and history.
+  - Election Day: Agent login (agentCode/agentPin), polling unit dashboard, check-in, incident reporting with severity levels, vote count submission. Only visible when admin activates Election Day Mode.
 - **Mobile Files**: Located in `mobile/` directory with Expo Router file-based routing.
+- **Election Day Mode**: Admin-activated mode via Situation Room (`/situation-room`). Uses `app_settings` table for global config. Backend endpoints: `GET/PUT /api/election-day-mode`, agent check-in, incident reporting, vote submission. Real-time Socket.IO updates.
 
 ## External Dependencies
 - **Payment Processing**: Flutterwave for membership dues, point purchases, donations, airtime/data redemption, and bank transfers for cash withdrawals.
