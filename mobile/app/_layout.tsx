@@ -25,6 +25,61 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="tasks"
+              options={{
+                headerShown: true,
+                headerTitle: 'Tasks',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="rewards"
+              options={{
+                headerShown: true,
+                headerTitle: 'Points & Rewards',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="donations"
+              options={{
+                headerShown: true,
+                headerTitle: 'Donations',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="referrals"
+              options={{
+                headerShown: true,
+                headerTitle: 'Referral Program',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="dues"
+              options={{
+                headerShown: true,
+                headerTitle: 'Membership Dues',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
           </Stack>
         </AuthGuard>
       </SafeAreaProvider>

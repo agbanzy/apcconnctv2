@@ -307,25 +307,46 @@ export default function DashboardScreen() {
             <Text variant="caption" style={styles.quickActionLabel}>Events</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/news')}>
-            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="newspaper-outline" size={28} color="#F59E0B" />
-            </View>
-            <Text variant="caption" style={styles.quickActionLabel}>News</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/tasks')}>
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/tasks' as any)}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#F5F3FF' }]}>
               <Ionicons name="clipboard-outline" size={28} color="#8B5CF6" />
             </View>
             <Text variant="caption" style={styles.quickActionLabel}>Tasks</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/rewards')}>
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/rewards' as any)}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="gift-outline" size={28} color="#F59E0B" />
             </View>
             <Text variant="caption" style={styles.quickActionLabel}>Rewards</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/donations' as any)}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEE2E2' }]}>
+              <Ionicons name="heart-outline" size={28} color="#EF4444" />
+            </View>
+            <Text variant="caption" style={styles.quickActionLabel}>Donate</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/referrals' as any)}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#DBEAFE' }]}>
+              <Ionicons name="people-outline" size={28} color="#3B82F6" />
+            </View>
+            <Text variant="caption" style={styles.quickActionLabel}>Referrals</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/dues' as any)}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="card-outline" size={28} color="#00A86B" />
+            </View>
+            <Text variant="caption" style={styles.quickActionLabel}>Dues</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/news')}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="newspaper-outline" size={28} color="#F59E0B" />
+            </View>
+            <Text variant="caption" style={styles.quickActionLabel}>News</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -528,7 +549,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   quickActionCard: {
-    width: (Dimensions.get('window').width - 80) / 5,
+    width: (Dimensions.get('window').width - 80) / 4,
     alignItems: 'center',
     gap: 8,
   },

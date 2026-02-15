@@ -15,7 +15,7 @@ interface PointsBalance {
 
 interface Redemption {
   id: string;
-  productType: 'airtime' | 'data' | 'cash';
+  productType: 'airtime' | 'data';
   pointsDebited: number;
   nairaValue: string;
   status: 'pending' | 'completed' | 'failed';
@@ -26,12 +26,6 @@ interface Redemption {
   errorMessage?: string;
 }
 
-interface Bank {
-  id: string;
-  code: string;
-  name: string;
-}
-
 interface ConversionSetting {
   productType: string;
   baseRate: string;
@@ -40,20 +34,34 @@ interface ConversionSetting {
   isActive: boolean;
 }
 
-type RedeemType = 'airtime' | 'data' | 'cash' | null;
+interface QuoteResult {
+  pointsNeeded: number;
+  nairaValue: number;
+  rate: number;
+  minPoints: number;
+  maxPoints: number;
+}
+
+type RedeemType = 'airtime' | 'data' | null;
+
+const CARRIERS = [
+  { label: 'MTN', value: 'MTN' },
+  { label: 'Airtel', value: 'AIRTEL' },
+  { label: 'Glo', value: 'GLO' },
+  { label: '9mobile', value: '9MOBILE' },
+];
+
+const QUICK_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
 export default function RewardsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeModal, setActiveModal] = useState<RedeemType>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [pointsAmount, setPointsAmount] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
-  const [showBankPicker, setShowBankPicker] = useState(false);
-  const [verifiedAccountName, setVerifiedAccountName] = useState('');
+  const [nairaValue, setNairaValue] = useState('');
+  const [selectedCarrier, setSelectedCarrier] = useState('');
+  const [showCarrierPicker, setShowCarrierPicker] = useState(false);
   const queryClient = useQueryClient();
 
-  // Queries
   const { data: pointsData, isLoading, error, refetch: refetchPoints } = useQuery({
     queryKey: ['/api/members/points'],
     queryFn: async () => {
@@ -64,11 +72,11 @@ export default function RewardsScreen() {
   });
 
   const { data: conversionData } = useQuery({
-    queryKey: ['/api/rewards/conversion/settings'],
+    queryKey: ['/api/rewards/conversion-settings'],
     queryFn: async () => {
-      const response = await api.get('/api/rewards/conversion/settings');
+      const response = await api.get('/api/rewards/conversion-settings');
       if (!response.success) throw new Error(response.error || 'Failed to load settings');
-      return response.data as { settings: ConversionSetting[] };
+      return response.data as ConversionSetting[];
     },
   });
 
@@ -81,29 +89,22 @@ export default function RewardsScreen() {
     },
   });
 
-  const { data: banksData } = useQuery({
-    queryKey: ['/api/rewards/banks'],
-    queryFn: async () => {
-      const response = await api.get('/api/rewards/banks');
-      if (!response.success) throw new Error(response.error || 'Failed to load banks');
-      return response.data as { banks: Bank[] };
+  const quoteMutation = useMutation({
+    mutationFn: async (params: { productType: string; carrier: string; nairaValue: number }) => {
+      const response = await api.post('/api/rewards/quote', params);
+      if (!response.success) throw new Error(response.error || 'Failed to get quote');
+      return response.data as QuoteResult;
     },
-    enabled: activeModal === 'cash',
   });
 
-  // Mutations
-  const airtimeMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post('/api/rewards/redeem/airtime', {
-        phoneNumber: phoneNumber.trim(),
-        pointsAmount: parseInt(pointsAmount),
-        idempotencyKey: `air_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      });
-      if (!response.success) throw new Error(response.error || 'Airtime redemption failed');
+  const redeemMutation = useMutation({
+    mutationFn: async (params: { phoneNumber: string; carrier: string; productType: string; nairaValue: number }) => {
+      const response = await api.post('/api/rewards/redeem', params);
+      if (!response.success) throw new Error(response.error || 'Redemption failed');
       return response.data;
     },
     onSuccess: (data: any) => {
-      Alert.alert('Success', data?.message || 'Airtime sent successfully!');
+      Alert.alert('Success', data?.message || 'Redemption completed successfully!');
       resetForm();
       setActiveModal(null);
       refetchPoints();
@@ -111,78 +112,14 @@ export default function RewardsScreen() {
     },
     onError: (err: Error) => {
       Alert.alert('Error', err.message);
-    },
-  });
-
-  const dataMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post('/api/rewards/redeem/data', {
-        phoneNumber: phoneNumber.trim(),
-        pointsAmount: parseInt(pointsAmount),
-        billerCode: 'BIL135',
-        idempotencyKey: `data_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      });
-      if (!response.success) throw new Error(response.error || 'Data redemption failed');
-      return response.data;
-    },
-    onSuccess: (data: any) => {
-      Alert.alert('Success', data?.message || 'Data bundle sent successfully!');
-      resetForm();
-      setActiveModal(null);
-      refetchPoints();
-      refetchRedemptions();
-    },
-    onError: (err: Error) => {
-      Alert.alert('Error', err.message);
-    },
-  });
-
-  const cashMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post('/api/rewards/redeem/cash', {
-        pointsAmount: parseInt(pointsAmount),
-        accountNumber: accountNumber.trim(),
-        bankCode: selectedBank!.code,
-      });
-      if (!response.success) throw new Error(response.error || 'Cash withdrawal failed');
-      return response.data;
-    },
-    onSuccess: (data: any) => {
-      Alert.alert('Success', data?.message || 'Transfer initiated successfully!');
-      resetForm();
-      setActiveModal(null);
-      refetchPoints();
-      refetchRedemptions();
-    },
-    onError: (err: Error) => {
-      Alert.alert('Error', err.message);
-    },
-  });
-
-  const verifyBankMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post('/api/rewards/verify-bank', {
-        accountNumber: accountNumber.trim(),
-        bankCode: selectedBank!.code,
-      });
-      if (!response.success) throw new Error(response.error || 'Verification failed');
-      return response.data as { account: { account_name: string } };
-    },
-    onSuccess: (data) => {
-      setVerifiedAccountName(data.account.account_name);
-    },
-    onError: (err: Error) => {
-      Alert.alert('Error', err.message);
-      setVerifiedAccountName('');
     },
   });
 
   const resetForm = () => {
     setPhoneNumber('');
-    setPointsAmount('');
-    setAccountNumber('');
-    setSelectedBank(null);
-    setVerifiedAccountName('');
+    setNairaValue('');
+    setSelectedCarrier('');
+    quoteMutation.reset();
   };
 
   const onRefresh = useCallback(async () => {
@@ -201,11 +138,10 @@ export default function RewardsScreen() {
     return points.toLocaleString();
   };
 
-  const getRedemptionIcon = (type: string) => {
+  const getRedemptionIcon = (type: string): string => {
     switch (type) {
       case 'airtime': return 'call-outline';
       case 'data': return 'wifi-outline';
-      case 'cash': return 'cash-outline';
       default: return 'gift-outline';
     }
   };
@@ -221,71 +157,57 @@ export default function RewardsScreen() {
 
   const isValidPhone = (phone: string) => {
     const cleaned = phone.replace(/\s/g, '');
-    return /^(\+234|234|0)\d{10}$/.test(cleaned);
+    return /^0[789][01]\d{8}$/.test(cleaned);
   };
 
-  const handleRedeem = (type: RedeemType) => {
-    if (type === 'airtime') {
-      if (!isValidPhone(phoneNumber)) {
-        Alert.alert('Invalid Phone', 'Please enter a valid Nigerian phone number');
-        return;
-      }
-      if (!pointsAmount || parseInt(pointsAmount) < 100) {
-        Alert.alert('Invalid Amount', 'Minimum redemption is 100 points');
-        return;
-      }
-      Alert.alert(
-        'Confirm Airtime',
-        `Redeem ${formatPoints(parseInt(pointsAmount))} points for airtime to ${phoneNumber}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => airtimeMutation.mutate() },
-        ]
-      );
-    } else if (type === 'data') {
-      if (!isValidPhone(phoneNumber)) {
-        Alert.alert('Invalid Phone', 'Please enter a valid Nigerian phone number');
-        return;
-      }
-      if (!pointsAmount || parseInt(pointsAmount) < 100) {
-        Alert.alert('Invalid Amount', 'Minimum redemption is 100 points');
-        return;
-      }
-      Alert.alert(
-        'Confirm Data',
-        `Redeem ${formatPoints(parseInt(pointsAmount))} points for data to ${phoneNumber}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => dataMutation.mutate() },
-        ]
-      );
-    } else if (type === 'cash') {
-      if (!selectedBank || !accountNumber || accountNumber.length !== 10) {
-        Alert.alert('Missing Info', 'Please select a bank and enter a valid 10-digit account number');
-        return;
-      }
-      if (!verifiedAccountName) {
-        Alert.alert('Verify Account', 'Please verify your bank account first');
-        return;
-      }
-      if (!pointsAmount || parseInt(pointsAmount) < 500) {
-        Alert.alert('Invalid Amount', 'Minimum cash withdrawal is 500 points');
-        return;
-      }
-      Alert.alert(
-        'Confirm Withdrawal',
-        `Withdraw ${formatPoints(parseInt(pointsAmount))} points to ${verifiedAccountName} (${selectedBank.name})?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => cashMutation.mutate() },
-        ]
-      );
+  const handleGetQuote = () => {
+    if (!activeModal || !selectedCarrier || !nairaValue || parseInt(nairaValue) <= 0) return;
+    quoteMutation.mutate({
+      productType: activeModal,
+      carrier: selectedCarrier,
+      nairaValue: parseInt(nairaValue),
+    });
+  };
+
+  const handleRedeem = () => {
+    if (!activeModal) return;
+    if (!isValidPhone(phoneNumber)) {
+      Alert.alert('Invalid Phone', 'Please enter a valid Nigerian phone number (e.g. 08012345678)');
+      return;
     }
+    if (!selectedCarrier) {
+      Alert.alert('Select Carrier', 'Please select your mobile carrier');
+      return;
+    }
+    if (!nairaValue || parseInt(nairaValue) <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid Naira amount');
+      return;
+    }
+
+    const quote = quoteMutation.data;
+    const label = activeModal === 'airtime' ? 'Airtime' : 'Data Bundle';
+
+    Alert.alert(
+      `Confirm ${label} Purchase`,
+      `Redeem ${quote ? formatPoints(quote.pointsNeeded) + ' points' : ''} for N${parseInt(nairaValue).toLocaleString()} ${label.toLowerCase()} to ${phoneNumber}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => redeemMutation.mutate({
+            phoneNumber: phoneNumber.trim(),
+            carrier: selectedCarrier,
+            productType: activeModal,
+            nairaValue: parseInt(nairaValue),
+          }),
+        },
+      ]
+    );
   };
 
   const totalPoints = pointsData?.totalPoints ?? 0;
   const redemptions = redemptionsData?.redemptions ?? [];
-  const isPending = airtimeMutation.isPending || dataMutation.isPending || cashMutation.isPending;
+  const isPending = redeemMutation.isPending;
 
   if (isLoading) {
     return (
@@ -308,14 +230,12 @@ export default function RewardsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00A86B" />
         }
       >
-        {/* Balance Card */}
         <Card style={styles.balanceCard}>
           <Text variant="caption" style={styles.balanceLabel}>Your Points Balance</Text>
           <Text variant="h1" style={styles.balanceAmount}>{formatPoints(totalPoints)}</Text>
           <Text variant="caption" style={styles.balanceSubtext}>points available</Text>
         </Card>
 
-        {/* Redemption Options */}
         <Text variant="h3" style={styles.sectionTitle}>Redeem Points</Text>
         <View style={styles.optionsRow}>
           <TouchableOpacity style={styles.optionCard} onPress={() => { resetForm(); setActiveModal('airtime'); }}>
@@ -331,16 +251,8 @@ export default function RewardsScreen() {
             </View>
             <Text variant="caption" style={styles.optionLabel}>Data</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionCard} onPress={() => { resetForm(); setActiveModal('cash'); }}>
-            <View style={[styles.optionIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="cash-outline" size={28} color="#F59E0B" />
-            </View>
-            <Text variant="caption" style={styles.optionLabel}>Cash</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Transaction History */}
         <Text variant="h3" style={styles.sectionTitle}>Recent Transactions</Text>
         {redemptions.length > 0 ? (
           redemptions.slice(0, 20).map((item) => (
@@ -351,9 +263,11 @@ export default function RewardsScreen() {
                 </View>
                 <View style={styles.txInfo}>
                   <Text variant="body" style={styles.txTitle}>
-                    {item.productType === 'airtime' ? 'Airtime' : item.productType === 'data' ? 'Data Bundle' : 'Cash Withdrawal'}
+                    {item.productType === 'airtime' ? 'Airtime' : 'Data Bundle'}
                   </Text>
-                  <Text variant="caption" style={styles.txDate}>{formatDate(item.createdAt)}</Text>
+                  <Text variant="caption" style={styles.txDate}>
+                    {item.carrier ? `${item.carrier} - ` : ''}{formatDate(item.createdAt)}
+                  </Text>
                 </View>
                 <View style={styles.txAmountCol}>
                   <Text variant="body" style={styles.txPoints}>-{formatPoints(item.pointsDebited)}</Text>
@@ -375,7 +289,6 @@ export default function RewardsScreen() {
         )}
       </ScrollView>
 
-      {/* Airtime / Data Modal */}
       <Modal
         visible={activeModal === 'airtime' || activeModal === 'data'}
         animationType="slide"
@@ -401,24 +314,74 @@ export default function RewardsScreen() {
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"
-              maxLength={14}
+              maxLength={11}
             />
 
-            <Text variant="caption" style={styles.fieldLabel}>Points to Redeem</Text>
+            <Text variant="caption" style={styles.fieldLabel}>Carrier</Text>
+            <TouchableOpacity style={styles.selector} onPress={() => setShowCarrierPicker(true)}>
+              <Text variant="body" style={selectedCarrier ? styles.selectorText : styles.selectorPlaceholder}>
+                {selectedCarrier ? CARRIERS.find(c => c.value === selectedCarrier)?.label : 'Select carrier'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text variant="caption" style={styles.fieldLabel}>Amount (Naira)</Text>
+
+            <View style={styles.quickAmountsRow}>
+              {QUICK_AMOUNTS.map((amt) => (
+                <TouchableOpacity
+                  key={amt}
+                  style={[styles.quickAmountChip, nairaValue === String(amt) && styles.quickAmountChipActive]}
+                  onPress={() => {
+                    setNairaValue(String(amt));
+                    if (selectedCarrier && activeModal) {
+                      quoteMutation.mutate({ productType: activeModal, carrier: selectedCarrier, nairaValue: amt });
+                    }
+                  }}
+                >
+                  <Text variant="caption" style={[styles.quickAmountText, nairaValue === String(amt) && styles.quickAmountTextActive]}>
+                    N{amt.toLocaleString()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <TextInput
               style={styles.input}
-              placeholder="e.g. 500"
+              placeholder="Or enter custom amount"
               placeholderTextColor="#9CA3AF"
-              value={pointsAmount}
-              onChangeText={setPointsAmount}
+              value={nairaValue}
+              onChangeText={(text) => {
+                setNairaValue(text);
+                quoteMutation.reset();
+              }}
               keyboardType="number-pad"
             />
 
-            {pointsAmount && parseInt(pointsAmount) > 0 && (
+            {selectedCarrier && nairaValue && parseInt(nairaValue) > 0 && !quoteMutation.data && (
+              <Button
+                title={quoteMutation.isPending ? 'Calculating...' : 'Get Points Quote'}
+                onPress={handleGetQuote}
+                loading={quoteMutation.isPending}
+                variant="outline"
+                style={{ marginTop: 12 }}
+              />
+            )}
+
+            {quoteMutation.data && (
               <View style={styles.conversionInfo}>
                 <Ionicons name="information-circle" size={16} color="#3B82F6" />
                 <Text variant="caption" style={styles.conversionText}>
-                  {formatPoints(parseInt(pointsAmount))} points = ~N{parseInt(pointsAmount).toLocaleString()}
+                  N{quoteMutation.data.nairaValue.toLocaleString()} = {formatPoints(quoteMutation.data.pointsNeeded)} points
+                </Text>
+              </View>
+            )}
+
+            {quoteMutation.isError && (
+              <View style={[styles.conversionInfo, { backgroundColor: '#FEF2F2' }]}>
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                <Text variant="caption" style={{ color: '#EF4444' }}>
+                  {quoteMutation.error?.message || 'Could not calculate quote'}
                 </Text>
               </View>
             )}
@@ -431,138 +394,41 @@ export default function RewardsScreen() {
 
             <Button
               title={isPending ? 'Processing...' : `Redeem for ${activeModal === 'airtime' ? 'Airtime' : 'Data'}`}
-              onPress={() => handleRedeem(activeModal)}
+              onPress={handleRedeem}
               loading={isPending}
-              disabled={isPending}
+              disabled={isPending || !quoteMutation.data}
               style={styles.redeemButton}
             />
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Cash Withdrawal Modal */}
       <Modal
-        visible={activeModal === 'cash'}
+        visible={showCarrierPicker}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setActiveModal(null)}
-      >
-        <KeyboardAvoidingView style={styles.modalContainer} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalHeader}>
-            <Text variant="h3" style={styles.modalTitle}>Cash Withdrawal</Text>
-            <TouchableOpacity onPress={() => setActiveModal(null)}>
-              <Ionicons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent}>
-            {/* Bank Selection */}
-            <Text variant="caption" style={styles.fieldLabel}>Select Bank</Text>
-            <TouchableOpacity style={styles.selector} onPress={() => setShowBankPicker(true)}>
-              <Text variant="body" style={selectedBank ? styles.selectorText : styles.selectorPlaceholder}>
-                {selectedBank?.name || 'Choose a bank'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#6B7280" />
-            </TouchableOpacity>
-
-            {/* Account Number */}
-            <Text variant="caption" style={styles.fieldLabel}>Account Number</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="10-digit account number"
-              placeholderTextColor="#9CA3AF"
-              value={accountNumber}
-              onChangeText={(text) => {
-                setAccountNumber(text);
-                setVerifiedAccountName('');
-              }}
-              keyboardType="number-pad"
-              maxLength={10}
-            />
-
-            {/* Verify Button */}
-            {selectedBank && accountNumber.length === 10 && !verifiedAccountName && (
-              <Button
-                title={verifyBankMutation.isPending ? 'Verifying...' : 'Verify Account'}
-                onPress={() => verifyBankMutation.mutate()}
-                loading={verifyBankMutation.isPending}
-                variant="outline"
-                style={styles.verifyButton}
-              />
-            )}
-
-            {/* Verified Name */}
-            {verifiedAccountName && (
-              <View style={styles.verifiedBox}>
-                <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-                <Text variant="body" style={styles.verifiedName}>{verifiedAccountName}</Text>
-              </View>
-            )}
-
-            {/* Points Amount */}
-            <Text variant="caption" style={styles.fieldLabel}>Points to Withdraw</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Min 500, Max 50,000"
-              placeholderTextColor="#9CA3AF"
-              value={pointsAmount}
-              onChangeText={setPointsAmount}
-              keyboardType="number-pad"
-            />
-
-            {pointsAmount && parseInt(pointsAmount) > 0 && (
-              <View style={styles.conversionInfo}>
-                <Ionicons name="information-circle" size={16} color="#3B82F6" />
-                <Text variant="caption" style={styles.conversionText}>
-                  {formatPoints(parseInt(pointsAmount))} points = N{parseInt(pointsAmount).toLocaleString()}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.balanceReminder}>
-              <Text variant="caption" style={styles.balanceReminderText}>
-                Available: {formatPoints(totalPoints)} points
-              </Text>
-            </View>
-
-            <Button
-              title={isPending ? 'Processing...' : 'Withdraw to Bank'}
-              onPress={() => handleRedeem('cash')}
-              loading={isPending}
-              disabled={isPending || !verifiedAccountName}
-              style={styles.redeemButton}
-            />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Bank Picker Modal */}
-      <Modal
-        visible={showBankPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowBankPicker(false)}
+        onRequestClose={() => setShowCarrierPicker(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text variant="h3" style={styles.modalTitle}>Select Bank</Text>
-            <TouchableOpacity onPress={() => setShowBankPicker(false)}>
+            <Text variant="h3" style={styles.modalTitle}>Select Carrier</Text>
+            <TouchableOpacity onPress={() => setShowCarrierPicker(false)}>
               <Ionicons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalScroll}>
-            {banksData?.banks?.map((bank) => (
+            {CARRIERS.map((carrier) => (
               <TouchableOpacity
-                key={bank.id || bank.code}
+                key={carrier.value}
                 style={styles.bankItem}
                 onPress={() => {
-                  setSelectedBank(bank);
-                  setVerifiedAccountName('');
-                  setShowBankPicker(false);
+                  setSelectedCarrier(carrier.value);
+                  setShowCarrierPicker(false);
+                  quoteMutation.reset();
                 }}
               >
-                <Text variant="body" style={styles.bankName}>{bank.name}</Text>
-                {selectedBank?.code === bank.code && (
+                <Text variant="body" style={styles.bankName}>{carrier.label}</Text>
+                {selectedCarrier === carrier.value && (
                   <Ionicons name="checkmark" size={20} color="#00A86B" />
                 )}
               </TouchableOpacity>
@@ -587,7 +453,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
-  // Balance Card
   balanceCard: {
     backgroundColor: '#00A86B',
     padding: 24,
@@ -609,12 +474,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 4,
   },
-  // Section
   sectionTitle: {
     marginBottom: 12,
     color: '#111827',
   },
-  // Options
   optionsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -644,7 +507,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
   },
-  // Transaction cards
   txCard: {
     marginBottom: 8,
     padding: 12,
@@ -692,7 +554,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
-  // Modal
   modalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -713,8 +574,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     padding: 16,
+    paddingBottom: 40,
   },
-  // Form fields
   fieldLabel: {
     color: '#374151',
     fontWeight: '600',
@@ -750,6 +611,32 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: 16,
   },
+  quickAmountsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickAmountChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  quickAmountChipActive: {
+    borderColor: '#00A86B',
+    backgroundColor: '#DCFCE7',
+  },
+  quickAmountText: {
+    color: '#374151',
+    fontWeight: '500',
+  },
+  quickAmountTextActive: {
+    color: '#00A86B',
+    fontWeight: '700',
+  },
   conversionInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -769,36 +656,19 @@ const styles = StyleSheet.create({
   balanceReminderText: {
     color: '#6B7280',
   },
-  verifyButton: {
-    marginTop: 12,
-  },
-  verifiedBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    padding: 10,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 8,
-  },
-  verifiedName: {
-    color: '#10B981',
-    fontWeight: '600',
-  },
   redeemButton: {
-    marginTop: 24,
+    marginTop: 20,
   },
-  // Bank picker
   bankItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
   bankName: {
     color: '#111827',
+    fontSize: 16,
   },
 });
