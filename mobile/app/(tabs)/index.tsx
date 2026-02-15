@@ -81,11 +81,11 @@ export default function DashboardScreen() {
   });
 
   const { data: activeTasks, refetch: refetchTasks } = useQuery({
-    queryKey: ['/api/micro-tasks', 'active'],
+    queryKey: ['/api/tasks/micro', 'active'],
     queryFn: async () => {
-      const response = await api.get('/api/micro-tasks?limit=3');
+      const response = await api.get('/api/tasks/micro');
       if (!response.success) throw new Error(response.error || 'Failed to load tasks');
-      return response.data as ActiveTask[];
+      return (response.data as ActiveTask[]).slice(0, 3);
     },
   });
 
@@ -314,6 +314,13 @@ export default function DashboardScreen() {
             <Text variant="caption" style={styles.quickActionLabel}>News</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/tasks')}>
+            <View style={[styles.quickActionIcon, { backgroundColor: '#F5F3FF' }]}>
+              <Ionicons name="clipboard-outline" size={28} color="#8B5CF6" />
+            </View>
+            <Text variant="caption" style={styles.quickActionLabel}>Tasks</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(tabs)/rewards')}>
             <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="gift-outline" size={28} color="#F59E0B" />
@@ -521,7 +528,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   quickActionCard: {
-    width: (Dimensions.get('window').width - 56) / 4,
+    width: (Dimensions.get('window').width - 80) / 5,
     alignItems: 'center',
     gap: 8,
   },

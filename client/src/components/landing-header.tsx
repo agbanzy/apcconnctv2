@@ -14,13 +14,11 @@ export function LandingHeader() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
-            <Link href="/">
-              <a className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid="link-home">
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-sm">APC</span>
-                </div>
-                <span className="text-xl font-bold hidden sm:inline">{t.appName}</span>
-              </a>
+            <Link href="/" className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid="link-home">
+              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-sm">APC</span>
+              </div>
+              <span className="text-xl font-bold hidden sm:inline">{t.appName}</span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">

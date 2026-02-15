@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 type IconName = 'home' | 'home-outline' | 'calendar' | 'calendar-outline' |
                 'checkmark-circle' | 'checkmark-circle-outline' |
                 'newspaper' | 'newspaper-outline' | 'person' | 'person-outline' |
-                'gift' | 'gift-outline';
+                'gift' | 'gift-outline' | 'clipboard' | 'clipboard-outline';
 
 function TabBarIcon({ name, color, size }: { name: IconName; color: string; size: number }) {
   return <Ionicons name={name} size={size} color={color} />;
@@ -75,6 +75,20 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon
               name={focused ? 'calendar' : 'calendar-outline'}
+              color={color}
+              size={22}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          title: 'Tasks',
+          headerTitle: 'Tasks',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? 'clipboard' : 'clipboard-outline'}
               color={color}
               size={22}
             />
