@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@tanstack/react-query": "^5.62.14",
     "expo": "~52.0.0",
     "expo-asset": "~11.0.5",
+    "expo-clipboard": "~7.0.1",
     "expo-constants": "~17.0.0",
     "expo-font": "~13.0.4",
     "expo-linking": "~7.0.0",
