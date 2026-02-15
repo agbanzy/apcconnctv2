@@ -13,7 +13,7 @@ import crypto from "crypto";
 import { db } from "./db";
 import { pool } from "./db";
 import * as schema from "@shared/schema";
-import { eq, and, gte, lte, sql, desc, asc, inArray, or as drizzleOr, isNull as drizzleIsNull } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc, asc, inArray, or as drizzleOr, isNull as drizzleIsNull, ilike } from "drizzle-orm";
 import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
@@ -10108,6 +10108,45 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: recentResults.rows });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============================================================
+  // MEMBER SEARCH - Admin agent assignment
+  // ============================================================
+
+  app.get("/api/admin/members-search", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, limit: limitParam } = req.query;
+      const searchLimit = Math.min(parseInt(limitParam as string) || 20, 50);
+
+      if (!q || (q as string).trim().length < 2) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const searchTerm = `%${(q as string).trim()}%`;
+
+      const results = await db.query.members.findMany({
+        where: drizzleOr(
+          ilike(schema.members.memberId, searchTerm),
+          sql`EXISTS (SELECT 1 FROM users u WHERE u.id = ${schema.members.userId} AND (u.first_name ILIKE ${searchTerm} OR u.last_name ILIKE ${searchTerm} OR u.email ILIKE ${searchTerm}))`
+        ),
+        with: { user: true },
+        limit: searchLimit,
+      });
+
+      const data = results.map(m => ({
+        id: m.id,
+        memberId: m.memberId,
+        firstName: m.user.firstName,
+        lastName: m.user.lastName,
+        email: m.user.email,
+        status: m.status,
+      }));
+
+      res.json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to search members" });
     }
   });
 
