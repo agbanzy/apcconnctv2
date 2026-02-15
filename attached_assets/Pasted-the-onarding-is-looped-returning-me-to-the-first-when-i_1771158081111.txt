@@ -1,0 +1,161 @@
+the onarding is looped, returning me to the first when i click get started, fish and push and commint changes
+The issue is that AuthGuard caches hasSeenOnboarding state on mount but never updates it when onboarding completes, so it keeps redirecting back. I'll fix this with a context so the onboarding screen can trigger a re-check.
+
+Write AuthGuard.tsx
+81 lines
+Now update the onboarding screen to call refreshAuth instead of navigating directly.
+
+Read onboarding.tsx (lines 2-16)
+Edit onboarding.tsx
+Modified
+Edit onboarding.tsx
+Modified
+Edit onboarding.tsx
+Modified
+Now run TypeScript check, then commit and push.
+
+Bash TypeScript check
+IN
+cd /Users/godwinagbane/Downloads/APCConnect/mobile && npx tsc --noEmit 2>&1
+
+OUT
+0
+Zero errors. Now let me commit and push.
+
+Bash Check git status
+IN
+cd /Users/godwinagbane/Downloads/APCConnect && git status
+
+OUT
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   mobile/app/onboarding.tsx
+	modified:   mobile/components/AuthGuard.tsx
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Bash Check diff stats
+IN
+cd /Users/godwinagbane/Downloads/APCConnect && git diff --stat
+
+OUT
+ mobile/app/onboarding.tsx       |  6 +++---
+ mobile/components/AuthGuard.tsx | 28 ++++++++++++++++++++--------
+ 2 files changed, 23 insertions(+), 11 deletions(-)
+Bash Recent commit messages
+IN
+cd /Users/godwinagbane/Downloads/APCConnect && git log --oneline -5
+
+OUT
+8350b66 feat(mobile): implement onboarding and feature education flow
+2d5b5f6 Add Rewards screen, news detail modal with comments, and UI polish
+0078bf4 Fix ExpoFontLoader crash on Android and React Query undefined data errors
+aab7bd6 Fix type errors in server routes and add mobile development notes
+1f6e7a4 Fix mobile app TypeScript errors, add missing dependencies, and debug configuration
+Bash Commit onboarding fix
+IN
+git add mobile/app/onboarding.tsx mobile/components/AuthGuard.tsx && git commit -m "$(cat <<'EOF'
+Fix onboarding loop by adding AuthContext for state refresh
+
+Onboarding was looping back to the first slide because AuthGuard's
+cached hasSeenOnboarding state was never updated after completion.
+Added AuthContext with refreshAuth callback so the onboarding screen
+triggers a re-check, allowing proper navigation to the login screen.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+OUT
+[main e341f88] Fix onboarding loop by adding AuthContext for state refresh
+ 2 files changed, 23 insertions(+), 11 deletions(-)
+Bash Push to GitHub
+IN
+git push origin main 2>&1
+
+OUT
+To https://github.com/agbanzy/apcconnctv2.git
+   8350b66..e341f88  main -> main
+Done. The fix is pushed. The problem was that when you tapped "Get Started," the onboarding screen wrote the flag to SecureStore and tried to navigate, but AuthGuard still had stale state (hasSeenOnboarding = false) and redirected right back to onboarding.
+
+Fix: Added an AuthContext that exposes a refreshAuth callback. The onboarding screen now calls refreshAuth() after saving the flag, which updates AuthGuard's state and triggers the correct redirect to the login screen.
+
+commit the changes by fprce so pther users can pull the lates
+Bash Check current git status
+IN
+git status && git log --oneline -3
+
+OUT
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+e341f88 Fix onboarding loop by adding AuthContext for state refresh
+8350b66 feat(mobile): implement onboarding and feature education flow
+2d5b5f6 Add Rewards screen, news detail modal with comments, and UI polish
+The branch is already up to date with origin — the latest commit (e341f88) was pushed successfully in the previous step. There's nothing new to commit or push. Other users can already pull the latest with:
+
+
+git pull origin main
+i mean all the mobile channges etc, 
+
+with the onbard Iing 
+
+this is what they see 
+
+~/workspace$ git status
+On branch main
+nothing to commit, working tree clean
+~/workspace$ git log --oneline -5
+764a951 (HEAD -> main, gitsafe-backup/main) Update ward data seeding to include all states and LGAs
+fad1cd3 Add script to populate ward and LGA data from PDF documents
+eb041fc Add new task categories and scope options to the engagement platform
+9c91c5b Improve data fetching, query handling, and user experience across the platform
+376263f Expand map to show new engagement data and filter content by location
+~/workspace$
+The Replit workspace has a different commit history — it doesn't have the mobile changes. They need to pull from the GitHub repo. Let me check the local state and push to make sure everything is synced.
+
+Bash Check remotes and full commit history
+IN
+git remote -v && echo "---" && git log --oneline -10
+
+OUT
+gitsafe-backup	git://gitsafe:5418/backup.git (fetch)
+gitsafe-backup	git://gitsafe:5418/backup.git (push)
+origin	https://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@github.com/agbanzy/apcconnctv2.git (fetch)
+origin	https://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@github.com/agbanzy/apcconnctv2.git (push)
+---
+e341f88 Fix onboarding loop by adding AuthContext for state refresh
+8350b66 feat(mobile): implement onboarding and feature education flow
+2d5b5f6 Add Rewards screen, news detail modal with comments, and UI polish
+0078bf4 Fix ExpoFontLoader crash on Android and React Query undefined data errors
+aab7bd6 Fix type errors in server routes and add mobile development notes
+1f6e7a4 Fix mobile app TypeScript errors, add missing dependencies, and debug configuration
+7187894 Saved progress at the end of the loop
+d9bad64 Add agent login and results submission functionality
+a0bb057 Published your App
+b43aec6 Improve ward display on registration form to handle missing ward numbers
+Bash Check what's on origin/main
+IN
+git fetch origin && git log --oneline origin/main -5
+
+OUT
+e341f88 Fix onboarding loop by adding AuthContext for state refresh
+8350b66 feat(mobile): implement onboarding and feature education flow
+2d5b5f6 Add Rewards screen, news detail modal with comments, and UI polish
+0078bf4 Fix ExpoFontLoader crash on Android and React Query undefined data errors
+aab7bd6 Fix type errors in server routes and add mobile development notes
+Your local and GitHub are in sync — all the mobile/onboarding changes are already on GitHub at origin/main.
+
+The Replit workspace is on a different history (its latest is 764a951 - Update ward data seeding). Those Replit commits don't exist in this repo's history, and vice versa.
+
+On the Replit workspace, they need to run:
+
+
+git remote add github https://github.com/agbanzy/apcconnctv2.git
+git fetch github
+git reset --hard github/main
+This will sync the Replit workspace to match GitHub. If the Replit workspace has server-side changes (like the ward data seeding commits) that you want to keep, you'd need to merge instead. Do you want me to pull those Replit commits into this repo first so nothing is lost?
