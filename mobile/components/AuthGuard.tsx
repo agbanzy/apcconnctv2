@@ -48,7 +48,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     if (!hasSeenOnboarding && !inOnboarding) {
       router.replace('/onboarding');
-    } else if (hasSeenOnboarding && !isAuthenticated && !inAuthGroup && !inOnboarding) {
+    } else if (hasSeenOnboarding && !isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && (inAuthGroup || inOnboarding)) {
       router.replace('/(tabs)');
