@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ErrorState } from '@/components/ui/ErrorState';
 import { api } from '@/lib/api';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -37,7 +39,7 @@ export default function ElectionsScreen() {
   const [showVoteModal, setShowVoteModal] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: elections, isLoading, refetch } = useQuery({
+  const { data: elections, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/elections'],
     queryFn: async () => {
       const response = await api.get('/api/elections');
@@ -156,9 +158,14 @@ export default function ElectionsScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <Text variant="body">Loading elections...</Text>
+        <ActivityIndicator size="large" color="#00A86B" />
+        <Text variant="body" style={{ marginTop: 12, color: '#6B7280' }}>Loading elections...</Text>
       </View>
     );
+  }
+
+  if (error) {
+    return <ErrorState message="Could not load elections" onRetry={() => refetch()} />;
   }
 
   return (

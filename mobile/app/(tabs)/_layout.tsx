@@ -2,9 +2,10 @@ import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-type IconName = 'home' | 'home-outline' | 'calendar' | 'calendar-outline' | 
-                'checkmark-circle' | 'checkmark-circle-outline' | 
-                'newspaper' | 'newspaper-outline' | 'person' | 'person-outline';
+type IconName = 'home' | 'home-outline' | 'calendar' | 'calendar-outline' |
+                'checkmark-circle' | 'checkmark-circle-outline' |
+                'newspaper' | 'newspaper-outline' | 'person' | 'person-outline' |
+                'gift' | 'gift-outline';
 
 function TabBarIcon({ name, color, size }: { name: IconName; color: string; size: number }) {
   return <Ionicons name={name} size={size} color={color} />;
@@ -25,7 +26,7 @@ export default function TabLayout() {
           height: Platform.OS === 'ios' ? 88 : 64,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
         },
         headerStyle: {
@@ -41,13 +42,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Dashboard',
+          title: 'Home',
           headerTitle: 'APC Connect',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon 
-              name={focused ? 'home' : 'home-outline'} 
-              color={color} 
-              size={24} 
+            <TabBarIcon
+              name={focused ? 'home' : 'home-outline'}
+              color={color}
+              size={22}
             />
           ),
         }}
@@ -58,10 +59,10 @@ export default function TabLayout() {
           title: 'News',
           headerTitle: 'Party News',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon 
-              name={focused ? 'newspaper' : 'newspaper-outline'} 
-              color={color} 
-              size={24} 
+            <TabBarIcon
+              name={focused ? 'newspaper' : 'newspaper-outline'}
+              color={color}
+              size={22}
             />
           ),
         }}
@@ -72,10 +73,10 @@ export default function TabLayout() {
           title: 'Events',
           headerTitle: 'Events',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon 
-              name={focused ? 'calendar' : 'calendar-outline'} 
-              color={color} 
-              size={24} 
+            <TabBarIcon
+              name={focused ? 'calendar' : 'calendar-outline'}
+              color={color}
+              size={22}
             />
           ),
         }}
@@ -86,10 +87,24 @@ export default function TabLayout() {
           title: 'Elections',
           headerTitle: 'Elections',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon 
-              name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} 
-              color={color} 
-              size={24} 
+            <TabBarIcon
+              name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              color={color}
+              size={22}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="rewards"
+        options={{
+          title: 'Rewards',
+          headerTitle: 'Points & Rewards',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? 'gift' : 'gift-outline'}
+              color={color}
+              size={22}
             />
           ),
         }}
@@ -100,10 +115,10 @@ export default function TabLayout() {
           title: 'Profile',
           headerTitle: 'My Profile',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon 
-              name={focused ? 'person' : 'person-outline'} 
-              color={color} 
-              size={24} 
+            <TabBarIcon
+              name={focused ? 'person' : 'person-outline'}
+              color={color}
+              size={22}
             />
           ),
         }}
