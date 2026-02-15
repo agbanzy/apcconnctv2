@@ -182,6 +182,7 @@ export default function SituationRoom() {
 
   const [agentSearch, setAgentSearch] = useState("");
   const [agentStatusFilter, setAgentStatusFilter] = useState("all");
+  const [agentElectionFilter, setAgentElectionFilter] = useState("all");
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [selectedMember, setSelectedMember] = useState<MemberSearchResult | null>(null);
@@ -308,10 +309,11 @@ export default function SituationRoom() {
     success: boolean;
     data: PollingAgent[];
   }>({
-    queryKey: ["/api/admin/polling-agents", agentStatusFilter],
+    queryKey: ["/api/admin/polling-agents", agentStatusFilter, agentElectionFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (agentStatusFilter !== "all") params.set("status", agentStatusFilter);
+      if (agentElectionFilter !== "all") params.set("electionId", agentElectionFilter);
       const res = await fetch(`/api/admin/polling-agents?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch agents");
       return res.json();
@@ -1250,6 +1252,17 @@ export default function SituationRoom() {
                     data-testid="input-agent-search"
                   />
                 </div>
+                <Select value={agentElectionFilter} onValueChange={setAgentElectionFilter}>
+                  <SelectTrigger className="w-[180px]" data-testid="select-agent-election">
+                    <SelectValue placeholder="All Elections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Elections</SelectItem>
+                    {elections.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={agentStatusFilter} onValueChange={setAgentStatusFilter}>
                   <SelectTrigger className="w-[160px]" data-testid="select-agent-status">
                     <SelectValue placeholder="All Status" />
@@ -1304,15 +1317,13 @@ export default function SituationRoom() {
                               <p>
                                 <span className="font-medium">Code:</span>{" "}
                                 <span className="font-mono">{agent.agentCode}</span>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-5 w-5 ml-1 inline-flex"
+                                <span
+                                  className="inline-flex items-center ml-1 cursor-pointer hover-elevate active-elevate-2 rounded-md p-0.5"
                                   onClick={() => copyToClipboard(agent.agentCode)}
                                   data-testid={`button-copy-agent-code-${agent.id}`}
                                 >
                                   <Copy className="w-3 h-3" />
-                                </Button>
+                                </span>
                               </p>
                               <p>
                                 <span className="font-medium">Unit:</span> {agent.pollingUnit.name} ({agent.pollingUnit.unitCode})
