@@ -91,6 +91,17 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="manage-agents"
+              options={{
+                headerShown: true,
+                headerTitle: 'Manage Agents',
+                headerStyle: { backgroundColor: '#1E40AF' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
           </Stack>
         </AuthGuard>
       </SafeAreaProvider>

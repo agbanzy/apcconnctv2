@@ -15,10 +15,12 @@ interface DrawerItem {
   label: string;
   icon: string;
   route: string;
+  adminOnly?: boolean;
 }
 
 const DRAWER_ITEMS: DrawerItem[] = [
   { label: 'Election Day', icon: 'shield-checkmark-outline', route: '/election-day' },
+  { label: 'Manage Agents', icon: 'people-circle-outline', route: '/manage-agents', adminOnly: true },
   { label: 'Tasks', icon: 'clipboard-outline', route: '/tasks' },
   { label: 'Rewards', icon: 'gift-outline', route: '/rewards' },
   { label: 'Donations', icon: 'heart-outline', route: '/donations' },
@@ -113,7 +115,7 @@ export function SideDrawer({ visible, onClose }: SideDrawerProps) {
 
         <ScrollView style={styles.drawerContent}>
           <Text variant="caption" style={styles.sectionLabel}>FEATURES</Text>
-          {DRAWER_ITEMS.map((item) => (
+          {DRAWER_ITEMS.filter(item => !item.adminOnly || (userData?.user?.role === 'admin' || userData?.user?.role === 'coordinator')).map((item) => (
             <TouchableOpacity
               key={item.route}
               style={styles.drawerItem}
