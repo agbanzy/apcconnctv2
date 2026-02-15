@@ -26,6 +26,12 @@ const DRAWER_ITEMS: DrawerItem[] = [
   { label: 'Donations', icon: 'heart-outline', route: '/donations' },
   { label: 'Referrals', icon: 'people-outline', route: '/referrals' },
   { label: 'Dues', icon: 'card-outline', route: '/dues' },
+  { label: 'Leaderboard', icon: 'trophy-outline', route: '/leaderboard' },
+  { label: 'Campaigns', icon: 'megaphone-outline', route: '/campaigns' },
+  { label: 'Knowledge Base', icon: 'book-outline', route: '/knowledge-base' },
+  { label: 'Quizzes', icon: 'school-outline', route: '/quizzes' },
+  { label: 'Ideas', icon: 'bulb-outline', route: '/ideas' },
+  { label: 'Notifications', icon: 'notifications-outline', route: '/notification-settings' },
 ];
 
 interface SideDrawerProps {

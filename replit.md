@@ -63,7 +63,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: TanStack Query for server state, React hooks for local state.
 - **Authentication**: JWT-based auth with expo-secure-store for token persistence.
 - **Icons**: @expo/vector-icons (Ionicons) bundled with Expo.
-- **Navigation**: Left side drawer for additional features (Donations, Referrals, Dues, Rewards, Election Day).
+- **Navigation**: Left side drawer for additional features (Donations, Referrals, Dues, Rewards, Election Day, Leaderboard, Campaigns, Knowledge Base, Quizzes, Ideas, Notification Settings).
 - **Features Implemented**:
   - Dashboard: Time-based greetings, member stats, rank display, news/events previews, quick actions grid, Election Day Mode live banner.
   - News: Category filtering, like/share functionality, featured news highlighting.
@@ -76,6 +76,12 @@ Preferred communication style: Simple, everyday language.
   - Referrals: Referral tracking and sharing.
   - Dues: Membership dues payment and history.
   - Election Day: Agent login (agentCode/agentPin), polling unit dashboard, check-in, incident reporting with severity levels, vote count submission. Only visible when admin activates Election Day Mode.
+  - Leaderboard: Global rankings with time period filters (all/monthly/weekly), state filter with picker modal, top-3 podium display, highlights current user.
+  - Campaigns: Campaign list with category filters, voting, commenting, detail modal, create campaign modal.
+  - Knowledge Base: Articles and FAQs tabs, category filters, article detail modal, expandable FAQs.
+  - Quizzes: Political literacy quiz list with difficulty badges, full quiz attempt flow (progress bar, answer selection, submit, result modal with score/points).
+  - Ideas: Ideas board with upvote column, category filters, detail modal with comments, create idea modal.
+  - Notification Settings: Channel toggles (push/email/SMS), category toggles (elections/events/news/dues/tasks/campaigns), save preferences.
 - **Mobile Files**: Located in `mobile/` directory with Expo Router file-based routing.
 - **Election Day Mode**: Admin-activated mode via Situation Room (`/situation-room`). Uses `app_settings` table for global config. Backend endpoints: `GET/PUT /api/election-day-mode`, agent check-in, incident reporting, vote submission. Real-time Socket.IO updates.
 
