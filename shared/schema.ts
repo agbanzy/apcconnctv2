@@ -656,7 +656,7 @@ export const pollingAgents = pgTable("polling_agents", {
 
 // General Elections (National/State elections - separate from party primaries)
 export const generalElectionPositionEnum = pgEnum("general_election_position", [
-  "presidential", "governorship", "senatorial", "house_of_reps", "state_assembly"
+  "presidential", "governorship", "senatorial", "house_of_reps", "state_assembly", "lga_chairman", "councillorship"
 ]);
 export const generalElectionStatusEnum = pgEnum("general_election_status", [
   "upcoming", "ongoing", "completed", "cancelled"
@@ -741,6 +741,23 @@ export const incidentMedia = pgTable("incident_media", {
   incidentId: varchar("incident_id").notNull().references(() => incidents.id),
   mediaUrl: text("media_url").notNull(),
   mediaType: text("media_type").notNull(), // image, video
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+// Result Sheet Uploads (photos of official result sheets from polling units)
+export const resultSheets = pgTable("result_sheets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollingUnitId: varchar("polling_unit_id").notNull().references(() => pollingUnits.id),
+  electionId: varchar("election_id").notNull().references(() => generalElections.id),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => members.id),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  mimeType: text("mime_type").default("image/jpeg"),
+  fileSize: integer("file_size"),
+  isVerified: boolean("is_verified").default(false),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  verificationNotes: text("verification_notes"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
@@ -1471,6 +1488,21 @@ export const incidentMediaRelations = relations(incidentMedia, ({ one }) => ({
   }),
 }));
 
+export const resultSheetsRelations = relations(resultSheets, ({ one }) => ({
+  pollingUnit: one(pollingUnits, {
+    fields: [resultSheets.pollingUnitId],
+    references: [pollingUnits.id],
+  }),
+  election: one(generalElections, {
+    fields: [resultSheets.electionId],
+    references: [generalElections.id],
+  }),
+  uploader: one(members, {
+    fields: [resultSheets.uploadedBy],
+    references: [members.id],
+  }),
+}));
+
 export const postEngagementRelations = relations(postEngagement, ({ one }) => ({
   post: one(newsPosts, {
     fields: [postEngagement.postId],
@@ -1754,6 +1786,7 @@ export const insertGeneralElectionSchema = createInsertSchema(generalElections).
 export const insertGeneralElectionCandidateSchema = createInsertSchema(generalElectionCandidates).omit({ id: true, createdAt: true, totalVotes: true });
 export const insertPollingUnitResultSchema = createInsertSchema(pollingUnitResults).omit({ id: true, reportedAt: true, updatedAt: true });
 export const insertPollingAgentSchema = createInsertSchema(pollingAgents).omit({ id: true, assignedAt: true });
+export const insertResultSheetSchema = createInsertSchema(resultSheets).omit({ id: true, uploadedAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1878,3 +1911,5 @@ export type InsertPollingUnitResult = z.infer<typeof insertPollingUnitResultSche
 export type PollingUnitResult = typeof pollingUnitResults.$inferSelect;
 export type InsertPollingAgent = z.infer<typeof insertPollingAgentSchema>;
 export type PollingAgent = typeof pollingAgents.$inferSelect;
+export type InsertResultSheet = z.infer<typeof insertResultSheetSchema>;
+export type ResultSheet = typeof resultSheets.$inferSelect;

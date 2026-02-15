@@ -72,6 +72,8 @@ const POSITION_LABELS: Record<string, string> = {
   senatorial: "Senatorial",
   house_of_reps: "House of Representatives",
   state_assembly: "State House of Assembly",
+  lga_chairman: "LGA Chairman",
+  councillorship: "Councillorship",
 };
 
 const POSITION_ICONS: Record<string, typeof Building2> = {
@@ -80,6 +82,8 @@ const POSITION_ICONS: Record<string, typeof Building2> = {
   senatorial: Users,
   house_of_reps: Users,
   state_assembly: Building2,
+  lga_chairman: MapPin,
+  councillorship: Users,
 };
 
 export default function GeneralElections() {
@@ -189,6 +193,8 @@ export default function GeneralElections() {
               <SelectItem value="senatorial">Senatorial</SelectItem>
               <SelectItem value="house_of_reps">House of Reps</SelectItem>
               <SelectItem value="state_assembly">State Assembly</SelectItem>
+              <SelectItem value="lga_chairman">LGA Chairman</SelectItem>
+              <SelectItem value="councillorship">Councillorship</SelectItem>
             </SelectContent>
           </Select>
           {currentElection?.status === "ongoing" && (

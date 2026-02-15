@@ -10609,10 +10609,68 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const lga = ward ? await db.query.lgas.findFirst({ where: eq(schema.lgas.id, ward.lgaId) }) : null;
       const state = lga ? await db.query.states.findFirst({ where: eq(schema.states.id, lga.stateId) }) : null;
 
-      const candidates = agent.electionId ? await db.query.generalElectionCandidates.findMany({
-        where: eq(schema.generalElectionCandidates.electionId, agent.electionId),
-        with: { party: true }
-      }) : [];
+      const allActiveElections = await db.query.generalElections.findMany({
+        where: drizzleOr(
+          eq(schema.generalElections.status, "ongoing"),
+          eq(schema.generalElections.status, "upcoming")
+        ),
+        orderBy: asc(schema.generalElections.position),
+      });
+
+      const electionsWithCandidates = await Promise.all(
+        allActiveElections.map(async (election) => {
+          const candidates = await db.query.generalElectionCandidates.findMany({
+            where: eq(schema.generalElectionCandidates.electionId, election.id),
+            with: { party: true }
+          });
+
+          const existingResults = await db.query.pollingUnitResults.findMany({
+            where: and(
+              eq(schema.pollingUnitResults.electionId, election.id),
+              eq(schema.pollingUnitResults.pollingUnitId, agent.pollingUnitId)
+            ),
+          });
+
+          const resultSheets = await db.query.resultSheets.findMany({
+            where: and(
+              eq(schema.resultSheets.electionId, election.id),
+              eq(schema.resultSheets.pollingUnitId, agent.pollingUnitId)
+            ),
+          });
+
+          return {
+            id: election.id,
+            title: election.title,
+            position: election.position,
+            status: election.status,
+            electionDate: election.electionDate,
+            candidates: candidates.map(c => ({
+              id: c.id,
+              name: c.name,
+              party: c.party.abbreviation,
+              partyColor: c.party.color,
+              partyId: c.partyId,
+              partyName: c.party.name,
+            })),
+            submittedResults: existingResults.map(r => ({
+              candidateId: r.candidateId,
+              partyId: r.partyId,
+              votes: r.votes,
+              isVerified: r.isVerified,
+            })),
+            registeredVoters: existingResults[0]?.registeredVoters || 0,
+            accreditedVoters: existingResults[0]?.accreditedVoters || 0,
+            hasResults: existingResults.length > 0,
+            resultSheets: resultSheets.map(rs => ({
+              id: rs.id,
+              fileUrl: rs.fileUrl,
+              fileName: rs.fileName,
+              isVerified: rs.isVerified,
+              uploadedAt: rs.uploadedAt,
+            })),
+          };
+        })
+      );
 
       res.json({
         success: true,
@@ -10635,22 +10693,19 @@ Be friendly, informative, and politically neutral when discussing governance. En
             lga: lga?.name || "",
             state: state?.name || "",
           },
+          elections: electionsWithCandidates,
           election: agent.election ? {
             id: agent.election.id,
             title: agent.election.title,
             position: agent.election.position,
             status: agent.election.status,
           } : null,
-          candidates: candidates.map(c => ({
-            id: c.id,
-            name: c.name,
-            party: c.party.abbreviation,
-            partyColor: c.party.color,
-            partyId: c.partyId,
-          })),
+          candidates: agent.electionId ? electionsWithCandidates
+            .find(e => e.id === agent.electionId)?.candidates || [] : [],
         }
       });
     } catch (error) {
+      console.error("Agent login error:", error);
       res.status(500).json({ success: false, error: "Failed to authenticate agent" });
     }
   });
@@ -10749,6 +10804,234 @@ Be friendly, informative, and politically neutral when discussing governance. En
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to submit results" });
+    }
+  });
+
+  app.post("/api/agent/submit-results-batch", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin, pollingUnitId, submissions } = req.body;
+
+      if (!agentCode || !agentPin || !pollingUnitId || !submissions || !Array.isArray(submissions)) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+        with: { member: true }
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid agent credentials" });
+      }
+      if (agent.status === "revoked") {
+        return res.status(403).json({ success: false, error: "Agent access has been revoked" });
+      }
+      if (agent.pollingUnitId !== pollingUnitId) {
+        return res.status(403).json({ success: false, error: "You are not assigned to this polling unit" });
+      }
+
+      const deviceInfo = {
+        userAgent: req.headers["user-agent"] || "",
+        ip: req.ip || "",
+        timestamp: new Date().toISOString(),
+      };
+
+      const batchSummary: Array<{ electionId: string; submitted: number }> = [];
+
+      for (const submission of submissions) {
+        const { electionId, results, registeredVoters, accreditedVoters } = submission;
+        if (!electionId || !results || !Array.isArray(results)) continue;
+
+        let submittedCount = 0;
+        for (const result of results) {
+          const { candidateId, partyId, votes } = result;
+          if (!candidateId || !partyId || votes === undefined) continue;
+
+          const existing = await db.query.pollingUnitResults.findFirst({
+            where: and(
+              eq(schema.pollingUnitResults.electionId, electionId),
+              eq(schema.pollingUnitResults.pollingUnitId, pollingUnitId),
+              eq(schema.pollingUnitResults.candidateId, candidateId)
+            )
+          });
+
+          if (existing) {
+            await db.update(schema.pollingUnitResults)
+              .set({
+                votes: parseInt(votes),
+                registeredVoters: registeredVoters ? parseInt(registeredVoters) : existing.registeredVoters,
+                accreditedVoters: accreditedVoters ? parseInt(accreditedVoters) : existing.accreditedVoters,
+                reportedBy: agent.memberId,
+                updatedAt: new Date(),
+                deviceInfo,
+              })
+              .where(eq(schema.pollingUnitResults.id, existing.id));
+          } else {
+            await db.insert(schema.pollingUnitResults).values({
+              electionId,
+              pollingUnitId,
+              candidateId,
+              partyId,
+              votes: parseInt(votes),
+              registeredVoters: registeredVoters ? parseInt(registeredVoters) : 0,
+              accreditedVoters: accreditedVoters ? parseInt(accreditedVoters) : 0,
+              reportedBy: agent.memberId,
+              deviceInfo,
+            });
+          }
+          submittedCount++;
+        }
+
+        if (submittedCount > 0) {
+          batchSummary.push({ electionId, submitted: submittedCount });
+          io.emit("general-election:result-updated", { electionId, pollingUnitId });
+        }
+      }
+
+      await db.update(schema.pollingAgents)
+        .set({ status: "active" })
+        .where(eq(schema.pollingAgents.id, agent.id));
+
+      res.json({
+        success: true,
+        data: {
+          totalElections: batchSummary.length,
+          submissions: batchSummary,
+          pollingUnitId,
+          reportedBy: agent.memberId,
+          timestamp: new Date().toISOString(),
+        }
+      });
+    } catch (error: any) {
+      console.error("Batch result submission error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to submit batch results" });
+    }
+  });
+
+  app.post("/api/agent/upload-result-sheet", apiLimiter, upload.single("resultSheet"), async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin, electionId, pollingUnitId } = req.body;
+
+      if (!agentCode || !agentPin || !electionId || !pollingUnitId) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
+        ),
+        with: { member: true }
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid agent credentials" });
+      }
+      if (agent.status === "revoked") {
+        return res.status(403).json({ success: false, error: "Agent access has been revoked" });
+      }
+      if (agent.pollingUnitId !== pollingUnitId) {
+        return res.status(403).json({ success: false, error: "You are not assigned to this polling unit" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: "No file uploaded" });
+      }
+
+      const fileBuffer = req.file.buffer;
+      const fileName = `result-sheets/${pollingUnitId}/${electionId}/${Date.now()}_${req.file.originalname}`;
+      const base64Data = fileBuffer.toString("base64");
+      const fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+      const [sheet] = await db.insert(schema.resultSheets).values({
+        pollingUnitId,
+        electionId,
+        uploadedBy: agent.memberId,
+        fileUrl,
+        fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        fileSize: req.file.size,
+      }).returning();
+
+      io.emit("result-sheet:uploaded", { electionId, pollingUnitId, sheetId: sheet.id });
+
+      res.json({
+        success: true,
+        data: {
+          id: sheet.id,
+          fileName: sheet.fileName,
+          electionId,
+          pollingUnitId,
+          uploadedAt: sheet.uploadedAt,
+        }
+      });
+    } catch (error: any) {
+      console.error("Result sheet upload error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to upload result sheet" });
+    }
+  });
+
+  app.get("/api/agent/result-sheets", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { agentCode, agentPin } = req.query;
+
+      if (!agentCode || !agentPin) {
+        return res.status(400).json({ success: false, error: "Agent credentials required" });
+      }
+
+      const agent = await db.query.pollingAgents.findFirst({
+        where: and(
+          eq(schema.pollingAgents.agentCode, (agentCode as string).toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin as string)
+        ),
+      });
+
+      if (!agent) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      const sheets = await db.query.resultSheets.findMany({
+        where: eq(schema.resultSheets.pollingUnitId, agent.pollingUnitId),
+        with: { election: true },
+        orderBy: desc(schema.resultSheets.uploadedAt),
+      });
+
+      res.json({
+        success: true,
+        data: sheets.map(s => ({
+          id: s.id,
+          electionId: s.electionId,
+          electionTitle: s.election.title,
+          electionPosition: s.election.position,
+          fileName: s.fileName,
+          isVerified: s.isVerified,
+          uploadedAt: s.uploadedAt,
+        }))
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: "Failed to fetch result sheets" });
+    }
+  });
+
+  app.post("/api/admin/result-sheets/:id/verify", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { notes } = req.body;
+      const [sheet] = await db.update(schema.resultSheets)
+        .set({
+          isVerified: true,
+          verifiedBy: req.user!.id,
+          verifiedAt: new Date(),
+          verificationNotes: notes || null,
+        })
+        .where(eq(schema.resultSheets.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, data: sheet });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to verify result sheet" });
     }
   });
 
