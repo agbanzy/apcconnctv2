@@ -19,16 +19,34 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 
+const TASK_CATEGORIES = [
+  { value: "outreach", label: "Outreach" },
+  { value: "canvassing", label: "Canvassing" },
+  { value: "social_media", label: "Social Media" },
+  { value: "community_service", label: "Community Service" },
+  { value: "data_collection", label: "Data Collection" },
+  { value: "education", label: "Education" },
+  { value: "event_support", label: "Event Support" },
+  { value: "fundraising", label: "Fundraising" },
+  { value: "monitoring", label: "Monitoring" },
+  { value: "content_creation", label: "Content Creation" },
+  { value: "membership_drive", label: "Membership Drive" },
+  { value: "general", label: "General" },
+];
+
 const createTaskSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(200),
   description: z.string().min(20, "Description must be at least 20 characters").max(2000),
   category: z.string().min(1, "Category is required"),
+  taskCategory: z.string().optional().default("general"),
+  taskScope: z.enum(["national", "state", "lga", "ward"]).optional().default("national"),
   location: z.string().min(1, "Location is required"),
   skills: z.string().min(1, "At least one skill is required"),
   pointsPerCompletion: z.number().min(10, "Minimum 10 points required").max(1000),
   maxCompletions: z.number().min(1).max(100).optional(),
   deadline: z.string().optional(),
   difficulty: z.enum(["Easy", "Medium", "Hard"]),
+  cooldownHours: z.number().min(0).max(720).optional().default(0),
 });
 
 type CreateTaskFormData = z.infer<typeof createTaskSchema>;
@@ -70,11 +88,14 @@ export default function UserTasksPage() {
       title: "",
       description: "",
       category: "",
+      taskCategory: "general",
+      taskScope: "national",
       location: "",
       skills: "",
       pointsPerCompletion: 50,
       maxCompletions: 1,
       difficulty: "Medium",
+      cooldownHours: 0,
     },
   });
 
@@ -264,6 +285,79 @@ export default function UserTasksPage() {
                     )}
                   />
                 </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="taskCategory"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Task Category</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "general"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-task-category">
+                              <SelectValue placeholder="Select task category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {TASK_CATEGORIES.map((cat) => (
+                              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="taskScope"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Task Scope</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "national"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-task-scope">
+                              <SelectValue placeholder="Select scope" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="national">National</SelectItem>
+                            <SelectItem value="state">State</SelectItem>
+                            <SelectItem value="lga">LGA</SelectItem>
+                            <SelectItem value="ward">Ward</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Who can see and complete this task</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="cooldownHours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cooldown Hours</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={720}
+                          {...field}
+                          value={field.value || 0}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          data-testid="input-cooldown-hours"
+                        />
+                      </FormControl>
+                      <FormDescription>Hours between repeat completions (0 = no cooldown)</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}

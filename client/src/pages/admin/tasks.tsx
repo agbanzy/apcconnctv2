@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -56,6 +58,15 @@ interface Task {
   maxAssignees: number | null;
   assigneeCount?: number;
   createdAt: string;
+  taskCategory?: string;
+  taskScope?: string;
+  stateId?: string | null;
+  lgaId?: string | null;
+  wardId?: string | null;
+  cooldownHours?: number;
+  maxCompletionsTotal?: number | null;
+  expiresAt?: string | null;
+  isActive?: boolean;
 }
 
 const taskSchema = z.object({
@@ -67,9 +78,39 @@ const taskSchema = z.object({
   points: z.coerce.number().min(0, "Points must be at least 0"),
   deadline: z.string().optional(),
   maxAssignees: z.coerce.number().nullable().optional(),
+  taskCategory: z.enum(["outreach", "canvassing", "social_media", "community_service", "data_collection", "education", "event_support", "fundraising", "monitoring", "content_creation", "membership_drive", "general"]).optional().default("general"),
+  taskScope: z.enum(["national", "state", "lga", "ward"]).optional().default("national"),
+  stateId: z.string().nullable().optional(),
+  lgaId: z.string().nullable().optional(),
+  wardId: z.string().nullable().optional(),
+  cooldownHours: z.coerce.number().min(0).optional().default(0),
+  maxCompletionsTotal: z.coerce.number().min(0).nullable().optional(),
+  expiresAt: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
+
+const categoryLabels: Record<string, string> = {
+  outreach: "Outreach",
+  canvassing: "Canvassing",
+  social_media: "Social Media",
+  community_service: "Community Service",
+  data_collection: "Data Collection",
+  education: "Education",
+  event_support: "Event Support",
+  fundraising: "Fundraising",
+  monitoring: "Monitoring",
+  content_creation: "Content Creation",
+  membership_drive: "Membership Drive",
+  general: "General",
+};
+
+const scopeLabels: Record<string, string> = {
+  national: "National",
+  state: "State",
+  lga: "LGA",
+  ward: "Ward",
+};
 
 export default function AdminTasks() {
   const { toast } = useToast();
@@ -82,9 +123,25 @@ export default function AdminTasks() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [selectedStateId, setSelectedStateId] = useState<string>("");
+  const [selectedLgaId, setSelectedLgaId] = useState<string>("");
 
   const { data, isLoading } = useResourceList<Task>("/api/admin/tasks", filters);
   const { create, update, remove } = useResourceMutations<Task>("/api/admin/tasks");
+
+  const { data: statesData } = useQuery<{ success: boolean; data: any[] }>({
+    queryKey: ["/api/locations/states"],
+  });
+
+  const { data: lgasData } = useQuery<{ success: boolean; data: any[] }>({
+    queryKey: ["/api/locations/lgas", selectedStateId],
+    enabled: !!selectedStateId,
+  });
+
+  const { data: wardsData } = useQuery<{ success: boolean; data: any[] }>({
+    queryKey: ["/api/locations/wards", selectedLgaId],
+    enabled: !!selectedLgaId,
+  });
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -97,8 +154,18 @@ export default function AdminTasks() {
       points: 50,
       deadline: "",
       maxAssignees: null,
+      taskCategory: "general",
+      taskScope: "national",
+      stateId: null,
+      lgaId: null,
+      wardId: null,
+      cooldownHours: 0,
+      maxCompletionsTotal: null,
+      expiresAt: "",
     },
   });
+
+  const watchedScope = form.watch("taskScope");
 
   const columns: Column<Task>[] = [
     {
@@ -114,6 +181,24 @@ export default function AdminTasks() {
             <span className="text-xs text-muted-foreground">{task.difficulty}</span>
           </div>
         </div>
+      ),
+    },
+    {
+      key: "category",
+      header: "Category",
+      render: (task) => (
+        <span className="text-sm" data-testid={`text-category-${task.id}`}>
+          {categoryLabels[task.taskCategory || "general"] || task.taskCategory}
+        </span>
+      ),
+    },
+    {
+      key: "scope",
+      header: "Scope",
+      render: (task) => (
+        <Badge variant="outline" data-testid={`badge-scope-${task.id}`}>
+          {scopeLabels[task.taskScope || "national"] || task.taskScope}
+        </Badge>
       ),
     },
     {
@@ -191,7 +276,19 @@ export default function AdminTasks() {
                   ? format(new Date(task.deadline), "yyyy-MM-dd")
                   : "",
                 maxAssignees: task.maxAssignees,
+                taskCategory: (task.taskCategory as any) || "general",
+                taskScope: (task.taskScope as any) || "national",
+                stateId: task.stateId || null,
+                lgaId: task.lgaId || null,
+                wardId: task.wardId || null,
+                cooldownHours: task.cooldownHours || 0,
+                maxCompletionsTotal: task.maxCompletionsTotal ?? null,
+                expiresAt: task.expiresAt
+                  ? format(new Date(task.expiresAt), "yyyy-MM-dd'T'HH:mm")
+                  : "",
               });
+              if (task.stateId) setSelectedStateId(task.stateId);
+              if (task.lgaId) setSelectedLgaId(task.lgaId);
               setDrawerOpen(true);
             }}
             data-testid={`button-edit-${task.id}`}
@@ -222,6 +319,14 @@ export default function AdminTasks() {
         points: data.points,
         deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
         maxAssignees: data.maxAssignees || null,
+        taskCategory: data.taskCategory || "general",
+        taskScope: data.taskScope || "national",
+        stateId: data.taskScope !== "national" ? data.stateId : null,
+        lgaId: data.taskScope === "lga" || data.taskScope === "ward" ? data.lgaId : null,
+        wardId: data.taskScope === "ward" ? data.wardId : null,
+        cooldownHours: data.cooldownHours || 0,
+        maxCompletionsTotal: data.maxCompletionsTotal || null,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt).toISOString() : null,
       };
 
       if (editingTask) {
@@ -235,6 +340,8 @@ export default function AdminTasks() {
       setDrawerOpen(false);
       setEditingTask(null);
       form.reset();
+      setSelectedStateId("");
+      setSelectedLgaId("");
     } catch (error) {
       toast({
         title: "Error",
@@ -288,6 +395,8 @@ export default function AdminTasks() {
           onClick={() => {
             setEditingTask(null);
             form.reset();
+            setSelectedStateId("");
+            setSelectedLgaId("");
             setDrawerOpen(true);
           }}
           data-testid="button-create-task"
@@ -387,6 +496,8 @@ export default function AdminTasks() {
           setDrawerOpen(false);
           setEditingTask(null);
           form.reset();
+          setSelectedStateId("");
+          setSelectedLgaId("");
         }}
         title={editingTask ? "Edit Task" : "Create Task"}
         description={editingTask ? "Update task details" : "Add a new task"}
@@ -562,6 +673,234 @@ export default function AdminTasks() {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="taskCategory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Task Category</FormLabel>
+                    <Select value={field.value || "general"} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-task-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.entries(categoryLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="taskScope"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Task Scope</FormLabel>
+                    <Select
+                      value={field.value || "national"}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        if (value === "national") {
+                          form.setValue("stateId", null);
+                          form.setValue("lgaId", null);
+                          form.setValue("wardId", null);
+                          setSelectedStateId("");
+                          setSelectedLgaId("");
+                        }
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-task-scope">
+                          <SelectValue placeholder="Select scope" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.entries(scopeLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {watchedScope && watchedScope !== "national" && (
+              <div className="grid grid-cols-2 gap-4">
+                {(watchedScope === "state" || watchedScope === "lga" || watchedScope === "ward") && (
+                  <FormField
+                    control={form.control}
+                    name="stateId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <Select
+                          value={field.value || ""}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            setSelectedStateId(value);
+                            form.setValue("lgaId", null);
+                            form.setValue("wardId", null);
+                            setSelectedLgaId("");
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-state">
+                              <SelectValue placeholder="Select state" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(statesData?.data || []).map((state: any) => (
+                              <SelectItem key={state.id} value={String(state.id)}>
+                                {state.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {(watchedScope === "lga" || watchedScope === "ward") && (
+                  <FormField
+                    control={form.control}
+                    name="lgaId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>LGA</FormLabel>
+                        <Select
+                          value={field.value || ""}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            setSelectedLgaId(value);
+                            form.setValue("wardId", null);
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-lga">
+                              <SelectValue placeholder="Select LGA" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(lgasData?.data || []).map((lga: any) => (
+                              <SelectItem key={lga.id} value={String(lga.id)}>
+                                {lga.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {watchedScope === "ward" && (
+                  <FormField
+                    control={form.control}
+                    name="wardId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Ward</FormLabel>
+                        <Select
+                          value={field.value || ""}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-ward">
+                              <SelectValue placeholder="Select ward" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(wardsData?.data || []).map((ward: any) => (
+                              <SelectItem key={ward.id} value={String(ward.id)}>
+                                {ward.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="cooldownHours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cooldown Hours</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        {...field}
+                        value={field.value ?? 0}
+                        data-testid="input-cooldown-hours"
+                      />
+                    </FormControl>
+                    <FormDescription>Hours between task completions (0 = no cooldown)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="maxCompletionsTotal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Total Completions</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Unlimited"
+                        {...field}
+                        value={field.value ?? ""}
+                        data-testid="input-max-completions"
+                      />
+                    </FormControl>
+                    <FormDescription>Maximum times this task can be completed (empty = unlimited)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="expiresAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expires At</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="datetime-local"
+                      {...field}
+                      data-testid="input-expires-at"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="flex gap-3 justify-end">
               <Button
                 type="button"
@@ -570,6 +909,8 @@ export default function AdminTasks() {
                   setDrawerOpen(false);
                   setEditingTask(null);
                   form.reset();
+                  setSelectedStateId("");
+                  setSelectedLgaId("");
                 }}
                 data-testid="button-cancel"
               >

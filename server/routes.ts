@@ -13,7 +13,7 @@ import crypto from "crypto";
 import { db } from "./db";
 import { pool } from "./db";
 import * as schema from "@shared/schema";
-import { eq, and, gte, lte, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc, asc, inArray, or as drizzleOr, isNull as drizzleIsNull } from "drizzle-orm";
 import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
@@ -7745,14 +7745,62 @@ Be friendly, informative, and politically neutral when discussing governance. En
   app.get("/api/tasks/micro", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, req.user!.id)
+        where: eq(schema.members.userId, req.user!.id),
+        with: {
+          ward: {
+            with: {
+              lga: {
+                with: {
+                  state: true
+                }
+              }
+            }
+          }
+        }
       });
 
       if (!member) {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      const memberWardId = member.wardId;
+      const memberLgaId = member.ward?.lgaId;
+      const memberStateId = member.ward?.lga?.stateId;
+
+      const { taskCategory, taskScope: queriedScope } = req.query;
+
+      const now = new Date();
+
       const tasks = await db.query.microTasks.findMany({
+        where: and(
+          eq(schema.microTasks.isActive, true),
+          drizzleOr(
+            drizzleIsNull(schema.microTasks.expiresAt),
+            gte(schema.microTasks.expiresAt, now)
+          ),
+          drizzleOr(
+            sql`${schema.microTasks.maxCompletionsTotal} IS NULL`,
+            sql`${schema.microTasks.currentCompletions} < ${schema.microTasks.maxCompletionsTotal}`
+          ),
+          drizzleOr(
+            eq(schema.microTasks.taskScope, "national"),
+            and(
+              drizzleIsNull(schema.microTasks.stateId),
+              drizzleIsNull(schema.microTasks.lgaId),
+              drizzleIsNull(schema.microTasks.wardId)
+            ),
+            ...(memberStateId ? [and(eq(schema.microTasks.taskScope, "state"), eq(schema.microTasks.stateId, memberStateId))] : []),
+            ...(memberLgaId ? [and(eq(schema.microTasks.taskScope, "lga"), eq(schema.microTasks.lgaId, memberLgaId))] : []),
+            ...(memberWardId ? [and(eq(schema.microTasks.taskScope, "ward"), eq(schema.microTasks.wardId, memberWardId))] : [])
+          ),
+          ...(taskCategory && typeof taskCategory === "string" ? [eq(schema.microTasks.taskCategory, taskCategory as any)] : []),
+          ...(queriedScope && typeof queriedScope === "string" ? [eq(schema.microTasks.taskScope, queriedScope as any)] : [])
+        ),
+        with: {
+          state: true,
+          lga: true,
+          ward: true,
+        },
         orderBy: desc(schema.microTasks.createdAt)
       });
 
@@ -7796,7 +7844,10 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
   app.post("/api/tasks/micro", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
-      const taskData = schema.insertMicroTaskSchema.parse(req.body);
+      const taskData = schema.insertMicroTaskSchema.parse({
+        ...req.body,
+        createdBy: req.user!.id
+      });
       const [task] = await db.insert(schema.microTasks).values([taskData as any]).returning();
       res.json({ success: true, data: task });
     } catch (error) {
@@ -7828,6 +7879,34 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       if (!task) {
         return res.status(404).json({ success: false, error: "Task not found" });
+      }
+
+      if (!task.isActive) {
+        return res.status(400).json({ success: false, error: "Task is no longer active" });
+      }
+
+      if (task.expiresAt && new Date(task.expiresAt) < new Date()) {
+        return res.status(400).json({ success: false, error: "Task has expired" });
+      }
+
+      if (task.maxCompletionsTotal && (task.currentCompletions || 0) >= task.maxCompletionsTotal) {
+        return res.status(400).json({ success: false, error: "Task has reached maximum completions" });
+      }
+
+      if (task.cooldownHours && task.cooldownHours > 0) {
+        const cooldownCutoff = new Date(Date.now() - task.cooldownHours * 60 * 60 * 1000);
+        const recentCompletion = await db.query.taskCompletions.findFirst({
+          where: and(
+            eq(schema.taskCompletions.memberId, memberId),
+            eq(schema.taskCompletions.taskType, "micro"),
+            gte(schema.taskCompletions.completedAt, cooldownCutoff)
+          ),
+          orderBy: desc(schema.taskCompletions.completedAt)
+        });
+        if (recentCompletion) {
+          const waitHours = task.cooldownHours;
+          return res.status(400).json({ success: false, error: `Please wait ${waitHours} hours between task completions` });
+        }
       }
 
       const completionRequirement = task.completionRequirement || "quiz";
@@ -7907,6 +7986,10 @@ Be friendly, informative, and politically neutral when discussing governance. En
         userAgent,
         fingerprint
       }).returning();
+
+      await db.update(schema.microTasks)
+        .set({ currentCompletions: sql`COALESCE(${schema.microTasks.currentCompletions}, 0) + 1` })
+        .where(eq(schema.microTasks.id, req.params.id));
 
       // Log audit trail
       await logAudit({
@@ -8378,18 +8461,58 @@ Be friendly, informative, and politically neutral when discussing governance. En
   // VOLUNTEER TASKS ROUTES
   app.get("/api/tasks/volunteer", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { status, location, category } = req.query;
-      const stateId = typeof req.query.stateId === "string" ? req.query.stateId : undefined;
-      const lgaId = typeof req.query.lgaId === "string" ? req.query.lgaId : undefined;
-      const wardId = typeof req.query.wardId === "string" ? req.query.wardId : undefined;
+      const { status, location, category, taskCategory: queryTaskCategory } = req.query;
 
-      const locationConditions: any[] = [];
-      if (stateId) locationConditions.push(eq(schema.volunteerTasks.stateId, stateId));
-      if (lgaId) locationConditions.push(eq(schema.volunteerTasks.lgaId, lgaId));
-      if (wardId) locationConditions.push(eq(schema.volunteerTasks.wardId, wardId));
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+        with: {
+          ward: {
+            with: {
+              lga: {
+                with: {
+                  state: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const memberWardId = member.wardId;
+      const memberLgaId = member.ward?.lgaId;
+      const memberStateId = member.ward?.lga?.stateId;
+
+      const now = new Date();
 
       const tasks = await db.query.volunteerTasks.findMany({
-        where: locationConditions.length > 0 ? and(...locationConditions) : undefined,
+        where: and(
+          eq(schema.volunteerTasks.isActive, true),
+          drizzleOr(
+            drizzleIsNull(schema.volunteerTasks.expiresAt),
+            gte(schema.volunteerTasks.expiresAt, now)
+          ),
+          drizzleOr(
+            eq(schema.volunteerTasks.taskScope, "national"),
+            and(
+              drizzleIsNull(schema.volunteerTasks.stateId),
+              drizzleIsNull(schema.volunteerTasks.lgaId),
+              drizzleIsNull(schema.volunteerTasks.wardId)
+            ),
+            ...(memberStateId ? [and(eq(schema.volunteerTasks.taskScope, "state"), eq(schema.volunteerTasks.stateId, memberStateId))] : []),
+            ...(memberLgaId ? [and(eq(schema.volunteerTasks.taskScope, "lga"), eq(schema.volunteerTasks.lgaId, memberLgaId))] : []),
+            ...(memberWardId ? [and(eq(schema.volunteerTasks.taskScope, "ward"), eq(schema.volunteerTasks.wardId, memberWardId))] : [])
+          ),
+          ...(queryTaskCategory && typeof queryTaskCategory === "string" ? [eq(schema.volunteerTasks.taskCategory, queryTaskCategory as any)] : [])
+        ),
+        with: {
+          state: true,
+          lga: true,
+          ward: true,
+        },
         orderBy: desc(schema.volunteerTasks.createdAt)
       });
 

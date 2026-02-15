@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, Clock, Trophy, Target, Filter, MapPin } from "lucide-react";
+import { CheckCircle2, Clock, Trophy, Target, Filter, MapPin, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -23,13 +23,15 @@ export default function TasksPage() {
   const [activeTab, setActiveTab] = useState("micro");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [taskCategoryFilter, setTaskCategoryFilter] = useState<string>("all");
+  const [taskScopeFilter, setTaskScopeFilter] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<MicroTaskWithCompletion | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const { toast } = useToast();
 
   // Fetch micro-tasks
   const { data: microTasks, isLoading: loadingMicro } = useQuery<{ data: MicroTaskWithCompletion[] }>({
-    queryKey: ["/api/tasks/micro"],
+    queryKey: ["/api/tasks/micro", { taskCategory: taskCategoryFilter !== "all" ? taskCategoryFilter : undefined, taskScope: taskScopeFilter !== "all" ? taskScopeFilter : undefined }],
   });
 
   // Fetch volunteer tasks
@@ -165,7 +167,7 @@ export default function TasksPage() {
 
         {/* Micro-Tasks Tab */}
         <TabsContent value="micro" className="space-y-6">
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[200px]" data-testid="select-category-filter">
                 <SelectValue placeholder="Filter by category" />
@@ -178,6 +180,38 @@ export default function TasksPage() {
                 <SelectItem value="governance">Governance</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={taskCategoryFilter} onValueChange={setTaskCategoryFilter}>
+              <SelectTrigger className="w-[200px]" data-testid="select-task-category-filter">
+                <SelectValue placeholder="Filter by task category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="outreach">Outreach</SelectItem>
+                <SelectItem value="canvassing">Canvassing</SelectItem>
+                <SelectItem value="social_media">Social Media</SelectItem>
+                <SelectItem value="community_service">Community Service</SelectItem>
+                <SelectItem value="data_collection">Data Collection</SelectItem>
+                <SelectItem value="education">Education</SelectItem>
+                <SelectItem value="event_support">Event Support</SelectItem>
+                <SelectItem value="fundraising">Fundraising</SelectItem>
+                <SelectItem value="monitoring">Monitoring</SelectItem>
+                <SelectItem value="content_creation">Content Creation</SelectItem>
+                <SelectItem value="membership_drive">Membership Drive</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={taskScopeFilter} onValueChange={setTaskScopeFilter}>
+              <SelectTrigger className="w-[200px]" data-testid="select-task-scope-filter">
+                <SelectValue placeholder="Filter by scope" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="national">National</SelectItem>
+                <SelectItem value="state">State</SelectItem>
+                <SelectItem value="lga">LGA</SelectItem>
+                <SelectItem value="ward">Ward</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {loadingMicro ? (
@@ -186,7 +220,7 @@ export default function TasksPage() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredMicroTasks.map((task) => (
+              {filteredMicroTasks.map((task: any) => (
                 <Card key={task.id} className="hover-elevate" data-testid={`card-micro-task-${task.id}`}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -200,14 +234,44 @@ export default function TasksPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline">{task.category}</Badge>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline">{task.category}</Badge>
+                        {task.taskCategory && (
+                          <Badge variant="secondary" data-testid="badge-task-category">
+                            {(task.taskCategory as string).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                          </Badge>
+                        )}
+                      </div>
                       <Badge className="bg-primary">{task.points} pts</Badge>
                     </div>
+                    {task.taskScope && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <Badge variant={task.taskScope === "national" ? "default" : "outline"} data-testid="badge-task-scope">
+                          {task.taskScope === "national" ? "National" : task.taskScope === "state" ? (task.state?.name || "State") : task.taskScope === "lga" ? (task.lga?.name || "LGA") : task.taskScope === "ward" ? (task.ward?.name || "Ward") : task.taskScope}
+                        </Badge>
+                      </div>
+                    )}
                     <div className="flex items-center text-sm text-muted-foreground">
                       <Clock className="h-4 w-4 mr-2" />
                       {task.timeEstimate}
                     </div>
+                    {task.maxCompletionsTotal != null && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-completions">
+                        <Users className="h-4 w-4" />
+                        <span>{task.currentCompletions || 0}/{task.maxCompletionsTotal} completed</span>
+                      </div>
+                    )}
+                    {task.expiresAt && (
+                      <div className="text-sm" data-testid="text-expires">
+                        {new Date(task.expiresAt) < new Date() ? (
+                          <span className="text-destructive font-medium">Expired</span>
+                        ) : (
+                          <span className="text-muted-foreground">Expires: {new Date(task.expiresAt).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    )}
                     <Button
                       className="w-full"
                       onClick={() => handleStartMicroTask(task)}

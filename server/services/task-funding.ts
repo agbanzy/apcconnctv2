@@ -8,6 +8,11 @@ export interface CreateUserTaskParams {
   title: string;
   description: string;
   category: string;
+  taskCategory?: "outreach" | "canvassing" | "social_media" | "community_service" | "data_collection" | "education" | "event_support" | "fundraising" | "monitoring" | "content_creation" | "membership_drive" | "general";
+  taskScope?: "national" | "state" | "lga" | "ward";
+  stateId?: string;
+  lgaId?: string;
+  wardId?: string;
   location: string;
   skills: string[];
   pointsPerCompletion: number;
@@ -19,6 +24,8 @@ export interface CreateUserTaskParams {
   autoApprove?: boolean;
   requiresProof?: boolean;
   fundingPoints: number;
+  cooldownHours?: number;
+  expiresAt?: Date;
 }
 
 export interface CompleteTaskParams {
@@ -36,6 +43,11 @@ export class TaskFundingService {
       title,
       description,
       category,
+      taskCategory = "general",
+      taskScope = "national",
+      stateId,
+      lgaId,
+      wardId,
       location,
       skills,
       pointsPerCompletion,
@@ -47,6 +59,8 @@ export class TaskFundingService {
       autoApprove = false,
       requiresProof = true,
       fundingPoints,
+      cooldownHours = 0,
+      expiresAt,
     } = params;
 
     if (fundingPoints <= 0) {
@@ -86,6 +100,11 @@ export class TaskFundingService {
           title,
           description,
           category,
+          taskCategory,
+          taskScope,
+          stateId: stateId || null,
+          lgaId: lgaId || null,
+          wardId: wardId || null,
           location,
           skills,
           points: pointsPerCompletion,
@@ -100,7 +119,10 @@ export class TaskFundingService {
           fundingStatus: "funded",
           autoApprove,
           requiresProof,
+          cooldownHours,
           status: "open",
+          expiresAt: expiresAt || null,
+          isActive: true,
         })
         .returning();
 

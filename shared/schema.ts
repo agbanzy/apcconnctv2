@@ -10,6 +10,12 @@ export const incidentSeverityEnum = pgEnum("incident_severity", ["low", "medium"
 export const pollingUnitStatusEnum = pgEnum("polling_unit_status", ["active", "delayed", "completed", "incident"]);
 export const campaignStatusEnum = pgEnum("campaign_status", ["active", "approved", "completed", "rejected"]);
 export const taskDifficultyEnum = pgEnum("task_difficulty", ["Easy", "Medium", "Hard"]);
+export const taskCategoryEnum = pgEnum("task_category", [
+  "outreach", "canvassing", "social_media", "community_service",
+  "data_collection", "education", "event_support", "fundraising",
+  "monitoring", "content_creation", "membership_drive", "general"
+]);
+export const taskScopeEnum = pgEnum("task_scope", ["national", "state", "lga", "ward"]);
 export const ideaStatusEnum = pgEnum("idea_status", ["pending", "under_review", "approved", "rejected", "implemented"]);
 export const voteTypeEnum = pgEnum("vote_type", ["upvote", "downvote"]);
 export const donationCategoryEnum = pgEnum("donation_category", ["general", "campaign", "infrastructure", "youth_programs", "community_development", "emergency_relief"]);
@@ -278,6 +284,8 @@ export const volunteerTasks = pgTable("volunteer_tasks", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(),
+  taskCategory: taskCategoryEnum("task_category").default("general"),
+  taskScope: taskScopeEnum("task_scope").default("national"),
   location: text("location").notNull(),
   skills: jsonb("skills").$type<string[]>().notNull(),
   points: integer("points").notNull(),
@@ -295,7 +303,10 @@ export const volunteerTasks = pgTable("volunteer_tasks", {
   fundingStatus: text("funding_status").default("unfunded"),
   autoApprove: boolean("auto_approve").default(false),
   requiresProof: boolean("requires_proof").default(true),
+  cooldownHours: integer("cooldown_hours").default(0),
   status: text("status").default("open"),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -569,11 +580,22 @@ export const microTasks = pgTable("micro_tasks", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(),
+  taskCategory: taskCategoryEnum("task_category").default("general"),
+  taskScope: taskScopeEnum("task_scope").default("national"),
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
   points: integer("points").notNull(),
-  completionRequirement: text("completion_requirement").default("quiz"), // "quiz" | "image" | "none"
-  options: jsonb("options").$type<string[]>(), // Multiple choice options (for quiz type)
-  correctAnswers: jsonb("correct_answers").$type<number[]>(), // Indices of correct answers (for quiz type)
+  completionRequirement: text("completion_requirement").default("quiz"),
+  options: jsonb("options").$type<string[]>(),
+  correctAnswers: jsonb("correct_answers").$type<number[]>(),
   timeEstimate: text("time_estimate").notNull(),
+  cooldownHours: integer("cooldown_hours").default(0),
+  maxCompletionsTotal: integer("max_completions_total"),
+  currentCompletions: integer("current_completions").default(0),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1303,8 +1325,20 @@ export const userPointsRelations = relations(userPoints, ({ one }) => ({
   }),
 }));
 
-export const microTasksRelations = relations(microTasks, ({ many }) => ({
+export const microTasksRelations = relations(microTasks, ({ one, many }) => ({
   completions: many(taskCompletions),
+  state: one(states, {
+    fields: [microTasks.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [microTasks.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [microTasks.wardId],
+    references: [wards.id],
+  }),
 }));
 
 export const taskCompletionsRelations = relations(taskCompletions, ({ one }) => ({
