@@ -57,6 +57,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/analytics/member-overview'],
     queryFn: async () => {
       const response = await api.get('/api/analytics/member-overview');
+      if (!response.success) throw new Error(response.error || 'Failed to load stats');
       return response.data as MemberStats;
     },
   });
@@ -65,6 +66,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/news', 'recent'],
     queryFn: async () => {
       const response = await api.get('/api/news?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load news');
       return response.data as RecentNews[];
     },
   });
@@ -73,6 +75,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/events', 'upcoming'],
     queryFn: async () => {
       const response = await api.get('/api/events?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load events');
       return response.data as UpcomingEvent[];
     },
   });
@@ -81,6 +84,7 @@ export default function DashboardScreen() {
     queryKey: ['/api/micro-tasks', 'active'],
     queryFn: async () => {
       const response = await api.get('/api/micro-tasks?limit=3');
+      if (!response.success) throw new Error(response.error || 'Failed to load tasks');
       return response.data as ActiveTask[];
     },
   });

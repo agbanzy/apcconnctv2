@@ -41,6 +41,7 @@ export default function ElectionsScreen() {
     queryKey: ['/api/elections'],
     queryFn: async () => {
       const response = await api.get('/api/elections');
+      if (!response.success) throw new Error(response.error || 'Failed to load elections');
       return response.data as Election[];
     },
   });
@@ -50,6 +51,7 @@ export default function ElectionsScreen() {
     queryFn: async () => {
       if (!selectedElection?.id) return null;
       const response = await api.get(`/api/elections/${selectedElection.id}`);
+      if (!response.success) throw new Error(response.error || 'Failed to load election');
       return response.data as Election;
     },
     enabled: !!selectedElection?.id,

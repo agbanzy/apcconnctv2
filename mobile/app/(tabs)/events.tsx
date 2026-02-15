@@ -49,6 +49,7 @@ export default function EventsScreen() {
         ? '/api/events' 
         : `/api/events?category=${selectedCategory}`;
       const response = await api.get(url);
+      if (!response.success) throw new Error(response.error || 'Failed to load events');
       return response.data as Event[];
     },
   });

@@ -86,6 +86,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/profile'],
     queryFn: async () => {
       const response = await api.get('/api/profile');
+      if (!response.success) throw new Error(response.error || 'Failed to load profile');
       return response.data as UserProfile;
     },
   });
@@ -94,6 +95,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/profile/badges'],
     queryFn: async () => {
       const response = await api.get('/api/profile/badges');
+      if (!response.success) throw new Error(response.error || 'Failed to load badges');
       return response.data as Badge[];
     },
   });
@@ -102,6 +104,7 @@ export default function ProfileScreen() {
     queryKey: ['/api/analytics/member-overview'],
     queryFn: async () => {
       const response = await api.get('/api/analytics/member-overview');
+      if (!response.success) throw new Error(response.error || 'Failed to load stats');
       return response.data;
     },
   });

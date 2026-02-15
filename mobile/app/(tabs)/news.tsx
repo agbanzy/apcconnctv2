@@ -43,6 +43,7 @@ export default function NewsScreen() {
         ? '/api/news' 
         : `/api/news?category=${selectedCategory}`;
       const response = await api.get(url);
+      if (!response.success) throw new Error(response.error || 'Failed to load news');
       return response.data as NewsPost[];
     },
   });
