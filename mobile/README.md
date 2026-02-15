@@ -54,12 +54,16 @@ Before you begin, ensure you have the following installed:
    
    Update the `.env` file with your backend API URL:
    ```env
-   API_URL=https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev
+   EXPO_PUBLIC_API_URL=https://your-backend-url.example.com
    ```
    
    For local development:
    ```env
-   API_URL=http://localhost:5000
+   # iOS simulator
+   EXPO_PUBLIC_API_URL=http://localhost:5000
+
+   # Android emulator
+   EXPO_PUBLIC_API_URL=http://10.0.2.2:5000
    ```
 
 ## Running the App
@@ -275,14 +279,14 @@ The app supports the following environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `API_URL` | Backend API base URL | `https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev` |
+| `EXPO_PUBLIC_API_URL` | Backend API base URL | `https://your-backend-url.example.com` |
 
 Environment variables are accessed via `expo-constants`:
 
 ```typescript
 import Constants from 'expo-constants';
 
-const apiUrl = Constants.expoConfig?.extra?.apiUrl || process.env.API_URL;
+const apiUrl = process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl;
 ```
 
 ## Troubleshooting
@@ -293,7 +297,7 @@ const apiUrl = Constants.expoConfig?.extra?.apiUrl || process.env.API_URL;
 
 **Solution:** 
 - Ensure your backend server is running
-- Check that `API_URL` in `.env` is correct
+- Check that `EXPO_PUBLIC_API_URL` in `.env` is correct
 - If using localhost on a physical device, use your computer's IP address instead
 - For iOS simulator, `localhost` should work
 - For Android emulator, use `10.0.2.2` instead of `localhost`

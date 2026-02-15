@@ -1,7 +1,14 @@
 import Constants from 'expo-constants';
 import { storage } from './storage';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || process.env.API_URL || 'http://localhost:5000';
+const rawApiUrl =
+  process.env.EXPO_PUBLIC_API_URL ||
+  Constants.expoConfig?.extra?.apiUrl ||
+  process.env.API_URL ||
+  'http://localhost:5000';
+
+const API_URL = rawApiUrl.replace(/\/$/, '');
+const DEFAULT_TIMEOUT_MS = 15000;
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -17,17 +24,34 @@ class ApiClient {
     this.baseURL = baseURL;
   }
 
-  private async getAuthHeaders(): Promise<HeadersInit> {
+  private async getAuthHeaders(options: RequestInit): Promise<HeadersInit> {
     const token = await storage.getAccessToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    
+    const headers: HeadersInit = {};
+
+    const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (!isFormDataBody) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    
+
     return headers;
+  }
+
+  private async fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   private async refreshAccessToken(): Promise<boolean> {
@@ -42,7 +66,7 @@ class ApiClient {
           return false;
         }
 
-        const response = await fetch(`${this.baseURL}/api/auth/mobile/refresh`, {
+        const response = await this.fetchWithTimeout(`${this.baseURL}/api/auth/mobile/refresh`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -80,10 +104,10 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      const headers = await this.getAuthHeaders();
+      const headers = await this.getAuthHeaders(options);
       const url = `${this.baseURL}${endpoint}`;
 
-      let response = await fetch(url, {
+      let response = await this.fetchWithTimeout(url, {
         ...options,
         headers: {
           ...headers,
@@ -91,12 +115,15 @@ class ApiClient {
         },
       });
 
-      if (response.status === 401) {
+      const isMobileAuthEndpoint = endpoint.startsWith('/api/auth/mobile/');
+      const hasRefreshToken = !!(await storage.getRefreshToken());
+
+      if (response.status === 401 && !isMobileAuthEndpoint && hasRefreshToken) {
         const refreshed = await this.refreshAccessToken();
-        
+
         if (refreshed) {
-          const newHeaders = await this.getAuthHeaders();
-          response = await fetch(url, {
+          const newHeaders = await this.getAuthHeaders(options);
+          response = await this.fetchWithTimeout(url, {
             ...options,
             headers: {
               ...newHeaders,
@@ -111,21 +138,37 @@ class ApiClient {
         }
       }
 
-      const data = await response.json();
+      const rawResponse = await response.text();
+      let data: any = {};
+      if (rawResponse) {
+        try {
+          data = JSON.parse(rawResponse);
+        } catch {
+          data = { error: rawResponse };
+        }
+      }
 
       if (!response.ok) {
         return {
           success: false,
-          error: data.error || `Request failed with status ${response.status}`,
+          error:
+            data?.error ||
+            data?.message ||
+            `Request failed with status ${response.status}`,
         };
       }
 
       return data;
     } catch (error) {
+      const isAbortError = error instanceof Error && error.name === 'AbortError';
       console.error('API request failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network request failed',
+        error: isAbortError
+          ? 'Request timed out. Please check your internet connection and try again.'
+          : error instanceof Error
+            ? error.message
+            : 'Network request failed',
       };
     }
   }

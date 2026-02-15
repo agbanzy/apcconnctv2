@@ -2,7 +2,7 @@ import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextS
 
 interface ButtonProps {
   title: string;
-  onPress: () => void;
+  onPress?: () => void;
   variant?: 'primary' | 'secondary' | 'outline';
   disabled?: boolean;
   loading?: boolean;

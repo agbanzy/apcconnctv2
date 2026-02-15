@@ -20,7 +20,7 @@ interface AuthRequest extends Request {
 }
 
 const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (!req.isAuthenticated()) {
+  if (!req.isAuthenticated?.() && !req.user) {
     return res.status(401).json({ success: false, error: "Unauthorized" });
   }
   next();

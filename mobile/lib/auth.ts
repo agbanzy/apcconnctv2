@@ -36,7 +36,10 @@ export interface AuthResult {
 
 export const auth = {
   async login(credentials: LoginCredentials): Promise<ApiResponse<AuthResult>> {
-    const response = await api.post<AuthResult>('/api/auth/mobile/login', credentials);
+    const response = await api.post<AuthResult>('/api/auth/mobile/login', {
+      ...credentials,
+      email: credentials.email.trim().toLowerCase(),
+    });
     
     if (response.success && response.data) {
       await storage.setAccessToken(response.data.accessToken);
@@ -51,7 +54,10 @@ export const auth = {
   },
 
   async register(data: RegisterData): Promise<ApiResponse<AuthResult>> {
-    const response = await api.post<AuthResult>('/api/auth/mobile/register', data);
+    const response = await api.post<AuthResult>('/api/auth/mobile/register', {
+      ...data,
+      email: data.email.trim().toLowerCase(),
+    });
     
     if (response.success && response.data) {
       await storage.setAccessToken(response.data.accessToken);

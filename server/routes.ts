@@ -13,12 +13,12 @@ import crypto from "crypto";
 import { db } from "./db";
 import { pool } from "./db";
 import * as schema from "@shared/schema";
-import { eq, and, gte, lte, sql, desc, asc } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc, asc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { emailService } from "./email-service";
 import { smsService } from "./sms-service";
 import { ninService, validateNINFormat, NINVerificationErrorCode } from "./nin-service";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getRefreshTokenExpiry, hashRefreshToken, verifyRefreshTokenHash } from "./jwt-utils";
+import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, getRefreshTokenExpiry, hashRefreshToken, verifyRefreshTokenHash } from "./jwt-utils";
 import { pushService, NotificationTemplates } from "./push-service";
 import { apiLimiter, authLimiter, votingLimiter, quizLimiter, taskLimiter, eventCheckInLimiter } from "./middleware/rate-limit";
 import { errorHandler, createError } from "./middleware/error-handler";
@@ -141,6 +141,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Accept JWT bearer tokens for mobile clients on all API routes.
+  // Session auth remains the default for web; JWT simply hydrates req.user.
+  app.use(async (req: AuthRequest, _res: Response, next: NextFunction) => {
+    if (req.user) {
+      return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const accessToken = authHeader.slice(7).trim();
+    if (!accessToken) {
+      return next();
+    }
+
+    try {
+      const userId = verifyAccessToken(accessToken);
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.id, userId),
+      });
+
+      if (user) {
+        req.user = user as Express.User;
+      } else {
+        (req as any).jwtAuthError = "User not found";
+      }
+    } catch (error) {
+      (req as any).jwtAuthError =
+        error instanceof Error ? error.message : "Invalid access token";
+    }
+
+    next();
+  });
+
   passport.use(
     new LocalStrategy({ usernameField: "email" }, async (email, password, done) => {
       try {
@@ -180,8 +216,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
+    if (!req.isAuthenticated?.() && !req.user) {
+      const jwtAuthError = (req as any).jwtAuthError;
+      return res.status(401).json({
+        success: false,
+        error: jwtAuthError || "Unauthorized",
+      });
     }
     next();
   };
@@ -499,16 +539,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  app.post("/api/auth/mobile/register", authLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const userData = schema.insertUserSchema.parse(req.body);
+      const { wardId, referralCode: referrerCode } = req.body;
+      const normalizedEmail = userData.email.trim().toLowerCase();
+
+      if (!wardId) {
+        return res.status(400).json({ success: false, error: "Ward selection is required" });
+      }
+
+      const existingUser = await db.query.users.findFirst({
+        where: eq(schema.users.email, normalizedEmail),
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ success: false, error: "Email already registered" });
+      }
+
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          ...userData,
+          email: normalizedEmail,
+          password: hashedPassword,
+        })
+        .returning();
+
+      const year = new Date().getFullYear();
+      const random = Math.floor(10000 + Math.random() * 90000);
+      const memberId = `APC-${year}-NG-${random}`;
+      const referralCode = `APC${userData.firstName
+        .substring(0, 3)
+        .toUpperCase()}${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+      let referrerId: string | null = null;
+      if (referrerCode) {
+        const referrer = await db.query.members.findFirst({
+          where: eq(schema.members.referralCode, referrerCode),
+        });
+        if (referrer) {
+          referrerId = referrer.id;
+        }
+      }
+
+      const [member] = await db
+        .insert(schema.members)
+        .values({
+          userId: user.id,
+          memberId,
+          wardId,
+          status: "pending",
+          referralCode,
+          referredBy: referrerId,
+        })
+        .returning();
+
+      if (referrerId) {
+        await db.insert(schema.referrals).values({
+          referrerId,
+          referredId: member.id,
+          status: "pending",
+          pointsEarned: 0,
+        });
+      }
+
+      const accessToken = generateAccessToken(user.id);
+      const refreshToken = generateRefreshToken(user.id);
+      const hashedRefreshToken = await hashRefreshToken(refreshToken);
+
+      await db.insert(schema.refreshTokens).values({
+        userId: user.id,
+        token: hashedRefreshToken,
+        expiresAt: getRefreshTokenExpiry(),
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+
+      await logAudit({
+        userId: user.id,
+        memberId: member.id,
+        action: AuditActions.REGISTER,
+        details: { email: user.email, channel: "mobile" },
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        status: "success",
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          accessToken,
+          refreshToken,
+          user: userWithoutPassword,
+          member,
+        },
+      });
+    } catch (error) {
+      console.error("Mobile registration error:", error);
+      return res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Registration failed",
+      });
+    }
+  });
+
   app.post("/api/auth/mobile/login", async (req: AuthRequest, res: Response) => {
     try {
       const { email, password } = req.body;
+      const normalizedEmail = String(email || "").trim().toLowerCase();
 
-      if (!email || !password) {
+      if (!normalizedEmail || !password) {
         return res.status(400).json({ success: false, error: "Email and password are required" });
       }
 
       const user = await db.query.users.findFirst({
-        where: eq(schema.users.email, email)
+        where: eq(schema.users.email, normalizedEmail)
       });
 
       if (!user) {
@@ -672,9 +819,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      res.json({ success: true, data: { user: req.user, member } });
+      const { password: _password, ...safeUser } = req.user!;
+      res.json({ success: true, data: { user: safeUser, member } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch user data" });
+    }
+  });
+
+  const normalizeRelatedValue = <T>(value: T | T[] | null | undefined): T | null => {
+    if (Array.isArray(value)) {
+      return value[0] ?? null;
+    }
+    return value ?? null;
+  };
+
+  const sanitizeUser = (user: UserType | null) => {
+    if (!user) {
+      return null;
+    }
+    const { password: _password, ...safeUser } = user;
+    return safeUser;
+  };
+
+  const getProfileByUserId = async (userId: string) => {
+    const member = await db.query.members.findFirst({
+      where: eq(schema.members.userId, userId),
+      with: {
+        user: true,
+        ward: {
+          with: {
+            lga: {
+              with: {
+                state: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!member) {
+      return null;
+    }
+
+    const memberUser = normalizeRelatedValue(member.user) as UserType | null;
+    const { user: _memberUser, ...memberWithoutUser } = member as any;
+
+    return {
+      user: sanitizeUser(memberUser),
+      member: memberWithoutUser,
+    };
+  };
+
+  app.get("/api/profile", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const profile = await getProfileByUserId(req.user!.id);
+      if (!profile) {
+        return res.status(404).json({ success: false, error: "Member profile not found" });
+      }
+      return res.json({ success: true, data: profile });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to fetch profile" });
+    }
+  });
+
+  app.patch("/api/profile", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const payload = z.object({
+        firstName: z.string().trim().min(1).max(120).optional(),
+        lastName: z.string().trim().min(1).max(120).optional(),
+        phone: z.string().trim().max(30).nullable().optional(),
+      }).parse(req.body);
+
+      const updateData: { firstName?: string; lastName?: string; phone?: string | null } = {};
+      if (payload.firstName !== undefined) updateData.firstName = payload.firstName;
+      if (payload.lastName !== undefined) updateData.lastName = payload.lastName;
+      if (payload.phone !== undefined) updateData.phone = payload.phone;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ success: false, error: "No profile fields provided" });
+      }
+
+      await db
+        .update(schema.users)
+        .set(updateData)
+        .where(eq(schema.users.id, req.user!.id));
+
+      const profile = await getProfileByUserId(req.user!.id);
+      if (!profile) {
+        return res.status(404).json({ success: false, error: "Member profile not found" });
+      }
+
+      return res.json({ success: true, data: profile });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update profile",
+      });
+    }
+  });
+
+  app.get("/api/profile/badges", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const earnedBadges = await db.query.userBadges.findMany({
+        where: eq(schema.userBadges.memberId, member.id),
+        orderBy: desc(schema.userBadges.earnedAt),
+        with: { badge: true },
+      });
+
+      const badges = earnedBadges.map((entry) => ({
+        id: entry.badge.id,
+        name: entry.badge.name,
+        description: entry.badge.description,
+        icon: entry.badge.icon,
+        earnedAt: entry.earnedAt,
+      }));
+
+      return res.json({ success: true, data: badges });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to fetch badges" });
     }
   });
 
@@ -710,6 +981,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, data: wards });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch wards" });
+    }
+  });
+
+  // Backward-compatible location routes used by the mobile app.
+  app.get("/api/states", async (_req: Request, res: Response) => {
+    try {
+      const states = await db.query.states.findMany({
+        orderBy: asc(schema.states.name),
+      });
+      return res.json({ success: true, data: states });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to fetch states" });
+    }
+  });
+
+  app.get("/api/lgas", async (req: Request, res: Response) => {
+    try {
+      const stateId = req.query.stateId as string | undefined;
+      if (!stateId) {
+        return res.status(400).json({ success: false, error: "stateId is required" });
+      }
+
+      const lgas = await db.query.lgas.findMany({
+        where: eq(schema.lgas.stateId, stateId),
+        orderBy: asc(schema.lgas.name),
+      });
+
+      return res.json({ success: true, data: lgas });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to fetch LGAs" });
+    }
+  });
+
+  app.get("/api/wards", async (req: Request, res: Response) => {
+    try {
+      const lgaId = req.query.lgaId as string | undefined;
+      if (!lgaId) {
+        return res.status(400).json({ success: false, error: "lgaId is required" });
+      }
+
+      const wards = await db.query.wards.findMany({
+        where: eq(schema.wards.lgaId, lgaId),
+        orderBy: asc(schema.wards.wardNumber),
+      });
+
+      return res.json({ success: true, data: wards });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to fetch wards" });
     }
   });
 
@@ -1429,123 +1748,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // NIN VERIFICATION ENDPOINT
+  // NIN VERIFICATION ENDPOINTS
   // ==========================
-  // This endpoint handles NIN verification for members using the NIMC API integration
+  const verifyNinForMember = async (
+    targetMemberId: string,
+    actorUserId: string,
+    actorRole: string | null | undefined,
+    nin: string,
+    dateOfBirth: string
+  ) => {
+    const member = await db.query.members.findFirst({
+      where: eq(schema.members.id, targetMemberId),
+      with: { user: true },
+    });
+
+    if (!member) {
+      return {
+        status: 404,
+        body: { success: false, error: "Member not found" },
+      };
+    }
+
+    if (member.userId !== actorUserId && actorRole !== "admin") {
+      return {
+        status: 403,
+        body: { success: false, error: "Forbidden" },
+      };
+    }
+
+    if (member.ninVerified) {
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: {
+            verified: true,
+            message: "NIN already verified",
+            verifiedAt: member.ninVerifiedAt,
+          },
+        },
+      };
+    }
+
+    const MAX_VERIFICATION_ATTEMPTS = 10;
+    if ((member.ninVerificationAttempts || 0) >= MAX_VERIFICATION_ATTEMPTS) {
+      return {
+        status: 429,
+        body: {
+          success: false,
+          error: `Maximum verification attempts (${MAX_VERIFICATION_ATTEMPTS}) exceeded. Please contact support.`,
+        },
+      };
+    }
+
+    const ninStatus = await ninService.checkNINStatus(nin);
+    if (ninStatus.exists && ninStatus.memberId !== member.memberId) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: "This NIN is already registered to another member",
+        },
+      };
+    }
+
+    const relatedUser = Array.isArray(member.user) ? member.user[0] : member.user;
+    const verificationResult = await ninService.verifyNIN({
+      nin,
+      firstName: relatedUser?.firstName || "",
+      lastName: relatedUser?.lastName || "",
+      dateOfBirth: dateOfBirth || "",
+    });
+
+    const attempts = (member.ninVerificationAttempts || 0) + 1;
+    if (verificationResult.success && verificationResult.data?.verified) {
+      const [updated] = await db
+        .update(schema.members)
+        .set({
+          nin: verificationResult.data.nin,
+          ninVerified: true,
+          ninVerifiedAt: new Date(),
+          ninVerificationAttempts: attempts,
+          status: "active",
+        })
+        .where(eq(schema.members.id, targetMemberId))
+        .returning();
+
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: {
+            verified: true,
+            member: updated,
+            message: verificationResult.message,
+          },
+        },
+      };
+    }
+
+    await db
+      .update(schema.members)
+      .set({
+        ninVerificationAttempts: attempts,
+      })
+      .where(eq(schema.members.id, targetMemberId));
+
+    const remainingAttempts = MAX_VERIFICATION_ATTEMPTS - attempts;
+    return {
+      status: 400,
+      body: {
+        success: false,
+        error: verificationResult.message,
+        code: verificationResult.code,
+        remainingAttempts,
+      },
+    };
+  };
+
   app.post("/api/members/:id/verify-nin", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { nin, dateOfBirth } = req.body;
+      const payload = z.object({
+        nin: z.string().trim().length(11),
+        dateOfBirth: z.string().trim().min(1),
+      }).parse(req.body);
 
-      // Get member to verify
+      const result = await verifyNinForMember(
+        req.params.id,
+        req.user!.id,
+        req.user!.role,
+        payload.nin,
+        payload.dateOfBirth
+      );
+
+      return res.status(result.status).json(result.body);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid NIN verification payload",
+          details: error.issues,
+        });
+      }
+      console.error("NIN verification error:", error);
+      return res.status(500).json({
+        success: false,
+        error: "NIN verification failed. Please try again later.",
+      });
+    }
+  });
+
+  app.post("/api/profile/verify-nin", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const payload = z.object({
+        nin: z.string().trim().length(11),
+        dateOfBirth: z.string().trim().min(1),
+      }).parse(req.body);
+
       const member = await db.query.members.findFirst({
-        where: eq(schema.members.id, req.params.id),
-        with: { user: true }
+        where: eq(schema.members.userId, req.user!.id),
       });
 
       if (!member) {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
-      // Authorization check: Only the member themselves or an admin can verify NIN
-      if (member.userId !== req.user!.id && req.user!.role !== "admin") {
-        return res.status(403).json({ success: false, error: "Forbidden" });
-      }
+      const result = await verifyNinForMember(
+        member.id,
+        req.user!.id,
+        req.user!.role,
+        payload.nin,
+        payload.dateOfBirth
+      );
 
-      // Check if already verified
-      if (member.ninVerified) {
-        return res.json({
-          success: true,
-          data: {
-            verified: true,
-            message: "NIN already verified",
-            verifiedAt: member.ninVerifiedAt
-          }
-        });
-      }
-
-      // RATE LIMITING: Check verification attempts
-      // Maximum 10 attempts per member (configurable)
-      const MAX_VERIFICATION_ATTEMPTS = 10;
-      if ((member.ninVerificationAttempts || 0) >= MAX_VERIFICATION_ATTEMPTS) {
-        return res.status(429).json({
-          success: false,
-          error: `Maximum verification attempts (${MAX_VERIFICATION_ATTEMPTS}) exceeded. Please contact support.`
-        });
-      }
-
-      // STEP 1: Check if NIN is already used by another member
-      const ninStatus = await ninService.checkNINStatus(nin);
-      if (ninStatus.exists && ninStatus.memberId !== member.memberId) {
-        return res.status(400).json({
-          success: false,
-          error: "This NIN is already registered to another member"
-        });
-      }
-
-      const user = Array.isArray(member.user) ? member.user[0] : member.user;
-
-      // STEP 2: Verify NIN with NIMC API
-      const verificationResult = await ninService.verifyNIN({
-        nin,
-        firstName: user?.firstName || "",
-        lastName: user?.lastName || "",
-        dateOfBirth: dateOfBirth || ""
-      });
-
-      // STEP 3: Update member record based on verification result
-      // Increment verification attempts regardless of success/failure
-      const attempts = (member.ninVerificationAttempts || 0) + 1;
-
-      if (verificationResult.success && verificationResult.data?.verified) {
-        // SUCCESS: Update member with verified NIN
-        const [updated] = await db.update(schema.members)
-          .set({
-            nin: verificationResult.data.nin,
-            ninVerified: true,
-            ninVerifiedAt: new Date(),
-            ninVerificationAttempts: attempts,
-            status: "active" // Activate member account upon successful NIN verification
-          })
-          .where(eq(schema.members.id, req.params.id))
-          .returning();
-
-        console.log(`NIN verified successfully for member ${member.memberId}`);
-
-        // OPTIONAL: Send notification to member
-        // await emailService.sendNINVerificationSuccess(user.email, member.memberId);
-
-        return res.json({
-          success: true,
-          data: {
-            verified: true,
-            member: updated,
-            message: verificationResult.message
-          }
-        });
-      } else {
-        // FAILURE: Update only the attempt counter, do not save the NIN
-        await db.update(schema.members)
-          .set({
-            ninVerificationAttempts: attempts
-          })
-          .where(eq(schema.members.id, req.params.id));
-
-        // RETRY LOGIC: Inform user of remaining attempts
-        const remainingAttempts = MAX_VERIFICATION_ATTEMPTS - attempts;
-        console.log(`NIN verification failed for member ${member.memberId}. Remaining attempts: ${remainingAttempts}`);
-
-        return res.status(400).json({
-          success: false,
-          error: verificationResult.message,
-          code: verificationResult.code,
-          remainingAttempts
-        });
-      }
+      return res.status(result.status).json(result.body);
     } catch (error) {
-      console.error("NIN verification error:", error);
-      res.status(500).json({
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid NIN verification payload",
+          details: error.issues,
+        });
+      }
+      console.error("Profile NIN verification error:", error);
+      return res.status(500).json({
         success: false,
-        error: "NIN verification failed. Please try again later."
+        error: "NIN verification failed. Please try again later.",
       });
     }
   });
@@ -2598,18 +2986,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/events", async (req: Request, res: Response) => {
+  app.get("/api/events", async (req: AuthRequest, res: Response) => {
     try {
-      const events = await db.query.events.findMany({
-        orderBy: desc(schema.events.date)
+      const categoryQuery = typeof req.query.category === "string" ? req.query.category : undefined;
+      const normalizedCategory = categoryQuery?.trim().toLowerCase();
+      const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+
+      const allEvents = await db.query.events.findMany({
+        orderBy: desc(schema.events.date),
       });
-      res.json({ success: true, data: events });
+
+      const filteredEvents = normalizedCategory
+        ? allEvents.filter((event) => {
+            const normalizedEventCategory = event.category
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, "_");
+            return normalizedEventCategory === normalizedCategory;
+          })
+        : allEvents;
+
+      const events = limit && limit > 0 ? filteredEvents.slice(0, limit) : filteredEvents;
+      const eventIds = events.map((event) => event.id);
+
+      const attendeeCounts = eventIds.length > 0
+        ? await db
+            .select({
+              eventId: schema.eventRsvps.eventId,
+              count: sql<number>`COUNT(*)`,
+            })
+            .from(schema.eventRsvps)
+            .where(
+              and(
+                inArray(schema.eventRsvps.eventId, eventIds),
+                eq(schema.eventRsvps.status, "confirmed")
+              )
+            )
+            .groupBy(schema.eventRsvps.eventId)
+        : [];
+
+      const attendeeCountMap = new Map(attendeeCounts.map((entry) => [entry.eventId, Number(entry.count) || 0]));
+
+      let memberRsvps: Array<typeof schema.eventRsvps.$inferSelect> = [];
+      if (req.user && eventIds.length > 0) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+        });
+
+        if (member) {
+          memberRsvps = await db.query.eventRsvps.findMany({
+            where: and(
+              eq(schema.eventRsvps.memberId, member.id),
+              inArray(schema.eventRsvps.eventId, eventIds),
+              eq(schema.eventRsvps.status, "confirmed")
+            ),
+          });
+        }
+      }
+
+      const memberRsvpMap = new Map(memberRsvps.map((rsvp) => [rsvp.eventId, rsvp]));
+
+      const data = events.map((event) => {
+        const memberRsvp = memberRsvpMap.get(event.id);
+        return {
+          ...event,
+          capacity: event.maxAttendees,
+          currentAttendees: attendeeCountMap.get(event.id) || 0,
+          hasRsvped: !!memberRsvp,
+          rsvpId: memberRsvp?.id || null,
+        };
+      });
+
+      res.json({ success: true, data });
     } catch (error) {
+      console.error("Fetch events error:", error);
       res.status(500).json({ success: false, error: "Failed to fetch events" });
     }
   });
 
-  app.get("/api/events/:id", async (req: Request, res: Response) => {
+  app.get("/api/events/:id", async (req: AuthRequest, res: Response) => {
     try {
       const event = await db.query.events.findFirst({
         where: eq(schema.events.id, req.params.id)
@@ -2626,7 +3081,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(schema.eventRsvps.status, "confirmed")
         ));
 
-      res.json({ success: true, data: { ...event, rsvpCount: rsvpCount[0]?.count || 0 } });
+      let memberRsvp: typeof schema.eventRsvps.$inferSelect | null = null;
+      if (req.user) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+        });
+
+        if (member) {
+          memberRsvp = await db.query.eventRsvps.findFirst({
+            where: and(
+              eq(schema.eventRsvps.eventId, req.params.id),
+              eq(schema.eventRsvps.memberId, member.id),
+              eq(schema.eventRsvps.status, "confirmed")
+            ),
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          ...event,
+          rsvpCount: Number(rsvpCount[0]?.count) || 0,
+          capacity: event.maxAttendees,
+          currentAttendees: Number(rsvpCount[0]?.count) || 0,
+          hasRsvped: !!memberRsvp,
+          rsvpId: memberRsvp?.id || null,
+        },
+      });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch event" });
     }
@@ -2865,6 +3347,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Backward-compatible mobile endpoint; rsvpId is ignored because RSVP is unique per member+event.
+  app.delete("/api/events/:id/rsvp/:rsvpId", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db
+        .update(schema.eventRsvps)
+        .set({ status: "cancelled" })
+        .where(
+          and(
+            eq(schema.eventRsvps.eventId, req.params.id),
+            eq(schema.eventRsvps.memberId, member.id)
+          )
+        );
+
+      return res.json({ success: true, data: { message: "RSVP cancelled" } });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: "Failed to cancel RSVP" });
+    }
+  });
+
   app.get("/api/events/:id/attendees", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const attendees = await db.query.eventRsvps.findMany({
@@ -3000,7 +3509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/elections", async (req: Request, res: Response) => {
+  app.get("/api/elections", async (req: AuthRequest, res: Response) => {
     try {
       const { status } = req.query;
       let elections;
@@ -3016,13 +3525,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      res.json({ success: true, data: elections });
+      const electionIds = elections.map((election) => election.id);
+      let voteMap = new Map<string, typeof schema.votes.$inferSelect>();
+
+      if (req.user && electionIds.length > 0) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+        });
+
+        if (member) {
+          const votes = await db.query.votes.findMany({
+            where: and(
+              eq(schema.votes.voterId, member.id),
+              inArray(schema.votes.electionId, electionIds)
+            ),
+          });
+          voteMap = new Map(votes.map((vote) => [vote.electionId, vote]));
+        }
+      }
+
+      const data = elections.map((election) => {
+        const vote = voteMap.get(election.id);
+        return {
+          ...election,
+          hasVoted: !!vote,
+          votedCandidateId: vote?.candidateId || null,
+        };
+      });
+
+      res.json({ success: true, data });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch elections" });
     }
   });
 
-  app.get("/api/elections/:id", async (req: Request, res: Response) => {
+  app.get("/api/elections/:id", async (req: AuthRequest, res: Response) => {
     try {
       const election = await db.query.elections.findFirst({
         where: eq(schema.elections.id, req.params.id),
@@ -3033,7 +3570,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Election not found" });
       }
 
-      res.json({ success: true, data: election });
+      let vote: typeof schema.votes.$inferSelect | null = null;
+      if (req.user) {
+        const member = await db.query.members.findFirst({
+          where: eq(schema.members.userId, req.user.id),
+        });
+
+        if (member) {
+          vote = await db.query.votes.findFirst({
+            where: and(
+              eq(schema.votes.electionId, req.params.id),
+              eq(schema.votes.voterId, member.id)
+            ),
+          });
+        }
+      }
+
+      const data = {
+        ...election,
+        hasVoted: !!vote,
+        votedCandidateId: vote?.candidateId || null,
+        candidates: election.candidates.map((candidate) => ({
+          ...candidate,
+          voteCount: candidate.votes || 0,
+        })),
+      };
+
+      res.json({ success: true, data });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch election" });
     }
@@ -3843,6 +4406,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/member-overview", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const [pointsRow] = await db
+        .select({
+          total: sql<number>`COALESCE(SUM(${schema.userPoints.amount}), 0)`,
+        })
+        .from(schema.userPoints)
+        .where(eq(schema.userPoints.memberId, member.id));
+
+      const [badgesRow] = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(schema.userBadges)
+        .where(eq(schema.userBadges.memberId, member.id));
+
+      const [eventsRow] = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(schema.eventAttendance)
+        .where(eq(schema.eventAttendance.memberId, member.id));
+
+      const [tasksRow] = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(schema.taskCompletions)
+        .where(
+          and(
+            eq(schema.taskCompletions.memberId, member.id),
+            eq(schema.taskCompletions.status, "approved")
+          )
+        );
+
+      const [membersRow] = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(schema.members);
+
+      const leaderboard = await db
+        .select({
+          memberId: schema.members.id,
+          totalPoints: sql<number>`COALESCE(SUM(${schema.userPoints.amount}), 0)`,
+        })
+        .from(schema.members)
+        .leftJoin(schema.userPoints, eq(schema.userPoints.memberId, schema.members.id))
+        .groupBy(schema.members.id)
+        .orderBy(desc(sql`COALESCE(SUM(${schema.userPoints.amount}), 0)`));
+
+      const rank = leaderboard.findIndex((entry) => entry.memberId === member.id) + 1;
+
+      return res.json({
+        success: true,
+        data: {
+          points: Number(pointsRow?.total) || 0,
+          badges: Number(badgesRow?.total) || 0,
+          eventsAttended: Number(eventsRow?.total) || 0,
+          tasksCompleted: Number(tasksRow?.total) || 0,
+          rank: rank > 0 ? rank : undefined,
+          totalMembers: Number(membersRow?.total) || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Member overview analytics error:", error);
+      return res.status(500).json({ success: false, error: "Failed to fetch member overview" });
+    }
+  });
+
+  app.get("/api/micro-tasks", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id),
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+      const tasks = await db.query.microTasks.findMany({
+        orderBy: desc(schema.microTasks.createdAt),
+      });
+
+      const completions = await db.query.taskCompletions.findMany({
+        where: and(
+          eq(schema.taskCompletions.memberId, member.id),
+          eq(schema.taskCompletions.taskType, "micro")
+        ),
+      });
+
+      const completionMap = new Map(completions.map((completion) => [completion.taskId, completion]));
+      const tasksWithCompletion = tasks.map((task) => ({
+        ...task,
+        completed: completionMap.has(task.id),
+        completion: completionMap.get(task.id),
+      }));
+
+      const data = limit && limit > 0 ? tasksWithCompletion.slice(0, limit) : tasksWithCompletion;
+      return res.json({ success: true, data });
+    } catch (error) {
+      console.error("Fetch micro-tasks error:", error);
+      return res.status(500).json({ success: false, error: "Failed to fetch micro-tasks" });
+    }
+  });
+
   app.get("/api/incidents", async (req: Request, res: Response) => {
     try {
       const { severity } = req.query;
@@ -4050,11 +4728,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/news", async (req: Request, res: Response) => {
     try {
+      const categoryQuery = typeof req.query.category === "string" ? req.query.category : undefined;
+      const normalizedCategory = categoryQuery?.trim().toLowerCase();
+      const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+
       const posts = await db.query.newsPosts.findMany({
         orderBy: desc(schema.newsPosts.publishedAt),
         with: { author: true }
       });
-      res.json({ success: true, data: posts });
+
+      const filteredPosts = normalizedCategory && normalizedCategory !== "all"
+        ? posts.filter((post) => {
+            const normalizedPostCategory = post.category.trim().toLowerCase().replace(/\s+/g, "_");
+            const categoryAliases: Record<string, string[]> = {
+              party_news: ["party_news", "news", "party"],
+              policy_updates: ["policy_updates", "policy", "policy_update"],
+              events: ["events", "event"],
+              opinion: ["opinion", "editorial"],
+            };
+            const acceptedCategories = categoryAliases[normalizedCategory] || [normalizedCategory];
+            return acceptedCategories.includes(normalizedPostCategory);
+          })
+        : posts;
+
+      const selectedPosts = limit && limit > 0 ? filteredPosts.slice(0, limit) : filteredPosts;
+
+      const data = selectedPosts.map((post) => ({
+        ...post,
+        author: post.author
+          ? (() => {
+              const author = Array.isArray(post.author) ? post.author[0] : post.author;
+              if (!author) return null;
+              const { password: _authorPassword, ...safeAuthor } = author;
+              return safeAuthor;
+            })()
+          : null,
+        summary: post.excerpt,
+        createdAt: post.publishedAt,
+        likesCount: post.likes || 0,
+        commentsCount: post.comments || 0,
+        isFeatured: false,
+        content: post.content || post.excerpt,
+      }));
+
+      res.json({ success: true, data });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch news" });
     }
@@ -4076,7 +4793,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         with: { member: { with: { user: true } } }
       });
 
-      res.json({ success: true, data: { ...post, engagement } });
+      const author = Array.isArray(post.author) ? post.author[0] : post.author;
+      const safeAuthor = author ? (() => {
+        const { password: _authorPassword, ...authorWithoutPassword } = author;
+        return authorWithoutPassword;
+      })() : null;
+
+      res.json({ success: true, data: { ...post, author: safeAuthor, engagement } });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch post" });
     }

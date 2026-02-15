@@ -3,6 +3,12 @@
     "name": "APC Connect",
     "slug": "apc-connect",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -17,6 +23,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "1",
       "bundleIdentifier": "org.apcng.APCConnect",
       "infoPlist": {
         "NSCameraUsageDescription": "This app requires camera access to upload photos for events and verification.",
@@ -25,6 +32,7 @@
       }
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00A86B"
@@ -34,9 +42,7 @@
         "CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -45,13 +51,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://9ddda6b6-7776-4943-9023-83e76d78b8b0-00-3863p3895q6c0.riker.replit.dev",
+      "apiUrl": "http://localhost:5000",
       "router": {
         "origin": false
       },

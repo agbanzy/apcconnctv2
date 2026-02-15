@@ -1,8 +1,8 @@
-import { Text as RNText, StyleSheet, TextProps as RNTextProps, TextStyle } from 'react-native';
+import { Text as RNText, StyleSheet, TextProps as RNTextProps, StyleProp, TextStyle } from 'react-native';
 
 interface TextProps extends RNTextProps {
   variant?: 'h1' | 'h2' | 'h3' | 'body' | 'caption';
-  style?: TextStyle;
+  style?: StyleProp<TextStyle>;
 }
 
 export function Text({ variant = 'body', style, ...props }: TextProps) {

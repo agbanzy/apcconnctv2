@@ -1,19 +1,3 @@
-// Re-export types from shared schema
-// This allows the mobile app to use the same types as the backend
-export type {
-  User,
-  Member,
-  Election,
-  Candidate,
-  Event,
-  VolunteerTask,
-  Quiz,
-  IssueCampaign,
-  Badge,
-  Achievement,
-  MicroTask,
-} from '@shared/schema';
-
 // Mobile-specific types
 export interface TabBarIconProps {
   focused: boolean;
