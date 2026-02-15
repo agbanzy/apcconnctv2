@@ -1,0 +1,42 @@
+~/workspace$ git status
+On branch main
+nothing to commit, working tree clean
+~/workspace$ git log --oneline -5
+764a951 (HEAD -> main, gitsafe-backup/main) Update ward data seeding to include all states and LGAs
+fad1cd3 Add script to populate ward and LGA data from PDF documents
+eb041fc Add new task categories and scope options to the engagement platform
+9c91c5b Improve data fetching, query handling, and user experience across the platform
+376263f Expand map to show new engagement data and filter content by location
+~/workspace$ git remote add mobile-repo https://$GITHUB_PERSONAL_ACCESS_TOKEN@github.com/agbanzy/apcconnctv2.git
+~/workspace$ git fetch mobile-repo main
+remote: Enumerating objects: 63, done.
+remote: Counting objects: 100% (63/63), done.
+remote: Compressing objects: 100% (23/23), done.
+remote: Total 45 (delta 29), reused 38 (delta 22), pack-reused 0 (from 0)
+Unpacking objects: 100% (45/45), 19.43 KiB | 1.29 MiB/s, done.
+From https://github.com/agbanzy/apcconnctv2
+ * branch            main       -> FETCH_HEAD
+ * [new branch]      main       -> mobile-repo/main
+~/workspace$ git merge mobile-repo/main --allow-unrelated-histories
+Merge made by the 'ort' strategy.
+ mobile/app/(auth)/register.tsx      |   3 +
+ mobile/app/(tabs)/_layout.tsx       |  65 ++-
+ mobile/app/(tabs)/elections.tsx     |  13 +-
+ mobile/app/(tabs)/events.tsx        |  12 +-
+ mobile/app/(tabs)/index.tsx         |  34 +-
+ mobile/app/(tabs)/news.tsx          | 578 ++++++++++++++++++----
+ mobile/app/(tabs)/profile.tsx       |   8 +-
+ mobile/app/(tabs)/rewards.tsx       | 804 +++++++++++++++++++++++++++++++
+ mobile/app/_layout.tsx              |   1 +
+ mobile/app/onboarding.tsx           | 282 +++++++++++
+ mobile/components/AuthGuard.tsx     |  46 +-
+ mobile/components/ui/EmptyState.tsx |  41 ++
+ mobile/components/ui/ErrorState.tsx |  43 ++
+ mobile/package-lock.json            |  12 -
+ mobile/package.json                 |   1 -
+ 15 files changed, 1785 insertions(+), 158 deletions(-)
+ create mode 100644 mobile/app/(tabs)/rewards.tsx
+ create mode 100644 mobile/app/onboarding.tsx
+ create mode 100644 mobile/components/ui/EmptyState.tsx
+ create mode 100644 mobile/components/ui/ErrorState.tsx
+~/workspace$ 
