@@ -972,6 +972,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/state/:stateId/lgas", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.params;
+
+      const lgaStats = await db.execute(sql`
+        SELECT 
+          l.id,
+          l.name,
+          l.code,
+          COALESCE(member_counts.member_count, 0)::int AS "memberCount",
+          COALESCE(member_counts.active_count, 0)::int AS "activeMembers",
+          COALESCE(ward_counts.ward_count, 0)::int AS "wardCount",
+          COALESCE(pu_counts.pu_count, 0)::int AS "pollingUnitsCount",
+          COALESCE(event_counts.event_count, 0)::int AS "eventsCount"
+        FROM lgas l
+        LEFT JOIN (
+          SELECT w.lga_id,
+            COUNT(DISTINCT m.id) AS member_count,
+            COUNT(DISTINCT CASE WHEN m.status = 'active' THEN m.id END) AS active_count
+          FROM wards w
+          LEFT JOIN members m ON m.ward_id = w.id
+          GROUP BY w.lga_id
+        ) member_counts ON member_counts.lga_id = l.id
+        LEFT JOIN (
+          SELECT lga_id, COUNT(*) AS ward_count
+          FROM wards
+          GROUP BY lga_id
+        ) ward_counts ON ward_counts.lga_id = l.id
+        LEFT JOIN (
+          SELECT w.lga_id, COUNT(DISTINCT pu.id) AS pu_count
+          FROM wards w
+          LEFT JOIN polling_units pu ON pu.ward_id = w.id
+          GROUP BY w.lga_id
+        ) pu_counts ON pu_counts.lga_id = l.id
+        LEFT JOIN (
+          SELECT e.lga_id, COUNT(*) AS event_count
+          FROM events e
+          WHERE e.lga_id IS NOT NULL
+          GROUP BY e.lga_id
+        ) event_counts ON event_counts.lga_id = l.id
+        WHERE l.state_id = ${stateId}
+        ORDER BY l.name ASC
+      `);
+
+      res.json({ success: true, data: lgaStats.rows });
+    } catch (error) {
+      console.error("State LGA analytics error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch LGA analytics" });
+    }
+  });
+
   app.get("/api/locations/lgas/:id/wards", async (req: Request, res: Response) => {
     try {
       const wards = await db.query.wards.findMany({
