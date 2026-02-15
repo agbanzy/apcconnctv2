@@ -3094,7 +3094,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(schema.eventRsvps.memberId, member.id),
               eq(schema.eventRsvps.status, "confirmed")
             ),
-          });
+          }) ?? null;
         }
       }
 
@@ -3582,7 +3582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(schema.votes.electionId, req.params.id),
               eq(schema.votes.voterId, member.id)
             ),
-          });
+          }) ?? null;
         }
       }
 
