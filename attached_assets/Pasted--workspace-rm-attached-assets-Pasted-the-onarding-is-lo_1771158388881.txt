@@ -1,0 +1,45 @@
+~/workspace$ rm attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt
+~/workspace$ git add -A && git commit --amend --no-edit
+[main 80d04f3] Remove exposed personal access token from commit history
+ Author: fuelgo9ja <40789889-fuelgo9ja@users.noreply.replit.com>
+ Date: Sun Feb 15 12:25:09 2026 +0000
+ 2 files changed, 39 insertions(+), 161 deletions(-)
+ create mode 100644 attached_assets/Pasted--workspace-git-remote-set-url-origin-https-GITHUB-PERSO_1771158269011.txt
+ delete mode 100644 attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt
+~/workspace$ git push origin main --force
+Enumerating objects: 146, done.
+Counting objects: 100% (115/115), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (82/82), done.
+Writing objects: 100% (82/82), 700.62 KiB | 20.02 MiB/s, done.
+Total 82 (delta 59), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (59/59), completed with 30 local objects.
+remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: 
+remote: - GITHUB PUSH PROTECTION
+remote:   —————————————————————————————————————————
+remote:     Resolve the following violations before pushing again
+remote: 
+remote:     - Push cannot contain secrets
+remote: 
+remote:     
+remote:      (?) Learn how to resolve a blocked push
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push
+remote:     
+remote:     
+remote:       —— GitHub Personal Access Token ——————————————————————
+remote:        locations:
+remote:          - commit: d10f751a14691f4d23d4ebfae69c8c2772d869f0
+remote:            path: attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt:128
+remote:          - commit: d10f751a14691f4d23d4ebfae69c8c2772d869f0
+remote:            path: attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt:129
+remote:     
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.
+remote:        https://github.com/agbanzy/apcconnctv2/security/secret-scanning/unblock-secret/39hpfCIPsvrdf8OrQls3aWfZ3WY
+remote:     
+remote: 
+remote: 
+To https://github.com/agbanzy/apcconnctv2.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/agbanzy/apcconnctv2.git'
+~/workspace$ 

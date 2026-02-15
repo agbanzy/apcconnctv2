@@ -1,0 +1,39 @@
+~/workspace$ git remote set-url origin https://$GITHUB_PERSONAL_ACCESS_TOKEN@github.com/agbanzy/apcconnctv2.git
+git remote remove mobile-repo
+~/workspace$ git push origin main
+Enumerating objects: 142, done.
+Counting objects: 100% (111/111), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (78/78), done.
+Writing objects: 100% (78/78), 699.08 KiB | 23.30 MiB/s, done.
+Total 78 (delta 57), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (57/57), completed with 30 local objects.
+remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: 
+remote: - GITHUB PUSH PROTECTION
+remote:   —————————————————————————————————————————
+remote:     Resolve the following violations before pushing again
+remote: 
+remote:     - Push cannot contain secrets
+remote: 
+remote:     
+remote:      (?) Learn how to resolve a blocked push
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push
+remote:     
+remote:     
+remote:       —— GitHub Personal Access Token ——————————————————————
+remote:        locations:
+remote:          - commit: d10f751a14691f4d23d4ebfae69c8c2772d869f0
+remote:            path: attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt:128
+remote:          - commit: d10f751a14691f4d23d4ebfae69c8c2772d869f0
+remote:            path: attached_assets/Pasted-the-onarding-is-looped-returning-me-to-the-first-when-i_1771158081111.txt:129
+remote:     
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.
+remote:        https://github.com/agbanzy/apcconnctv2/security/secret-scanning/unblock-secret/39hpfCIPsvrdf8OrQls3aWfZ3WY
+remote:     
+remote: 
+remote: 
+To https://github.com/agbanzy/apcconnctv2.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/agbanzy/apcconnctv2.git'
+~/workspace$ 
