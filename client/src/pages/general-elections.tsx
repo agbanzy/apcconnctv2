@@ -96,7 +96,7 @@ export default function GeneralElections() {
     success: boolean;
     data: ResultSummary;
   }>({
-    queryKey: [`/api/general-elections/${selectedElection}/results/summary`],
+    queryKey: ["/api/general-elections", selectedElection, "results", "summary"],
     enabled: !!selectedElection,
   });
 
@@ -104,7 +104,7 @@ export default function GeneralElections() {
     success: boolean;
     data: StateResult[];
   }>({
-    queryKey: [`/api/general-elections/${selectedElection}/results/by-state`],
+    queryKey: ["/api/general-elections", selectedElection, "results", "by-state"],
     enabled: !!selectedElection,
   });
 
@@ -112,7 +112,7 @@ export default function GeneralElections() {
     success: boolean;
     data: LiveFeedItem[];
   }>({
-    queryKey: [`/api/general-elections/${selectedElection}/results/live-feed`],
+    queryKey: ["/api/general-elections", selectedElection, "results", "live-feed"],
     enabled: !!selectedElection,
   });
 
@@ -120,9 +120,9 @@ export default function GeneralElections() {
     const socket = io();
     socket.on("general-election:result-updated", () => {
       if (selectedElection) {
-        queryClient.invalidateQueries({ queryKey: [`/api/general-elections/${selectedElection}/results/summary`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/general-elections/${selectedElection}/results/by-state`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/general-elections/${selectedElection}/results/live-feed`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/general-elections", selectedElection, "results", "summary"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/general-elections", selectedElection, "results", "by-state"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/general-elections", selectedElection, "results", "live-feed"] });
       }
     });
     socket.on("general-election:updated", () => {

@@ -10,19 +10,34 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { User, MapPin, Phone, Mail, QrCode, CreditCard, Camera, Upload } from "lucide-react";
 import { DigitalIdCard } from "@/components/digital-id-card";
 import { ObjectUploader } from "@/components/object-uploader";
 
 export default function Profile() {
-  const { user, member } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+
+  const { data: memberData } = useQuery<{ success: boolean; data: any }>({
+    queryKey: ["/api/members/me"],
+  });
+  const member = memberData?.data;
+
   const [formData, setFormData] = useState({
     phone: user?.phone || "",
     nin: member?.nin || "",
   });
+
+  useEffect(() => {
+    if (member && !isEditing) {
+      setFormData({
+        phone: user?.phone || "",
+        nin: member.nin || "",
+      });
+    }
+  }, [member, user, isEditing]);
 
   const { data: qrCodeData, isLoading: isLoadingQR } = useQuery<{ success: boolean; data: { qrCode: string } }>({
     queryKey: ["/api/members", member?.id, "qr-code"],
@@ -94,7 +109,7 @@ export default function Profile() {
     updateMutation.mutate(formData);
   };
 
-  if (!user || !member) {
+  if (!user || !memberData?.data) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />

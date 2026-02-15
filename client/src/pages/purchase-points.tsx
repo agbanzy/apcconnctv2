@@ -40,7 +40,7 @@ export default function PurchasePointsPage() {
   const memberId = memberData?.data?.id;
 
   const { data: balanceData } = useQuery<{ success: boolean; balance: number }>({
-    queryKey: [`/api/points/balance/${memberId}`],
+    queryKey: ["/api/points/balance", memberId],
     enabled: !!memberId,
   });
 
@@ -90,9 +90,9 @@ export default function PurchasePointsPage() {
       return await response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/transactions/${memberId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/purchases/${memberId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/transactions", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/purchases", memberId] });
       
       toast({
         title: "🎉 Purchase Successful!",

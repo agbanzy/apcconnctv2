@@ -32,10 +32,15 @@ export const getQueryFn: <T>(options: {
     let url = queryKey[0] as string;
     
     if (queryKey.length > 1) {
-      const params = queryKey[queryKey.length - 1];
-      if (typeof params === 'object' && params !== null && !Array.isArray(params)) {
+      const lastParam = queryKey[queryKey.length - 1];
+      const hasObjectParams = typeof lastParam === 'object' && lastParam !== null && !Array.isArray(lastParam);
+      
+      const pathSegments = hasObjectParams ? queryKey.slice(0, -1) : queryKey;
+      url = pathSegments.filter(key => key !== undefined && key !== null).map(String).join("/");
+      
+      if (hasObjectParams) {
         const searchParams = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
+        Object.entries(lastParam as Record<string, unknown>).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
             searchParams.append(key, String(value));
           }
@@ -44,8 +49,6 @@ export const getQueryFn: <T>(options: {
         if (queryString) {
           url += `?${queryString}`;
         }
-      } else {
-        url = queryKey.filter(key => typeof key === 'string').join("/");
       }
     }
     

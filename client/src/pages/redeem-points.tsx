@@ -39,31 +39,23 @@ export default function RedeemPoints() {
   const [cashPoints, setCashPoints] = useState("");
   const [isAccountVerified, setIsAccountVerified] = useState(false);
 
-  // Fetch user's member profile for balance
   const { data: memberData } = useQuery<any>({
     queryKey: ["/api/members/me"],
   });
 
-  // Fetch conversion settings
+  const memberId = memberData?.data?.id;
+
   const { data: settingsData } = useQuery<any>({
     queryKey: ["/api/points/conversion/settings"],
   });
 
-  // Fetch networks
   const { data: networksData } = useQuery<any>({
     queryKey: ["/api/points/conversion/networks"],
   });
 
-  // Fetch user's point balance
   const { data: balanceData } = useQuery<any>({
-    queryKey: ["/api/points/balance", memberData?.id],
-    queryFn: async () => {
-      if (!memberData?.id) return null;
-      const res = await fetch(`/api/points/balance/${memberData.id}`);
-      if (!res.ok) throw new Error("Failed to fetch balance");
-      return res.json();
-    },
-    enabled: !!memberData?.id,
+    queryKey: ["/api/points/balance", memberId],
+    enabled: !!memberId,
   });
 
   const airtimeSettings = settingsData?.settings?.find((s: any) => s.productType === "airtime");

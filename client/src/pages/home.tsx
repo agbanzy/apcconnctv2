@@ -63,7 +63,7 @@ export default function Home() {
     success: boolean;
     balance: number;
   }>({
-    queryKey: [`/api/points/balance/${memberId}`],
+    queryKey: ["/api/points/balance", memberId],
     enabled: !!memberId,
     retry: false,
   });
@@ -90,11 +90,27 @@ export default function Home() {
     retry: false,
   });
 
+  const { data: memberOverviewData } = useQuery<{
+    success: boolean;
+    data: {
+      points: number;
+      badges: number;
+      eventsAttended: number;
+      tasksCompleted: number;
+      rank: number;
+      totalMembers: number;
+    };
+  }>({
+    queryKey: ["/api/analytics/member-overview"],
+    enabled: !!memberId,
+    retry: false,
+  });
+
   const { data: transactionsData } = useQuery<{
     success: boolean;
     data: any[];
   }>({
-    queryKey: [`/api/points/transactions/${memberId}`, { limit: 3, offset: 0 }],
+    queryKey: ["/api/points/transactions", memberId, { limit: 3, offset: 0 }],
     enabled: !!memberId,
     retry: false,
   });
@@ -262,7 +278,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Tasks Completed</p>
-                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-2xl font-bold" data-testid="text-tasks-completed">{memberOverviewData?.data?.tasksCompleted || 0}</p>
                 </div>
                 <Target className="h-8 w-8 text-primary" />
               </div>
@@ -273,7 +289,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Events Attended</p>
-                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-2xl font-bold" data-testid="text-events-attended">{memberOverviewData?.data?.eventsAttended || 0}</p>
                 </div>
                 <Calendar className="h-8 w-8 text-primary" />
               </div>

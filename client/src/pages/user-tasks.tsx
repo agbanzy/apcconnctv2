@@ -45,7 +45,7 @@ export default function UserTasksPage() {
   const memberId = memberData?.data?.id;
 
   const { data: balanceData } = useQuery<{ success: boolean; balance: number }>({
-    queryKey: [`/api/points/balance/${memberId}`],
+    queryKey: ["/api/points/balance", memberId],
     enabled: !!memberId,
   });
 
@@ -80,26 +80,22 @@ export default function UserTasksPage() {
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: CreateTaskFormData) => {
-      const response = await apiRequest<{ success: boolean; data: any; message: string }>({
-        url: "/api/user-tasks/create-and-fund",
-        method: "POST",
-        data: {
-          ...data,
-          skills: data.skills.split(",").map((s) => s.trim()),
-          fundingPoints: data.pointsPerCompletion * (data.maxCompletions || 1),
-        },
+      const response = await apiRequest("POST", "/api/user-tasks/create-and-fund", {
+        ...data,
+        skills: data.skills.split(",").map((s) => s.trim()),
+        fundingPoints: data.pointsPerCompletion * (data.maxCompletions || 1),
       });
-      return response;
+      return await response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user-tasks/my-created"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user-tasks/available"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/transactions/${memberId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/transactions", memberId] });
       
       toast({
-        title: "✅ Task Created Successfully!",
-        description: data.message,
+        title: "Task Created Successfully!",
+        description: data.message || "Your task has been created",
       });
       
       setIsCreateModalOpen(false);
@@ -116,20 +112,17 @@ export default function UserTasksPage() {
 
   const cancelTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiRequest<{ success: boolean; data: any; message: string }>({
-        url: `/api/user-tasks/${taskId}/cancel`,
-        method: "POST",
-      });
-      return response;
+      const response = await apiRequest("POST", `/api/user-tasks/${taskId}/cancel`);
+      return await response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user-tasks/my-created"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/transactions/${memberId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/transactions", memberId] });
       
       toast({
         title: "Task Cancelled",
-        description: data.message,
+        description: data.message || "Task has been cancelled",
       });
     },
     onError: (error: any) => {

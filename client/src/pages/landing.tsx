@@ -188,7 +188,6 @@ export default function Landing() {
     queryKey: ["/api/locations/states"],
   });
 
-  // Fetch state-specific stats when state is selected
   const { data: stateStatsData, isLoading: isLoadingStateStats } = useQuery<{ success: boolean; data: StateStats }>({
     queryKey: ["/api/analytics/state-stats", selectedState],
     enabled: !!selectedState,

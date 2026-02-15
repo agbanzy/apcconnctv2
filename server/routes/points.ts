@@ -535,30 +535,44 @@ router.get("/conversion/settings", async (req: Request, res: Response) => {
       where: eq(schema.pointConversionSettings.isActive, true),
     });
 
-    // Default settings if none exist
+    const defaultSettings = [
+      {
+        productType: "airtime",
+        baseRate: "1.0",
+        minPoints: 100,
+        maxPoints: 10000,
+        isActive: true,
+      },
+      {
+        productType: "data",
+        baseRate: "1.0",
+        minPoints: 100,
+        maxPoints: 10000,
+        isActive: true,
+      },
+      {
+        productType: "cash",
+        baseRate: "1.0",
+        minPoints: 500,
+        maxPoints: 50000,
+        isActive: true,
+      },
+    ];
+
     if (settings.length === 0) {
       return res.json({
         success: true,
-        settings: [
-          {
-            productType: "airtime",
-            baseRate: "1.0", // 1 point = 1 NGN
-            minPoints: 100,
-            maxPoints: 10000,
-            isActive: true,
-          },
-          {
-            productType: "data",
-            baseRate: "1.0",
-            minPoints: 100,
-            maxPoints: 10000,
-            isActive: true,
-          },
-        ],
+        settings: defaultSettings,
       });
     }
 
-    res.json({ success: true, settings });
+    const existingTypes = settings.map((s: any) => s.productType);
+    const merged = [
+      ...settings,
+      ...defaultSettings.filter(d => !existingTypes.includes(d.productType)),
+    ];
+
+    res.json({ success: true, settings: merged });
   } catch (error: any) {
     console.error("Get conversion settings error:", error);
     res.status(500).json({ success: false, error: error.message || "Failed to get conversion settings" });

@@ -31,7 +31,7 @@ export default function PointsPage() {
     success: boolean;
     balance: number;
   }>({
-    queryKey: [`/api/points/balance/${memberId}`],
+    queryKey: ["/api/points/balance", memberId],
     enabled: !!memberId,
   });
 
@@ -41,7 +41,7 @@ export default function PointsPage() {
     total: number;
   }>({
     queryKey: [
-      `/api/points/transactions/${memberId}`,
+      "/api/points/transactions", memberId,
       { page, pageSize, transactionType, source },
     ],
     enabled: !!memberId,
@@ -51,7 +51,7 @@ export default function PointsPage() {
     success: boolean;
     purchases: any[];
   }>({
-    queryKey: [`/api/points/purchases/${memberId}`],
+    queryKey: ["/api/points/purchases", memberId],
     enabled: !!memberId,
   });
 

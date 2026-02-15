@@ -63,7 +63,7 @@ export default function RewardsPage() {
   const memberId = memberData?.data?.id;
 
   const { data: myPoints, isLoading: pointsLoading } = useQuery({
-    queryKey: [`/api/points/balance/${memberId}`],
+    queryKey: ["/api/points/balance", memberId],
     enabled: !!memberId,
   });
 
@@ -112,7 +112,7 @@ export default function RewardsPage() {
         description: data?.data?.message || "Points redeemed successfully",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/redemptions"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
       setShowConfirmDialog(false);
       setPhoneNumber("");
       setAmount(100);
@@ -146,7 +146,7 @@ export default function RewardsPage() {
           description: `You've earned ${data.data.length} new badge(s)!`,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/badges/my-badges"] });
-        queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
       }
     }
   });
@@ -160,7 +160,7 @@ export default function RewardsPage() {
           description: `You've unlocked ${data.data.length} new achievement(s)!`,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/achievements/my-achievements"] });
-        queryClient.invalidateQueries({ queryKey: [`/api/points/balance/${memberId}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/points/balance", memberId] });
       }
     }
   });
