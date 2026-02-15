@@ -2991,8 +2991,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const categoryQuery = typeof req.query.category === "string" ? req.query.category : undefined;
       const normalizedCategory = categoryQuery?.trim().toLowerCase();
       const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+      const stateId = typeof req.query.stateId === "string" ? req.query.stateId : undefined;
+      const lgaId = typeof req.query.lgaId === "string" ? req.query.lgaId : undefined;
+      const wardId = typeof req.query.wardId === "string" ? req.query.wardId : undefined;
+
+      const locationConditions: any[] = [];
+      if (stateId) locationConditions.push(eq(schema.events.stateId, stateId));
+      if (lgaId) locationConditions.push(eq(schema.events.lgaId, lgaId));
+      if (wardId) locationConditions.push(eq(schema.events.wardId, wardId));
 
       const allEvents = await db.query.events.findMany({
+        where: locationConditions.length > 0 ? and(...locationConditions) : undefined,
         orderBy: desc(schema.events.date),
       });
 
@@ -4169,20 +4178,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/campaigns", async (req: Request, res: Response) => {
     try {
       const { status } = req.query;
-      let campaigns;
+      const stateId = typeof req.query.stateId === "string" ? req.query.stateId : undefined;
+      const lgaId = typeof req.query.lgaId === "string" ? req.query.lgaId : undefined;
+      const wardId = typeof req.query.wardId === "string" ? req.query.wardId : undefined;
 
-      if (status) {
-        campaigns = await db.query.issueCampaigns.findMany({
-          where: eq(schema.issueCampaigns.status, status as any),
-          orderBy: desc(schema.issueCampaigns.createdAt),
-          with: { author: { with: { user: true } } }
-        });
-      } else {
-        campaigns = await db.query.issueCampaigns.findMany({
-          orderBy: desc(schema.issueCampaigns.createdAt),
-          with: { author: { with: { user: true } } }
-        });
-      }
+      const conditions: any[] = [];
+      if (status) conditions.push(eq(schema.issueCampaigns.status, status as any));
+      if (stateId) conditions.push(eq(schema.issueCampaigns.stateId, stateId));
+      if (lgaId) conditions.push(eq(schema.issueCampaigns.lgaId, lgaId));
+      if (wardId) conditions.push(eq(schema.issueCampaigns.wardId, wardId));
+
+      const campaigns = await db.query.issueCampaigns.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        orderBy: desc(schema.issueCampaigns.createdAt),
+        with: { author: { with: { user: true } } }
+      });
 
       res.json({ success: true, data: campaigns });
     } catch (error) {
@@ -4225,8 +4235,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ success: false, error: "Member not found" });
       }
 
+      let locationData: { stateId?: string; lgaId?: string; wardId?: string } = {};
+      if (!req.body.stateId && !req.body.lgaId && !req.body.wardId && member.wardId) {
+        const ward = await db.query.wards.findFirst({
+          where: eq(schema.wards.id, member.wardId),
+          with: { lga: true }
+        });
+        if (ward) {
+          locationData = {
+            wardId: ward.id,
+            lgaId: ward.lgaId,
+            stateId: ward.lga?.stateId
+          };
+        }
+      }
+
       const campaignData = schema.insertCampaignSchema.parse({
         ...req.body,
+        ...locationData,
         authorId: member.id
       });
 
@@ -4731,8 +4757,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const categoryQuery = typeof req.query.category === "string" ? req.query.category : undefined;
       const normalizedCategory = categoryQuery?.trim().toLowerCase();
       const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+      const stateId = typeof req.query.stateId === "string" ? req.query.stateId : undefined;
+      const lgaId = typeof req.query.lgaId === "string" ? req.query.lgaId : undefined;
+      const wardId = typeof req.query.wardId === "string" ? req.query.wardId : undefined;
+
+      const locationConditions: any[] = [];
+      if (stateId) locationConditions.push(eq(schema.newsPosts.stateId, stateId));
+      if (lgaId) locationConditions.push(eq(schema.newsPosts.lgaId, lgaId));
+      if (wardId) locationConditions.push(eq(schema.newsPosts.wardId, wardId));
 
       const posts = await db.query.newsPosts.findMany({
+        where: locationConditions.length > 0 ? and(...locationConditions) : undefined,
         orderBy: desc(schema.newsPosts.publishedAt),
         with: { author: true }
       });
@@ -5362,6 +5397,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sql`${schema.members.id} IS NOT NULL`
           ));
 
+        const pollingUnitsCount = await db
+          .select({ count: sql<number>`count(distinct ${schema.pollingUnits.id})` })
+          .from(schema.pollingUnits)
+          .leftJoin(schema.wards, eq(schema.pollingUnits.wardId, schema.wards.id))
+          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
+          .where(eq(schema.lgas.stateId, state.id));
+
+        const newsCount = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.newsPosts)
+          .where(eq(schema.newsPosts.stateId, state.id));
+
+        const tasksCount = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.volunteerTasks)
+          .where(eq(schema.volunteerTasks.stateId, state.id));
+
         return {
           stateId: state.id,
           name: state.name,
@@ -5371,7 +5423,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           upcomingEvents: Number(upcomingEventsByState[0]?.count) || 0,
           activeCampaigns: Number(activeCampaignsByState[0]?.count) || 0,
           lgasCovered: Number(lgasCovered[0]?.count) || 0,
-          wardsCovered: Number(wardsCovered[0]?.count) || 0
+          wardsCovered: Number(wardsCovered[0]?.count) || 0,
+          pollingUnitsCount: Number(pollingUnitsCount[0]?.count) || 0,
+          newsCount: Number(newsCount[0]?.count) || 0,
+          tasksCount: Number(tasksCount[0]?.count) || 0
         };
       }));
 
@@ -8324,9 +8379,17 @@ Be friendly, informative, and politically neutral when discussing governance. En
   app.get("/api/tasks/volunteer", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { status, location, category } = req.query;
-      let query = db.query.volunteerTasks;
-      
-      const tasks = await query.findMany({
+      const stateId = typeof req.query.stateId === "string" ? req.query.stateId : undefined;
+      const lgaId = typeof req.query.lgaId === "string" ? req.query.lgaId : undefined;
+      const wardId = typeof req.query.wardId === "string" ? req.query.wardId : undefined;
+
+      const locationConditions: any[] = [];
+      if (stateId) locationConditions.push(eq(schema.volunteerTasks.stateId, stateId));
+      if (lgaId) locationConditions.push(eq(schema.volunteerTasks.lgaId, lgaId));
+      if (wardId) locationConditions.push(eq(schema.volunteerTasks.wardId, wardId));
+
+      const tasks = await db.query.volunteerTasks.findMany({
+        where: locationConditions.length > 0 ? and(...locationConditions) : undefined,
         orderBy: desc(schema.volunteerTasks.createdAt)
       });
 

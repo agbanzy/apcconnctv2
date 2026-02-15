@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Calendar, Megaphone, TrendingUp, MapPin, Award, Activity, X } from "lucide-react";
+import { Users, Calendar, Megaphone, TrendingUp, MapPin, Award, X, Vote, Newspaper, ClipboardList } from "lucide-react";
 import { NIGERIA_STATE_PATHS, NIGERIA_MAP_VIEWBOX, STATE_NAME_ALIASES } from "@/lib/nigeria-svg-paths";
 
 interface StateData {
@@ -17,16 +17,19 @@ interface StateData {
   activeCampaigns: number;
   lgasCovered: number;
   wardsCovered: number;
+  pollingUnitsCount: number;
+  newsCount: number;
+  tasksCount: number;
 }
 
 interface NigeriaMapProps {
-  mode?: 'members' | 'events' | 'campaigns' | 'activity';
+  mode?: 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
   onStateClick?: (stateId: string, stateName: string) => void;
   highlightStates?: string[];
   showLegend?: boolean;
 }
 
-type MapMode = 'members' | 'events' | 'campaigns' | 'activity';
+type MapMode = 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
 
 function findStateData(states: StateData[] | undefined, svgName: string): StateData | undefined {
   if (!states) return undefined;
@@ -50,33 +53,32 @@ export function NigeriaMap({
   });
   const statesData = rawData?.data?.states;
 
+  const getModeValue = useCallback((s: StateData): number => {
+    switch (selectedMode) {
+      case 'members': return s.memberCount;
+      case 'events': return s.upcomingEvents;
+      case 'campaigns': return s.activeCampaigns;
+      case 'polling': return s.pollingUnitsCount || 0;
+      case 'news': return s.newsCount || 0;
+      case 'tasks': return s.tasksCount || 0;
+      case 'activity': return s.memberCount + s.upcomingEvents + s.activeCampaigns + (s.tasksCount || 0);
+      default: return 0;
+    }
+  }, [selectedMode]);
+
   const maxValue = useMemo(() => {
     if (!statesData?.length) return 1;
-    return Math.max(1, ...statesData.map(s => {
-      switch (selectedMode) {
-        case 'members': return s.memberCount;
-        case 'events': return s.upcomingEvents;
-        case 'campaigns': return s.activeCampaigns;
-        case 'activity': return s.memberCount + s.upcomingEvents + s.activeCampaigns;
-        default: return 0;
-      }
-    }));
-  }, [statesData, selectedMode]);
+    return Math.max(1, ...statesData.map(getModeValue));
+  }, [statesData, getModeValue]);
 
   const getColorIntensity = useCallback((stateData: StateData | undefined): string => {
     if (!stateData) return 'hsl(220, 13%, 88%)';
-    let value = 0;
-    switch (selectedMode) {
-      case 'members': value = stateData.memberCount; break;
-      case 'events': value = stateData.upcomingEvents; break;
-      case 'campaigns': value = stateData.activeCampaigns; break;
-      case 'activity': value = stateData.memberCount + stateData.upcomingEvents + stateData.activeCampaigns; break;
-    }
+    const value = getModeValue(stateData);
     if (value === 0) return 'hsl(220, 13%, 88%)';
     const intensity = Math.min(value / maxValue, 1);
     const lightness = 65 - (intensity * 30);
     return `hsl(142, 65%, ${lightness}%)`;
-  }, [selectedMode, maxValue]);
+  }, [getModeValue, maxValue]);
 
   const handleStateClick = useCallback((svgName: string) => {
     const stateData = findStateData(statesData, svgName);
@@ -114,6 +116,9 @@ export function NigeriaMap({
           { mode: 'members' as MapMode, icon: Users, label: 'Members' },
           { mode: 'events' as MapMode, icon: Calendar, label: 'Events' },
           { mode: 'campaigns' as MapMode, icon: Megaphone, label: 'Campaigns' },
+          { mode: 'polling' as MapMode, icon: Vote, label: 'Polling Units' },
+          { mode: 'news' as MapMode, icon: Newspaper, label: 'News' },
+          { mode: 'tasks' as MapMode, icon: ClipboardList, label: 'Tasks' },
           { mode: 'activity' as MapMode, icon: TrendingUp, label: 'Activity' },
         ]).map(({ mode: m, icon: Icon, label }) => (
           <Button
@@ -292,6 +297,18 @@ export function NigeriaMap({
                     <span className="text-muted-foreground">Campaigns</span>
                     <div className="font-bold text-sm" data-testid="tooltip-campaigns-count">{tooltipInfo.data.activeCampaigns}</div>
                   </div>
+                  <div>
+                    <span className="text-muted-foreground">Polling Units</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-polling-count">{(tooltipInfo.data.pollingUnitsCount || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">News</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-news-count">{tooltipInfo.data.newsCount || 0}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tasks</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-tasks-count">{tooltipInfo.data.tasksCount || 0}</div>
+                  </div>
                   <div className="col-span-2 text-muted-foreground border-t border-border pt-1 mt-1" data-testid="tooltip-coverage">
                     {tooltipInfo.data.lgasCovered} LGAs, {tooltipInfo.data.wardsCovered} wards
                   </div>
@@ -330,20 +347,32 @@ export function NigeriaMap({
               <div className="text-2xl font-bold" data-testid="text-active-members">{selectedState.activeMembers.toLocaleString()}</div>
             </div>
             <div>
+              <div className="text-xs text-muted-foreground">Polling Units</div>
+              <div className="text-2xl font-bold" data-testid="text-polling-units">{(selectedState.pollingUnitsCount || 0).toLocaleString()}</div>
+            </div>
+            <div>
               <div className="text-xs text-muted-foreground">Events</div>
-              <div className="text-2xl font-bold">{selectedState.upcomingEvents}</div>
+              <div className="text-2xl font-bold" data-testid="text-events-count">{selectedState.upcomingEvents}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Campaigns</div>
-              <div className="text-2xl font-bold">{selectedState.activeCampaigns}</div>
+              <div className="text-2xl font-bold" data-testid="text-campaigns-count">{selectedState.activeCampaigns}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">News Posts</div>
+              <div className="text-2xl font-bold" data-testid="text-news-count">{selectedState.newsCount || 0}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Tasks</div>
+              <div className="text-2xl font-bold" data-testid="text-tasks-count">{selectedState.tasksCount || 0}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">LGAs</div>
-              <div className="text-2xl font-bold">{selectedState.lgasCovered}</div>
+              <div className="text-2xl font-bold" data-testid="text-lgas-count">{selectedState.lgasCovered}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Wards</div>
-              <div className="text-2xl font-bold">{selectedState.wardsCovered}</div>
+              <div className="text-2xl font-bold" data-testid="text-wards-count">{selectedState.wardsCovered}</div>
             </div>
           </div>
         </Card>
@@ -358,7 +387,10 @@ export function NigeriaMap({
                 <Badge variant="outline" className="text-xs">
                   {selectedMode === 'members' ? 'Members' :
                    selectedMode === 'events' ? 'Events' :
-                   selectedMode === 'campaigns' ? 'Campaigns' : 'Overall Activity'}
+                   selectedMode === 'campaigns' ? 'Campaigns' :
+                   selectedMode === 'polling' ? 'Polling Units' :
+                   selectedMode === 'news' ? 'News Posts' :
+                   selectedMode === 'tasks' ? 'Tasks' : 'Overall Activity'}
                 </Badge>
               </div>
               <div className="flex items-center gap-0.5">

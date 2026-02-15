@@ -240,7 +240,9 @@ export const events = pgTable("events", {
   location: text("location").notNull(),
   coordinates: jsonb("coordinates"), // { lat: number; lng: number } for location validation
   points: integer("points").default(10), // Points awarded for attendance
-  stateId: varchar("state_id").references(() => states.id), // Optional - for state-level events
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
   maxAttendees: integer("max_attendees"),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -275,24 +277,25 @@ export const volunteerTasks = pgTable("volunteer_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  category: text("category").notNull(), // campaign, event, outreach, etc.
+  category: text("category").notNull(),
   location: text("location").notNull(),
   skills: jsonb("skills").$type<string[]>().notNull(),
-  points: integer("points").notNull(), // Base points (admin tasks) or expected reward (user tasks)
+  points: integer("points").notNull(),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   deadline: timestamp("deadline"),
   difficulty: taskDifficultyEnum("difficulty").notNull(),
   maxVolunteers: integer("max_volunteers"),
   currentVolunteers: integer("current_volunteers").default(0),
-  creatorId: varchar("creator_id").notNull().references(() => members.id), // NOT NULL - Every task has a creator
-  isUserCreated: boolean("is_user_created").default(false), // Created by member (vs admin)
-  // Note: Actual reward pool/escrow tracked in volunteer_task_funding table (single source of truth)
-  // IMPORTANT: Backend must enforce that volunteer_task_funding.funder_id = volunteer_tasks.creator_id
-  fundingStatus: text("funding_status").default("unfunded"), // unfunded, funded, distributing, completed
-  autoApprove: boolean("auto_approve").default(false), // Auto-approve completions if true
-  requiresProof: boolean("requires_proof").default(true), // Photo/evidence required
-  status: text("status").default("open"), // open, in-progress, completed, closed
+  creatorId: varchar("creator_id").notNull().references(() => members.id),
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
+  isUserCreated: boolean("is_user_created").default(false),
+  fundingStatus: text("funding_status").default("unfunded"),
+  autoApprove: boolean("auto_approve").default(false),
+  requiresProof: boolean("requires_proof").default(true),
+  status: text("status").default("open"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -341,6 +344,9 @@ export const issueCampaigns = pgTable("issue_campaigns", {
   description: text("description").notNull(),
   category: text("category").notNull(),
   authorId: varchar("author_id").notNull().references(() => members.id),
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
   targetVotes: integer("target_votes").default(5000),
   currentVotes: integer("current_votes").default(0),
   status: campaignStatusEnum("status").default("active"),
@@ -725,6 +731,9 @@ export const newsPosts = pgTable("news_posts", {
   category: text("category").notNull(),
   imageUrl: text("image_url"),
   authorId: varchar("author_id").references(() => users.id),
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
   likes: integer("likes").default(0),
   comments: integer("comments").default(0),
   publishedAt: timestamp("published_at").defaultNow(),
@@ -1008,6 +1017,10 @@ export const accountSuspensions = pgTable("account_suspensions", {
 // Relations
 export const statesRelations = relations(states, ({ many }) => ({
   lgas: many(lgas),
+  events: many(events),
+  newsPosts: many(newsPosts),
+  volunteerTasks: many(volunteerTasks),
+  issueCampaigns: many(issueCampaigns),
 }));
 
 export const lgasRelations = relations(lgas, ({ one, many }) => ({
@@ -1096,6 +1109,18 @@ export const newsPostsRelations = relations(newsPosts, ({ one, many }) => ({
     fields: [newsPosts.authorId],
     references: [users.id],
   }),
+  state: one(states, {
+    fields: [newsPosts.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [newsPosts.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [newsPosts.wardId],
+    references: [wards.id],
+  }),
   engagement: many(postEngagement),
   comments: many(newsComments),
 }));
@@ -1128,7 +1153,19 @@ export const votesRelations = relations(votes, ({ one }) => ({
   }),
 }));
 
-export const eventsRelations = relations(events, ({ many }) => ({
+export const eventsRelations = relations(events, ({ one, many }) => ({
+  state: one(states, {
+    fields: [events.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [events.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [events.wardId],
+    references: [wards.id],
+  }),
   rsvps: many(eventRsvps),
   attendance: many(eventAttendance),
 }));
@@ -1157,9 +1194,21 @@ export const eventAttendanceRelations = relations(eventAttendance, ({ one }) => 
 
 export const volunteerTasksRelations = relations(volunteerTasks, ({ one, many }) => ({
   applications: many(taskApplications),
-  creator: one(users, {
+  creator: one(members, {
     fields: [volunteerTasks.creatorId],
-    references: [users.id],
+    references: [members.id],
+  }),
+  state: one(states, {
+    fields: [volunteerTasks.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [volunteerTasks.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [volunteerTasks.wardId],
+    references: [wards.id],
   }),
 }));
 
@@ -1193,6 +1242,18 @@ export const issueCampaignsRelations = relations(issueCampaigns, ({ one, many })
   author: one(members, {
     fields: [issueCampaigns.authorId],
     references: [members.id],
+  }),
+  state: one(states, {
+    fields: [issueCampaigns.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [issueCampaigns.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [issueCampaigns.wardId],
+    references: [wards.id],
   }),
   votes: many(campaignVotes),
   comments: many(campaignComments),
