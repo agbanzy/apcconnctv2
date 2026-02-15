@@ -36,6 +36,8 @@ interface StateStats {
   stateId: string;
   name: string;
   code: string;
+  totalLgas: number;
+  totalWards: number;
   memberCount: number;
   activeMembers: number;
   upcomingEvents: number;
@@ -219,20 +221,20 @@ export function StateDetailModal({ stateId, stateName, open, onOpenChange }: Sta
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center p-3 rounded-md bg-muted/50">
-                      <div className="text-2xl font-bold" data-testid="badge-lgas-total">{lgasData.length}</div>
+                      <div className="text-2xl font-bold" data-testid="badge-lgas-total">{stateStats?.totalLgas || lgasData.length}</div>
                       <div className="text-xs text-muted-foreground">Total LGAs</div>
+                    </div>
+                    <div className="text-center p-3 rounded-md bg-muted/50">
+                      <div className="text-2xl font-bold" data-testid="badge-wards-total">
+                        {stateStats?.totalWards || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Total Wards</div>
                     </div>
                     <div className="text-center p-3 rounded-md bg-muted/50">
                       <div className="text-2xl font-bold" data-testid="badge-lgas-covered">
                         {stateStats?.lgasCovered || 0}
                       </div>
                       <div className="text-xs text-muted-foreground">LGAs with Members</div>
-                    </div>
-                    <div className="text-center p-3 rounded-md bg-muted/50">
-                      <div className="text-2xl font-bold" data-testid="badge-wards-covered">
-                        {stateStats?.wardsCovered || 0}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Wards with Members</div>
                     </div>
                     <div className="text-center p-3 rounded-md bg-muted/50">
                       <div className="text-2xl font-bold" data-testid="badge-campaigns">

@@ -11,6 +11,8 @@ interface StateData {
   stateId: string;
   name: string;
   code: string;
+  totalLgas: number;
+  totalWards: number;
   memberCount: number;
   activeMembers: number;
   upcomingEvents: number;
@@ -368,11 +370,11 @@ export function NigeriaMap({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">LGAs</div>
-              <div className="text-2xl font-bold" data-testid="text-lgas-count">{selectedState.lgasCovered}</div>
+              <div className="text-2xl font-bold" data-testid="text-lgas-count">{selectedState.totalLgas}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Wards</div>
-              <div className="text-2xl font-bold" data-testid="text-wards-count">{selectedState.wardsCovered}</div>
+              <div className="text-2xl font-bold" data-testid="text-wards-count">{selectedState.totalWards}</div>
             </div>
           </div>
         </Card>

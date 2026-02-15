@@ -5651,101 +5651,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/map-data", async (req: Request, res: Response) => {
     try {
-      const states = await db.query.states.findMany({
-        orderBy: asc(schema.states.name)
-      });
+      const result = await db.execute(sql`
+        SELECT 
+          s.id AS "stateId",
+          s.name,
+          s.code,
+          COALESCE(lga_counts.total_lgas, 0)::int AS "totalLgas",
+          COALESCE(ward_counts.total_wards, 0)::int AS "totalWards",
+          COALESCE(member_stats.member_count, 0)::int AS "memberCount",
+          COALESCE(member_stats.active_members, 0)::int AS "activeMembers",
+          COALESCE(member_stats.lgas_covered, 0)::int AS "lgasCovered",
+          COALESCE(member_stats.wards_covered, 0)::int AS "wardsCovered",
+          COALESCE(event_counts.upcoming_events, 0)::int AS "upcomingEvents",
+          COALESCE(pu_counts.polling_units, 0)::int AS "pollingUnitsCount",
+          COALESCE(news_counts.news_count, 0)::int AS "newsCount",
+          COALESCE(task_counts.task_count, 0)::int AS "tasksCount",
+          COALESCE(campaign_counts.campaign_count, 0)::int AS "activeCampaigns"
+        FROM states s
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS total_lgas FROM lgas GROUP BY state_id
+        ) lga_counts ON lga_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT l.state_id, COUNT(w.id)::int AS total_wards
+          FROM wards w JOIN lgas l ON w.lga_id = l.id
+          GROUP BY l.state_id
+        ) ward_counts ON ward_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT l.state_id,
+            COUNT(DISTINCT m.id)::int AS member_count,
+            COUNT(DISTINCT CASE WHEN m.status = 'active' THEN m.id END)::int AS active_members,
+            COUNT(DISTINCT l2.id)::int AS lgas_covered,
+            COUNT(DISTINCT w.id)::int AS wards_covered
+          FROM members m
+          JOIN wards w ON m.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          JOIN lgas l2 ON l2.id = l.id
+          GROUP BY l.state_id
+        ) member_stats ON member_stats.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS upcoming_events
+          FROM events WHERE date >= NOW()
+          GROUP BY state_id
+        ) event_counts ON event_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT l.state_id, COUNT(pu.id)::int AS polling_units
+          FROM polling_units pu
+          JOIN wards w ON pu.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          GROUP BY l.state_id
+        ) pu_counts ON pu_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS news_count FROM news_posts GROUP BY state_id
+        ) news_counts ON news_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS task_count FROM volunteer_tasks GROUP BY state_id
+        ) task_counts ON task_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT l.state_id, COUNT(DISTINCT ic.id)::int AS campaign_count
+          FROM issue_campaigns ic
+          JOIN members m ON ic.author_id = m.id
+          JOIN wards w ON m.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          WHERE ic.status = 'active'
+          GROUP BY l.state_id
+        ) campaign_counts ON campaign_counts.state_id = s.id
+        ORDER BY s.name
+      `);
 
-      const statesData = await Promise.all(states.map(async (state) => {
-        const membersByState = await db
-          .select({ count: sql<number>`count(distinct ${schema.members.id})` })
-          .from(schema.members)
-          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
-          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
-          .where(eq(schema.lgas.stateId, state.id));
-
-        const activeMembersByState = await db
-          .select({ count: sql<number>`count(distinct ${schema.members.id})` })
-          .from(schema.members)
-          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
-          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
-          .where(and(
-            eq(schema.lgas.stateId, state.id),
-            eq(schema.members.status, "active")
-          ));
-
-        const upcomingEventsByState = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.events)
-          .where(and(
-            eq(schema.events.stateId, state.id),
-            gte(schema.events.date, new Date())
-          ));
-
-        const activeCampaignsByState = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.issueCampaigns)
-          .leftJoin(schema.members, eq(schema.issueCampaigns.authorId, schema.members.id))
-          .leftJoin(schema.wards, eq(schema.members.wardId, schema.wards.id))
-          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
-          .where(and(
-            eq(schema.lgas.stateId, state.id),
-            eq(schema.issueCampaigns.status, "active")
-          ));
-
-        const lgasCovered = await db
-          .select({ count: sql<number>`count(distinct ${schema.lgas.id})` })
-          .from(schema.lgas)
-          .leftJoin(schema.wards, eq(schema.lgas.id, schema.wards.lgaId))
-          .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
-          .where(and(
-            eq(schema.lgas.stateId, state.id),
-            sql`${schema.members.id} IS NOT NULL`
-          ));
-
-        const wardsCovered = await db
-          .select({ count: sql<number>`count(distinct ${schema.wards.id})` })
-          .from(schema.wards)
-          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
-          .leftJoin(schema.members, eq(schema.wards.id, schema.members.wardId))
-          .where(and(
-            eq(schema.lgas.stateId, state.id),
-            sql`${schema.members.id} IS NOT NULL`
-          ));
-
-        const pollingUnitsCount = await db
-          .select({ count: sql<number>`count(distinct ${schema.pollingUnits.id})` })
-          .from(schema.pollingUnits)
-          .leftJoin(schema.wards, eq(schema.pollingUnits.wardId, schema.wards.id))
-          .leftJoin(schema.lgas, eq(schema.wards.lgaId, schema.lgas.id))
-          .where(eq(schema.lgas.stateId, state.id));
-
-        const newsCount = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.newsPosts)
-          .where(eq(schema.newsPosts.stateId, state.id));
-
-        const tasksCount = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.volunteerTasks)
-          .where(eq(schema.volunteerTasks.stateId, state.id));
-
-        return {
-          stateId: state.id,
-          name: state.name,
-          code: state.code,
-          memberCount: Number(membersByState[0]?.count) || 0,
-          activeMembers: Number(activeMembersByState[0]?.count) || 0,
-          upcomingEvents: Number(upcomingEventsByState[0]?.count) || 0,
-          activeCampaigns: Number(activeCampaignsByState[0]?.count) || 0,
-          lgasCovered: Number(lgasCovered[0]?.count) || 0,
-          wardsCovered: Number(wardsCovered[0]?.count) || 0,
-          pollingUnitsCount: Number(pollingUnitsCount[0]?.count) || 0,
-          newsCount: Number(newsCount[0]?.count) || 0,
-          tasksCount: Number(tasksCount[0]?.count) || 0
-        };
-      }));
-
-      res.json({ success: true, data: { states: statesData } });
+      res.json({ success: true, data: { states: result.rows } });
     } catch (error) {
       console.error("Map data error:", error);
       res.status(500).json({ success: false, error: "Failed to fetch map data" });
