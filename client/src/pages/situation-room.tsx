@@ -30,6 +30,10 @@ import {
   Eye,
   Radio,
   Power,
+  UserPlus,
+  Copy,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -104,6 +108,49 @@ type TraceabilityData = {
   incidents: any[];
 };
 
+type PollingAgent = {
+  id: string;
+  memberId: string;
+  pollingUnitId: string;
+  electionId: string | null;
+  agentCode: string;
+  agentPin: string;
+  status: string;
+  assignedAt: string;
+  checkedInAt: string | null;
+  completedAt: string | null;
+  notes: string | null;
+  member: {
+    id: string;
+    memberId: string;
+    user: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string | null;
+    };
+  };
+  pollingUnit: {
+    id: string;
+    name: string;
+    unitCode: string;
+  };
+  election: {
+    id: string;
+    title: string;
+    position: string;
+  } | null;
+};
+
+type MemberSearchResult = {
+  id: string;
+  memberId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: string;
+};
+
 type ElectionDayMode = {
   active: boolean;
   electionId: string | null;
@@ -132,6 +179,16 @@ export default function SituationRoom() {
   const [puStatusFilter, setPuStatusFilter] = useState("all");
   const [puPage, setPuPage] = useState(1);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+
+  const [agentSearch, setAgentSearch] = useState("");
+  const [agentStatusFilter, setAgentStatusFilter] = useState("all");
+  const [showAssignForm, setShowAssignForm] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [selectedMember, setSelectedMember] = useState<MemberSearchResult | null>(null);
+  const [assignPollingUnitId, setAssignPollingUnitId] = useState("");
+  const [assignElectionId, setAssignElectionId] = useState("");
+  const [assignNotes, setAssignNotes] = useState("");
+  const [createdAgent, setCreatedAgent] = useState<{ agentCode: string; agentPin: string } | null>(null);
 
   const { data: edmData } = useQuery<{ success: boolean; data: ElectionDayMode }>({
     queryKey: ["/api/election-day-mode"],
@@ -246,6 +303,95 @@ export default function SituationRoom() {
     },
     enabled: !!selectedUnitId && (user?.role === "admin" || user?.role === "coordinator"),
   });
+
+  const { data: agentsData, isLoading: agentsLoading } = useQuery<{
+    success: boolean;
+    data: PollingAgent[];
+  }>({
+    queryKey: ["/api/admin/polling-agents", agentStatusFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (agentStatusFilter !== "all") params.set("status", agentStatusFilter);
+      const res = await fetch(`/api/admin/polling-agents?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch agents");
+      return res.json();
+    },
+    enabled: activeTab === "agents" && (user?.role === "admin" || user?.role === "coordinator"),
+  });
+
+  const { data: memberSearchData, isLoading: memberSearchLoading } = useQuery<{
+    success: boolean;
+    data: MemberSearchResult[];
+  }>({
+    queryKey: ["/api/admin/members-search", memberSearchQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/members-search?q=${encodeURIComponent(memberSearchQuery)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to search members");
+      return res.json();
+    },
+    enabled: memberSearchQuery.length >= 2,
+  });
+
+  const { data: puListData } = useQuery<{ success: boolean; data: Array<{ id: string; name: string; unitCode: string }> }>({
+    queryKey: ["/api/situation-room/polling-units"],
+    enabled: showAssignForm,
+  });
+
+  const assignAgentMutation = useMutation({
+    mutationFn: async (payload: { memberId: string; pollingUnitId: string; electionId?: string; notes?: string }) => {
+      const res = await apiRequest("POST", "/api/admin/polling-agents", payload);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/polling-agents"] });
+      setCreatedAgent({ agentCode: data.data.agentCode, agentPin: data.data.agentPin });
+      toast({ title: "Agent assigned successfully", description: `Code: ${data.data.agentCode}` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const revokeAgentMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/polling-agents/${id}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/polling-agents"] });
+      toast({ title: "Agent status updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const allAgents = agentsData?.data || [];
+  const filteredAgents = agentSearch
+    ? allAgents.filter(a =>
+        a.agentCode.toLowerCase().includes(agentSearch.toLowerCase()) ||
+        `${a.member.user.firstName} ${a.member.user.lastName}`.toLowerCase().includes(agentSearch.toLowerCase()) ||
+        a.pollingUnit.name.toLowerCase().includes(agentSearch.toLowerCase())
+      )
+    : allAgents;
+
+  const memberSearchResults = memberSearchData?.data || [];
+  const pollingUnitOptions = (puListData?.data || []).map(u => ({ id: u.id, label: `${u.name} (${u.unitCode})` }));
+
+  const resetAssignForm = () => {
+    setShowAssignForm(false);
+    setSelectedMember(null);
+    setMemberSearchQuery("");
+    setAssignPollingUnitId("");
+    setAssignElectionId("");
+    setAssignNotes("");
+    setCreatedAgent(null);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
+  };
 
   useEffect(() => {
     const newSocket = io(window.location.origin);
@@ -522,6 +668,12 @@ export default function SituationRoom() {
             Incidents ({selectedState ? filteredIncidents.length : incidents.length})
           </TabsTrigger>
           <TabsTrigger value="report" data-testid="tab-report">Report Incident</TabsTrigger>
+          {(user?.role === "admin" || user?.role === "coordinator") && (
+            <TabsTrigger value="agents" data-testid="tab-agents">
+              <Shield className="w-4 h-4 mr-1" />
+              Agents
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="dashboard" className="mt-6">
@@ -893,6 +1045,326 @@ export default function SituationRoom() {
             <IncidentReportForm />
           </div>
         </TabsContent>
+
+        {(user?.role === "admin" || user?.role === "coordinator") && (
+          <TabsContent value="agents" className="mt-6">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold flex items-center gap-2" data-testid="text-agents-title">
+                  <Shield className="w-5 h-5" />
+                  Polling Agents ({allAgents.length})
+                </h2>
+                <Button onClick={() => { setShowAssignForm(true); setCreatedAgent(null); }} data-testid="button-assign-agent">
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  Assign New Agent
+                </Button>
+              </div>
+
+              {showAssignForm && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base" data-testid="text-assign-form-title">
+                      {createdAgent ? "Agent Credentials" : "Assign Polling Agent"}
+                    </CardTitle>
+                    <CardDescription>
+                      {createdAgent
+                        ? "Share these credentials with the agent. The PIN cannot be retrieved later."
+                        : "Search for a member and assign them to a polling unit"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {createdAgent ? (
+                      <div className="space-y-3">
+                        <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-md space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Agent Code</p>
+                              <p className="font-mono font-bold text-lg" data-testid="text-created-agent-code">{createdAgent.agentCode}</p>
+                            </div>
+                            <Button size="icon" variant="ghost" onClick={() => copyToClipboard(createdAgent.agentCode)} data-testid="button-copy-code">
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Agent PIN</p>
+                              <p className="font-mono font-bold text-lg" data-testid="text-created-agent-pin">{createdAgent.agentPin}</p>
+                            </div>
+                            <Button size="icon" variant="ghost" onClick={() => copyToClipboard(createdAgent.agentPin)} data-testid="button-copy-pin">
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          onClick={() => copyToClipboard(`Agent Code: ${createdAgent.agentCode}\nAgent PIN: ${createdAgent.agentPin}`)}
+                          className="w-full"
+                          data-testid="button-copy-both"
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copy Both
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={resetAssignForm} className="flex-1" data-testid="button-close-assign">
+                            Close
+                          </Button>
+                          <Button onClick={() => { setCreatedAgent(null); setSelectedMember(null); setMemberSearchQuery(""); setAssignPollingUnitId(""); setAssignElectionId(""); setAssignNotes(""); }} className="flex-1" data-testid="button-assign-another">
+                            Assign Another
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Search Member</Label>
+                          {selectedMember ? (
+                            <div className="flex items-center justify-between gap-2 p-2 border rounded-md">
+                              <div>
+                                <p className="font-medium text-sm">{selectedMember.firstName} {selectedMember.lastName}</p>
+                                <p className="text-xs text-muted-foreground">{selectedMember.memberId} | {selectedMember.email}</p>
+                              </div>
+                              <Button size="icon" variant="ghost" onClick={() => { setSelectedMember(null); setMemberSearchQuery(""); }} data-testid="button-clear-member">
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                placeholder="Search by name, email, or member ID..."
+                                className="pl-9"
+                                value={memberSearchQuery}
+                                onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                data-testid="input-member-search"
+                              />
+                              {memberSearchQuery.length >= 2 && (
+                                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-auto">
+                                  {memberSearchLoading ? (
+                                    <div className="p-3 text-center text-sm text-muted-foreground">
+                                      <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                                    </div>
+                                  ) : memberSearchResults.length === 0 ? (
+                                    <p className="p-3 text-center text-sm text-muted-foreground">No members found</p>
+                                  ) : (
+                                    memberSearchResults.map((m) => (
+                                      <button
+                                        key={m.id}
+                                        className="w-full text-left px-3 py-2 hover-elevate text-sm"
+                                        onClick={() => { setSelectedMember(m); setMemberSearchQuery(""); }}
+                                        data-testid={`button-select-member-${m.id}`}
+                                      >
+                                        <p className="font-medium">{m.firstName} {m.lastName}</p>
+                                        <p className="text-xs text-muted-foreground">{m.memberId} | {m.email}</p>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Polling Unit</Label>
+                          <Select value={assignPollingUnitId} onValueChange={setAssignPollingUnitId}>
+                            <SelectTrigger data-testid="select-polling-unit">
+                              <SelectValue placeholder="Select polling unit..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {pollingUnitOptions.map((u) => (
+                                <SelectItem key={u.id} value={u.id}>{u.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Election (optional)</Label>
+                          <Select value={assignElectionId} onValueChange={setAssignElectionId}>
+                            <SelectTrigger data-testid="select-assign-election">
+                              <SelectValue placeholder="Select election..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No specific election</SelectItem>
+                              {elections.map((e) => (
+                                <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Notes (optional)</Label>
+                          <Textarea
+                            placeholder="Optional notes about this assignment..."
+                            value={assignNotes}
+                            onChange={(e) => setAssignNotes(e.target.value)}
+                            className="resize-none"
+                            rows={2}
+                            data-testid="input-assign-notes"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={resetAssignForm} className="flex-1" data-testid="button-cancel-assign">
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              if (!selectedMember || !assignPollingUnitId) {
+                                toast({ title: "Please select a member and polling unit", variant: "destructive" });
+                                return;
+                              }
+                              assignAgentMutation.mutate({
+                                memberId: selectedMember.id,
+                                pollingUnitId: assignPollingUnitId,
+                                electionId: assignElectionId && assignElectionId !== "none" ? assignElectionId : undefined,
+                                notes: assignNotes || undefined,
+                              });
+                            }}
+                            disabled={!selectedMember || !assignPollingUnitId || assignAgentMutation.isPending}
+                            className="flex-1"
+                            data-testid="button-submit-assign"
+                          >
+                            {assignAgentMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Assigning...</>
+                            ) : (
+                              <><UserPlus className="w-4 h-4 mr-1" /> Assign Agent</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search agents..."
+                    className="pl-9"
+                    value={agentSearch}
+                    onChange={(e) => setAgentSearch(e.target.value)}
+                    data-testid="input-agent-search"
+                  />
+                </div>
+                <Select value={agentStatusFilter} onValueChange={setAgentStatusFilter}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-agent-status">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="assigned">Assigned</SelectItem>
+                    <SelectItem value="checked_in">Checked In</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="revoked">Revoked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {agentsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+                </div>
+              ) : filteredAgents.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    {allAgents.length === 0
+                      ? "No polling agents assigned yet. Click 'Assign New Agent' to get started."
+                      : "No agents match your search criteria"}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {filteredAgents.map((agent) => (
+                    <Card key={agent.id} data-testid={`card-agent-${agent.id}`}>
+                      <CardContent className="py-3">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <p className="font-medium text-sm">
+                                {agent.member.user.firstName} {agent.member.user.lastName}
+                              </p>
+                              <Badge
+                                variant={
+                                  agent.status === "checked_in" || agent.status === "active"
+                                    ? "default"
+                                    : agent.status === "revoked"
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                                data-testid={`badge-agent-status-${agent.id}`}
+                              >
+                                {agent.status.replace("_", " ")}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground space-y-0.5">
+                              <p>
+                                <span className="font-medium">Code:</span>{" "}
+                                <span className="font-mono">{agent.agentCode}</span>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-5 w-5 ml-1 inline-flex"
+                                  onClick={() => copyToClipboard(agent.agentCode)}
+                                  data-testid={`button-copy-agent-code-${agent.id}`}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </p>
+                              <p>
+                                <span className="font-medium">Unit:</span> {agent.pollingUnit.name} ({agent.pollingUnit.unitCode})
+                              </p>
+                              {agent.election && (
+                                <p><span className="font-medium">Election:</span> {agent.election.title}</p>
+                              )}
+                              <p className="flex items-center gap-3 flex-wrap">
+                                <span><span className="font-medium">Assigned:</span> {new Date(agent.assignedAt).toLocaleDateString()}</span>
+                                {agent.checkedInAt && (
+                                  <span className="flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3 text-green-600" />
+                                    Checked in: {new Date(agent.checkedInAt).toLocaleString()}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
+                            {agent.status !== "revoked" && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => revokeAgentMutation.mutate({ id: agent.id, status: "revoked" })}
+                                disabled={revokeAgentMutation.isPending}
+                                data-testid={`button-revoke-agent-${agent.id}`}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Revoke
+                              </Button>
+                            )}
+                            {agent.status === "revoked" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => revokeAgentMutation.mutate({ id: agent.id, status: "assigned" })}
+                                disabled={revokeAgentMutation.isPending}
+                                data-testid={`button-restore-agent-${agent.id}`}
+                              >
+                                Restore
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
