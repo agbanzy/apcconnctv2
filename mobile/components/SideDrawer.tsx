@@ -19,9 +19,12 @@ interface DrawerItem {
 }
 
 const DRAWER_ITEMS: DrawerItem[] = [
+  { label: 'Digital ID Card', icon: 'card-outline', route: '/digital-id' },
+  { label: 'Points', icon: 'star-outline', route: '/points' },
   { label: 'Election Day', icon: 'shield-checkmark-outline', route: '/election-day' },
   { label: 'Manage Agents', icon: 'people-circle-outline', route: '/manage-agents', adminOnly: true },
   { label: 'Tasks', icon: 'clipboard-outline', route: '/tasks' },
+  { label: 'Volunteer', icon: 'hand-left-outline', route: '/volunteer' },
   { label: 'Rewards', icon: 'gift-outline', route: '/rewards' },
   { label: 'Donations', icon: 'heart-outline', route: '/donations' },
   { label: 'Referrals', icon: 'people-outline', route: '/referrals' },
@@ -31,6 +34,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
   { label: 'Knowledge Base', icon: 'book-outline', route: '/knowledge-base' },
   { label: 'Quizzes', icon: 'school-outline', route: '/quizzes' },
   { label: 'Ideas', icon: 'bulb-outline', route: '/ideas' },
+  { label: 'Search', icon: 'search-outline', route: '/search' },
   { label: 'Notifications', icon: 'notifications-outline', route: '/notification-settings' },
 ];
 

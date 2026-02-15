@@ -584,8 +584,10 @@ export class PushService {
     console.log("[PushService] Sending notification to user:", userId);
     console.log("[PushService] Notification payload:", JSON.stringify(payload, null, 2));
 
+    await this.sendExpoPushNotification(userId, payload);
+
     if (!this.initialized) {
-      console.warn("[PushService] Service not initialized. Skipping notification.");
+      console.warn("[PushService] Service not initialized. Skipping web push notification.");
       return;
     }
 
@@ -598,6 +600,49 @@ export class PushService {
     }
 
     console.log("[PushService] Notification sent successfully");
+  }
+
+  private async sendExpoPushNotification(userId: string, payload: NotificationPayload): Promise<void> {
+    try {
+      const { db } = await import("./db");
+      const schema = await import("@shared/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      const tokens = await db.query.mobilePushTokens.findMany({
+        where: and(
+          eq(schema.mobilePushTokens.memberId, userId),
+          eq(schema.mobilePushTokens.isActive, true)
+        ),
+      });
+
+      if (tokens.length === 0) {
+        console.log(`[PushService] No active mobile push tokens for user: ${userId}`);
+        return;
+      }
+
+      const messages = tokens.map((tokenRecord) => ({
+        to: tokenRecord.token,
+        sound: 'default' as const,
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+      }));
+
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+
+      const result = await response.json();
+      console.log(`[PushService] Expo push sent to ${tokens.length} device(s):`, JSON.stringify(result));
+    } catch (error) {
+      console.error("[PushService] Expo push error:", error);
+    }
   }
 
   /**

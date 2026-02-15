@@ -997,6 +997,17 @@ export const notificationPreferences = pgTable("notification_preferences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const mobilePushTokens = pgTable("mobile_push_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  platform: varchar("platform", { length: 20 }).notNull(),
+  deviceName: text("device_name"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Audit Logging System
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

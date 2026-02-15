@@ -9575,6 +9575,67 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  app.post("/api/push/subscribe/mobile", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { token, platform, deviceName } = req.body;
+      
+      if (!token || !platform) {
+        return res.status(400).json({ success: false, error: "Missing token or platform" });
+      }
+
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const existing = await db.query.mobilePushTokens.findFirst({
+        where: eq(schema.mobilePushTokens.token, token)
+      });
+
+      if (existing) {
+        await db.update(schema.mobilePushTokens)
+          .set({ memberId: member.id, platform, deviceName, isActive: true, updatedAt: new Date() })
+          .where(eq(schema.mobilePushTokens.id, existing.id));
+      } else {
+        await db.insert(schema.mobilePushTokens).values({
+          memberId: member.id,
+          token,
+          platform,
+          deviceName,
+        });
+      }
+
+      res.json({ success: true, data: { message: "Mobile push token registered" } });
+    } catch (error) {
+      console.error("Error registering mobile push token:", error);
+      res.status(500).json({ success: false, error: "Failed to register push token" });
+    }
+  });
+
+  app.delete("/api/push/unsubscribe/mobile", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      await db.update(schema.mobilePushTokens)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(schema.mobilePushTokens.memberId, member.id));
+
+      res.json({ success: true, data: { message: "Mobile push tokens deactivated" } });
+    } catch (error) {
+      console.error("Error unregistering mobile push token:", error);
+      res.status(500).json({ success: false, error: "Failed to unregister push token" });
+    }
+  });
+
   app.get("/api/push/vapid-key", (req: Request, res: Response) => {
     const publicKey = pushService.getVapidPublicKey();
     if (!publicKey) {
