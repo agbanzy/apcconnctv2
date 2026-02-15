@@ -31,7 +31,7 @@ Preferred communication style: Simple, everyday language.
 - **ORM**: Drizzle ORM for type-safe operations.
 - **Database Schema**: Hierarchical administrative structure (states, LGAs, wards), users/members (NIN verification), elections (voting, blockchain audit), engagement (gamification, tasks), content (news, events), governance (dues, incident reports).
 - **Migrations**: Drizzle Kit.
-- **Administrative Boundaries Data**: Utilizes Nigeria's administrative structure (states, LGAs, wards) sourced from `attached_assets/nga_admin_boundaries_1762975238593.xlsx`. A seeding script (`server/seed-admin-boundaries.ts`) handles atomic data insertion and unique code generation.
+- **Administrative Boundaries Data**: Utilizes Nigeria's administrative structure (states, LGAs, wards) sourced from `attached_assets/nga_admin_boundaries_1762975238593.xlsx`. A seeding script (`server/seed-admin-boundaries.ts`) handles atomic data insertion and unique code generation. Data has been audited and deduplicated: 37 states, 774 LGAs (official count), 14,303 wards, 135,942 polling units with zero orphaned records. Cleanup scripts in `server/seed/fix-final-lgas.ts` and `server/seed/cleanup-orphans.ts`. Nine states currently have 0 polling units (their original PU data was corrupted/orphaned).
 
 ### Security & Data Privacy
 - **Anonymous Reporting**: Supports anonymous incident submissions.
