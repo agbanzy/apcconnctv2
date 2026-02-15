@@ -8,10 +8,10 @@ import {
   TouchableOpacity,
   ViewToken,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { useAuthRefresh } from '@/components/AuthGuard';
 
 const { width, height } = Dimensions.get('window');
 
@@ -71,7 +71,7 @@ const slides: OnboardingSlide[] = [
 export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
-  const router = useRouter();
+  const { refreshAuth } = useAuthRefresh();
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -85,7 +85,7 @@ export default function OnboardingScreen() {
 
   const completeOnboarding = async () => {
     await SecureStore.setItemAsync('onboarding_completed', 'true');
-    router.replace('/(auth)/login');
+    await refreshAuth();
   };
 
   const goToNext = () => {

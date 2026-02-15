@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { auth } from '@/lib/auth';
 import * as SecureStore from 'expo-secure-store';
+
+interface AuthContextType {
+  refreshAuth: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType>({ refreshAuth: async () => {} });
+
+export const useAuthRefresh = () => useContext(AuthContext);
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -11,11 +19,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const [authenticated, onboardingFlag] = await Promise.all([
         auth.isAuthenticated(),
@@ -30,7 +34,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -55,7 +63,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <AuthContext.Provider value={{ refreshAuth: checkAuth }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 const styles = StyleSheet.create({
