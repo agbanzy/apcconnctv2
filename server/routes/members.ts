@@ -101,14 +101,21 @@ router.get("/api/members/points", requireAuth, async (req: AuthRequest, res: Res
       return res.status(404).json({ success: false, error: "Member not found" });
     }
 
-    const pointBalance = member.pointBalance || 0;
-    const totalPointsEarned = member.totalPointsEarned || 0;
+    const latestTransaction = await db.query.userPoints.findFirst({
+      where: eq(schema.userPoints.memberId, member.id),
+      orderBy: desc(schema.userPoints.createdAt)
+    });
+    const pointBalance = latestTransaction?.balanceAfter || 0;
 
-    const pointHistory = await db.query.pointLedger.findMany({
-      where: eq(schema.pointLedger.memberId, member.id),
-      orderBy: desc(schema.pointLedger.createdAt),
+    const pointHistory = await db.query.userPoints.findMany({
+      where: eq(schema.userPoints.memberId, member.id),
+      orderBy: desc(schema.userPoints.createdAt),
       limit: 50
     });
+
+    const totalPointsEarned = pointHistory
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + t.amount, 0);
 
     res.json({
       success: true,

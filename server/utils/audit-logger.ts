@@ -24,6 +24,23 @@ export const AuditActions = {
   CAMPAIGN_VOTE: "campaign_vote",
   IDEA_SUBMITTED: "idea_submitted",
   PUSH_SUBSCRIPTION: "push_subscription",
+  SUSPEND_MEMBER: "suspend_member",
+  ACTIVATE_MEMBER: "activate_member",
+  DELETE_MEMBER: "delete_member",
+  RESTORE_MEMBER: "restore_member",
+  RESET_PASSWORD: "reset_password",
+  VERIFY_NIN: "nin_verification",
+  GENERATE_DUES: "generate_dues",
+  CREATE_ELECTION: "election_created",
+  UPDATE_ELECTION: "election_updated",
+  ADD_CANDIDATE: "add_candidate",
+  CAST_VOTE: "vote",
+  CREATE_EVENT: "create_event",
+  UPDATE_EVENT: "update_event",
+  DELETE_EVENT: "delete_event",
+  RSVP_EVENT: "rsvp_event",
+  EVENT_CHECKIN: "event_checkin",
+  CREATE_NEWS: "create_news",
 } as const;
 
 export interface AuditLogData {

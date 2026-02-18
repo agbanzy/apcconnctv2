@@ -65,8 +65,7 @@ router.get("/api/knowledge/articles/:slug", async (req: Request, res: Response) 
     // Update view count
     await db.update(schema.knowledgeArticles)
       .set({
-        views: (article.views || 0) + 1,
-        lastViewedAt: new Date()
+        viewsCount: (article.viewsCount || 0) + 1
       })
       .where(eq(schema.knowledgeArticles.id, article.id));
 
@@ -74,7 +73,7 @@ router.get("/api/knowledge/articles/:slug", async (req: Request, res: Response) 
       success: true,
       data: {
         ...article,
-        views: (article.views || 0) + 1
+        viewsCount: (article.viewsCount || 0) + 1
       }
     });
   } catch (error) {
@@ -89,12 +88,12 @@ router.get("/api/knowledge/faqs", async (req: Request, res: Response) => {
 
     let whereConditions: any = undefined;
     if (category) {
-      whereConditions = eq(schema.FAQs.category, category as string);
+      whereConditions = eq(schema.faqs.categoryId, category as string);
     }
 
-    const faqs = await db.query.FAQs.findMany({
+    const faqs = await db.query.faqs.findMany({
       where: whereConditions,
-      orderBy: asc(schema.FAQs.order),
+      orderBy: asc(schema.faqs.order),
       limit: parseInt(limit as string),
       offset: parseInt(offset as string)
     });
@@ -137,8 +136,8 @@ router.get("/api/knowledge/search", async (req: Request, res: Response) => {
     }
 
     if (!type || type === "faq") {
-      const faqs = await db.query.FAQs.findMany({
-        where: ilike(schema.FAQs.question, searchQuery),
+      const faqs = await db.query.faqs.findMany({
+        where: ilike(schema.faqs.question, searchQuery),
         limit: parseInt(limit as string)
       });
       results.faqs = faqs;
@@ -154,7 +153,7 @@ router.get("/api/knowledge/search", async (req: Request, res: Response) => {
 
     if (!type || type === "quote") {
       const quotes = await db.query.politicalQuotes.findMany({
-        where: ilike(schema.politicalQuotes.quote, searchQuery),
+        where: ilike(schema.politicalQuotes.content, searchQuery),
         limit: parseInt(limit as string)
       });
       results.quotes = quotes;
@@ -163,7 +162,7 @@ router.get("/api/knowledge/search", async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: results,
-      totalResults: Object.values(results).reduce((sum: number, arr: any[]) => sum + arr.length, 0)
+      totalResults: Object.values(results).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)
     });
   } catch (error) {
     console.error("Search error:", error);

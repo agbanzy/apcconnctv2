@@ -11132,7 +11132,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
           const agentCode = `AGT-${pollingUnitCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
           const agentPin = Math.floor(1000 + Math.random() * 9000).toString();
 
-          const bcrypt = await import("bcrypt");
           const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
           const [user] = await db.insert(schema.users).values({
@@ -11447,6 +11446,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       if (!agent) {
         return res.status(401).json({ success: false, error: "Invalid agent credentials" });
       }
+
       if (agent.status === "revoked") {
         return res.status(403).json({ success: false, error: "Agent access has been revoked" });
       }
@@ -11551,6 +11551,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       if (!agent) {
         return res.status(401).json({ success: false, error: "Invalid agent credentials" });
       }
+
       if (agent.status === "revoked") {
         return res.status(403).json({ success: false, error: "Agent access has been revoked" });
       }
@@ -11595,9 +11596,9 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.get("/api/agent/result-sheets", apiLimiter, async (req: Request, res: Response) => {
+  app.post("/api/agent/result-sheets", apiLimiter, async (req: Request, res: Response) => {
     try {
-      const { agentCode, agentPin } = req.query;
+      const { agentCode, agentPin } = req.body;
 
       if (!agentCode || !agentPin) {
         return res.status(400).json({ success: false, error: "Agent credentials required" });
@@ -11605,8 +11606,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       const agent = await db.query.pollingAgents.findFirst({
         where: and(
-          eq(schema.pollingAgents.agentCode, (agentCode as string).toUpperCase()),
-          eq(schema.pollingAgents.agentPin, agentPin as string)
+          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin)
         ),
       });
 
@@ -11780,7 +11781,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
           p.name as "partyName",
           p.abbreviation as "partyAbbreviation",
           p.color as "partyColor",
-          gec.candidate_name as "candidateName",
+          gec.name as "candidateName",
           ge.title as "electionTitle",
           CASE WHEN pur.reported_by IS NOT NULL THEN
             json_build_object(

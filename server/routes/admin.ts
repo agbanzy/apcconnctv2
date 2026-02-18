@@ -27,7 +27,7 @@ const router = Router();
 // Get conversion settings
 router.get("/api/admin/conversion-settings", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
   try {
-    const settings = await db.query.conversionSettings.findMany();
+    const settings = await db.query.pointConversionSettings.findMany();
     res.json({ success: true, data: settings });
   } catch (error) {
     res.status(500).json({ success: false, error: "Failed to fetch conversion settings" });
@@ -43,20 +43,20 @@ router.post("/api/admin/conversion-settings", requireAuth, requireRole("admin"),
       return res.status(400).json({ success: false, error: "Invalid point value" });
     }
 
-    const existing = await db.query.conversionSettings.findFirst();
+    const existing = await db.query.pointConversionSettings.findFirst();
 
     if (existing) {
-      const [updated] = await db.update(schema.conversionSettings)
+      const [updated] = await db.update(schema.pointConversionSettings)
         .set({
           pointValue,
           currency: currency || existing.currency
         })
-        .where(eq(schema.conversionSettings.id, existing.id))
+        .where(eq(schema.pointConversionSettings.id, existing.id))
         .returning();
 
       res.json({ success: true, data: updated });
     } else {
-      const [created] = await db.insert(schema.conversionSettings).values({
+      const [created] = await db.insert(schema.pointConversionSettings).values({
         pointValue,
         currency: currency || "NGN"
       }).returning();
@@ -75,7 +75,7 @@ router.get("/api/admin/dues/all", requireAuth, requireRole("admin"), async (req:
 
     let whereConditions: any = undefined;
     if (status) {
-      whereConditions = eq(schema.membershipDues.status, status as string);
+      whereConditions = eq(schema.membershipDues.paymentStatus, status as string);
     }
 
     const dues = await db.query.membershipDues.findMany({
@@ -121,7 +121,7 @@ router.post("/api/admin/dues/generate", requireAuth, requireRole("admin"), async
       memberId,
       amount,
       dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      status: "pending"
+      paymentStatus: "pending"
     }).returning();
 
     await logAudit({
@@ -148,7 +148,7 @@ router.post("/api/admin/dues/check-overdue", requireAuth, requireRole("admin"), 
     const now = new Date();
     const overdueDues = await db.query.membershipDues.findMany({
       where: and(
-        eq(schema.membershipDues.status, "pending"),
+        eq(schema.membershipDues.paymentStatus, "pending"),
         lte(schema.membershipDues.dueDate, now)
       ),
       with: {
@@ -161,7 +161,7 @@ router.post("/api/admin/dues/check-overdue", requireAuth, requireRole("admin"), 
     // Mark as overdue and optionally suspend members
     for (const due of overdueDues) {
       await db.update(schema.membershipDues)
-        .set({ status: "overdue" })
+        .set({ paymentStatus: "failed" })
         .where(eq(schema.membershipDues.id, due.id));
     }
 
@@ -342,7 +342,7 @@ router.get("/api/admin/members/:id/notes", requireAuth, requireRole("admin", "co
   try {
     const notes = await db.query.memberNotes.findMany({
       where: eq(schema.memberNotes.memberId, req.params.id),
-      with: { createdBy: { with: { user: true } } },
+      with: { author: true },
       orderBy: desc(schema.memberNotes.createdAt)
     });
 
@@ -375,8 +375,9 @@ router.post("/api/admin/members/:id/notes", requireAuth, requireRole("admin"), a
 
     const [newNote] = await db.insert(schema.memberNotes).values({
       memberId: req.params.id,
-      createdById: adminMember?.id || req.user!.id,
-      note
+      authorId: req.user!.id,
+      note,
+      visibility: "admin_only"
     }).returning();
 
     res.status(201).json({ success: true, data: newNote });

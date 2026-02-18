@@ -7,7 +7,7 @@ import { eventCheckInLimiter } from "../middleware/rate-limit";
 import { eventAntiCheat } from "../middleware/anti-cheat";
 import { antiCheatService } from "../security/anti-cheat";
 import { logAudit, AuditActions } from "../utils/audit-logger";
-import { PointLedgerService } from "../services/point-ledger";
+import { pointLedgerService } from "../services/point-ledger";
 
 import { requireAuth, requireRole } from "./auth";
 
@@ -35,28 +35,19 @@ router.get("/api/events", async (req: AuthRequest, res: Response) => {
     const whereConditions: any[] = [];
 
     if (upcomingOnly === 'true') {
-      whereConditions.push(gte(schema.events.eventDate, now));
-    }
-
-    if (status && status !== 'all') {
-      whereConditions.push(eq(schema.events.status, status as string));
+      whereConditions.push(gte(schema.events.date, now));
     }
 
     const events = await db.query.events.findMany({
       where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
-      with: {
-        creator: {
-          with: { user: true }
-        }
-      },
-      orderBy: desc(schema.events.eventDate)
+      orderBy: desc(schema.events.date)
     });
 
     // Fetch RSVP counts for each event
     const eventsWithCounts = await Promise.all(
       events.map(async (event) => {
-        const rsvpCount = await db.query.eventRSVPs.findMany({
-          where: eq(schema.eventRSVPs.eventId, event.id)
+        const rsvpCount = await db.query.eventRsvps.findMany({
+          where: eq(schema.eventRsvps.eventId, event.id)
         });
         return {
           ...event,
@@ -75,20 +66,15 @@ router.get("/api/events", async (req: AuthRequest, res: Response) => {
 router.get("/api/events/:id", async (req: AuthRequest, res: Response) => {
   try {
     const event = await db.query.events.findFirst({
-      where: eq(schema.events.id, req.params.id),
-      with: {
-        creator: {
-          with: { user: true }
-        }
-      }
+      where: eq(schema.events.id, req.params.id)
     });
 
     if (!event) {
       return res.status(404).json({ success: false, error: "Event not found" });
     }
 
-    const attendees = await db.query.eventAttendances.findMany({
-      where: eq(schema.eventAttendances.eventId, req.params.id),
+    const attendees = await db.query.eventAttendance.findMany({
+      where: eq(schema.eventAttendance.eventId, req.params.id),
       with: {
         member: {
           with: { user: true }
@@ -96,8 +82,8 @@ router.get("/api/events/:id", async (req: AuthRequest, res: Response) => {
       }
     });
 
-    const rsvps = await db.query.eventRSVPs.findMany({
-      where: eq(schema.eventRSVPs.eventId, req.params.id),
+    const rsvps = await db.query.eventRsvps.findMany({
+      where: eq(schema.eventRsvps.eventId, req.params.id),
       with: {
         member: {
           with: { user: true }
@@ -140,11 +126,10 @@ router.post("/api/events", requireAuth, requireRole("admin", "coordinator"), asy
     const [event] = await db.insert(schema.events).values({
       title,
       description: description || "",
-      eventDate: new Date(eventDate),
+      date: new Date(eventDate),
       location,
-      capacity: capacity || 0,
-      createdBy: member.id,
-      status: "scheduled"
+      maxAttendees: capacity || 0,
+      category: "General"
     }).returning();
 
     await logAudit({
@@ -182,10 +167,9 @@ router.patch("/api/events/:id", requireAuth, requireRole("admin", "coordinator")
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
-    if (eventDate !== undefined) updateData.eventDate = new Date(eventDate);
+    if (eventDate !== undefined) updateData.date = new Date(eventDate);
     if (location !== undefined) updateData.location = location;
-    if (capacity !== undefined) updateData.capacity = capacity;
-    if (status !== undefined) updateData.status = status;
+    if (capacity !== undefined) updateData.maxAttendees = capacity;
 
     const [updatedEvent] = await db.update(schema.events)
       .set(updateData)
@@ -271,10 +255,10 @@ router.post("/api/events/:id/rsvp", requireAuth, async (req: AuthRequest, res: R
     }
 
     // Check if already RSVP'd
-    const existingRSVP = await db.query.eventRSVPs.findFirst({
+    const existingRSVP = await db.query.eventRsvps.findFirst({
       where: and(
-        eq(schema.eventRSVPs.eventId, req.params.id),
-        eq(schema.eventRSVPs.memberId, member.id)
+        eq(schema.eventRsvps.eventId, req.params.id),
+        eq(schema.eventRsvps.memberId, member.id)
       )
     });
 
@@ -282,7 +266,7 @@ router.post("/api/events/:id/rsvp", requireAuth, async (req: AuthRequest, res: R
       return res.status(400).json({ success: false, error: "Already RSVP'd to this event" });
     }
 
-    const [rsvp] = await db.insert(schema.eventRSVPs).values({
+    const [rsvp] = await db.insert(schema.eventRsvps).values({
       eventId: req.params.id,
       memberId: member.id,
       status: status || "attending"
@@ -317,10 +301,10 @@ router.delete("/api/events/:id/rsvp", requireAuth, async (req: AuthRequest, res:
       return res.status(404).json({ success: false, error: "Member not found" });
     }
 
-    const rsvp = await db.query.eventRSVPs.findFirst({
+    const rsvp = await db.query.eventRsvps.findFirst({
       where: and(
-        eq(schema.eventRSVPs.eventId, req.params.id),
-        eq(schema.eventRSVPs.memberId, member.id)
+        eq(schema.eventRsvps.eventId, req.params.id),
+        eq(schema.eventRsvps.memberId, member.id)
       )
     });
 
@@ -328,7 +312,7 @@ router.delete("/api/events/:id/rsvp", requireAuth, async (req: AuthRequest, res:
       return res.status(404).json({ success: false, error: "RSVP not found" });
     }
 
-    await db.delete(schema.eventRSVPs).where(eq(schema.eventRSVPs.id, rsvp.id));
+    await db.delete(schema.eventRsvps).where(eq(schema.eventRsvps.id, rsvp.id));
 
     res.json({ success: true, data: { message: "RSVP cancelled" } });
   } catch (error: any) {
@@ -339,15 +323,15 @@ router.delete("/api/events/:id/rsvp", requireAuth, async (req: AuthRequest, res:
 // Delete specific RSVP
 router.delete("/api/events/:id/rsvp/:rsvpId", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const rsvp = await db.query.eventRSVPs.findFirst({
-      where: eq(schema.eventRSVPs.id, req.params.rsvpId)
+    const rsvp = await db.query.eventRsvps.findFirst({
+      where: eq(schema.eventRsvps.id, req.params.rsvpId)
     });
 
     if (!rsvp) {
       return res.status(404).json({ success: false, error: "RSVP not found" });
     }
 
-    await db.delete(schema.eventRSVPs).where(eq(schema.eventRSVPs.id, req.params.rsvpId));
+    await db.delete(schema.eventRsvps).where(eq(schema.eventRsvps.id, req.params.rsvpId));
 
     res.json({ success: true, data: { message: "RSVP deleted" } });
   } catch (error: any) {
@@ -358,8 +342,8 @@ router.delete("/api/events/:id/rsvp/:rsvpId", requireAuth, async (req: AuthReque
 // Get event attendees
 router.get("/api/events/:id/attendees", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const attendees = await db.query.eventAttendances.findMany({
-      where: eq(schema.eventAttendances.eventId, req.params.id),
+    const attendees = await db.query.eventAttendance.findMany({
+      where: eq(schema.eventAttendance.eventId, req.params.id),
       with: {
         member: {
           with: { user: true, ward: true }
@@ -405,7 +389,7 @@ router.post("/api/events/:id/attend", requireAuth, eventCheckInLimiter, eventAnt
 
     const pointsEarned = 10; // Base points for event attendance
 
-    const [attendance] = await db.insert(schema.eventAttendances).values({
+    const [attendance] = await db.insert(schema.eventAttendance).values({
       eventId: req.params.id,
       memberId,
       checkedInAt: new Date(),
@@ -417,22 +401,14 @@ router.post("/api/events/:id/attend", requireAuth, eventCheckInLimiter, eventAnt
     });
 
     if (member) {
-      await db.update(schema.members)
-        .set({
-          pointBalance: (member.pointBalance || 0) + pointsEarned,
-          totalPointsEarned: (member.totalPointsEarned || 0) + pointsEarned
-        })
-        .where(eq(schema.members.id, memberId));
-
-      const ledgerService = PointLedgerService.getInstance();
-      await ledgerService.recordTransaction({
+      await pointLedgerService.addPoints({
         memberId,
-        amount: pointsEarned,
-        type: "earned",
+        points: pointsEarned,
+        transactionType: "earned",
         source: "event_attendance",
-        description: `Points earned from event attendance: ${event.title}`,
-        resourceId: req.params.id,
-        resourceType: "event"
+        referenceType: "event",
+        referenceId: req.params.id,
+        metadata: { eventTitle: event.title }
       });
     }
 

@@ -70,12 +70,15 @@ router.post("/api/elections", requireAuth, requireRole("admin"), async (req: Aut
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
+    const startDateValue = electionDate ? new Date(electionDate) : new Date();
+    const endDateValue = new Date(startDateValue.getTime() + 24 * 60 * 60 * 1000);
     const [election] = await db.insert(schema.elections).values({
       title,
-      description: description || "",
-      electionDate: electionDate ? new Date(electionDate) : new Date(),
+      description,
+      startDate: startDateValue,
+      endDate: endDateValue,
       position,
-      status: status || "scheduled",
+      status: status || "upcoming",
       totalVotes: 0
     }).returning();
 
@@ -118,7 +121,10 @@ router.patch("/api/elections/:id", requireAuth, requireRole("admin"), async (req
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
-    if (electionDate !== undefined) updateData.electionDate = new Date(electionDate);
+    if (electionDate !== undefined) {
+      updateData.startDate = new Date(electionDate);
+      updateData.endDate = new Date(new Date(electionDate).getTime() + 24 * 60 * 60 * 1000);
+    }
     if (position !== undefined) updateData.position = position;
     if (status !== undefined) updateData.status = status;
 
@@ -166,11 +172,11 @@ router.post("/api/elections/:id/candidates", requireAuth, requireRole("admin"), 
       return res.status(404).json({ success: false, error: "Election not found" });
     }
 
-    const [candidate] = await db.insert(schema.electionCandidates).values({
+    const [candidate] = await db.insert(schema.candidates).values({
       electionId: req.params.id,
       name,
-      party: party || "",
-      platform: platform || "",
+      manifesto: platform || "",
+      experience: "",
       votes: 0
     }).returning();
 
@@ -226,7 +232,7 @@ router.post("/api/elections/:id/vote", votingLimiter, requireAuth, async (req: A
     const existingVote = await db.query.votes.findFirst({
       where: and(
         eq(schema.votes.electionId, req.params.id),
-        eq(schema.votes.memberId, member.id)
+        eq(schema.votes.voterId, member.id)
       )
     });
 
@@ -240,19 +246,17 @@ router.post("/api/elections/:id/vote", votingLimiter, requireAuth, async (req: A
       return res.status(404).json({ success: false, error: "Candidate not found" });
     }
 
-    // Record vote
     const [vote] = await db.insert(schema.votes).values({
       electionId: req.params.id,
-      memberId: member.id,
-      candidateId: candidateId,
-      votedAt: new Date()
+      voterId: member.id,
+      candidateId: candidateId
     }).returning();
 
     // Update candidate vote count
     const currentVotes = candidate.votes || 0;
-    await db.update(schema.electionCandidates)
+    await db.update(schema.candidates)
       .set({ votes: currentVotes + 1 })
-      .where(eq(schema.electionCandidates.id, candidateId));
+      .where(eq(schema.candidates.id, candidateId));
 
     // Update election total votes
     const currentTotal = election.totalVotes || 0;

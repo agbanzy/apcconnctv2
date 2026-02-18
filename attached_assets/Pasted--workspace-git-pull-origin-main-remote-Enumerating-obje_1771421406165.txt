@@ -1,0 +1,63 @@
+/workspace$ git pull origin main
+remote: Enumerating objects: 85, done.
+remote: Counting objects: 100% (85/85), done.
+remote: Compressing objects: 100% (16/16), done.
+remote: Total 50 (delta 34), reused 50 (delta 34), pack-reused 0 (from 0)
+Unpacking objects: 100% (50/50), 303.46 KiB | 1.05 MiB/s, done.
+From https://github.com/agbanzy/apcconnctv2
+ * branch            main       -> FETCH_HEAD
+   5e49955..8ca463f  main       -> origin/main
+Updating 5e49955..8ca463f
+Fast-forward
+ .gitignore                                  |   2 +-
+ APC_Connect_Full_Code_Audit_Feb2026.docx    | Bin 0 -> 18118 bytes
+ CHANGELOG_2026-02-18.md                     | 126 ++++++++++++++++++
+ apclogo.png                                 | Bin 0 -> 247674 bytes
+ client/src/App.tsx                          | 387 ++++++++++++++++++++++++++++++-----------------------
+ client/src/components/admin-sidebar.tsx     |   6 +
+ client/src/components/error-boundary.tsx    | 131 ++++++++++++++++++
+ client/src/pages/admin/agent-management.tsx | 691 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ client/src/pages/admin/elections.tsx        |  66 ++++-----
+ client/src/pages/admin/incidents.tsx        | 178 ++++++++-----------------
+ mobile/.gitignore                           |   4 +
+ mobile/app.json                             |   3 +-
+ mobile/app/(tabs)/profile.tsx               |   2 +
+ mobile/app/_layout.tsx                      | 234 ++++++++++++++++++++++++++++++--
+ mobile/app/digital-id.tsx                   |   8 +-
+ mobile/app/donations.tsx                    |  88 ++++++++++--
+ mobile/app/dues.tsx                         | 117 +++++++++++++---
+ mobile/app/election-day.tsx                 | 162 +++++++++++++++++++++-
+ mobile/app/notification-settings.tsx        |   2 +-
+ mobile/components/OfflineBanner.tsx         |  73 ++++++++++
+ mobile/components/PaystackPayment.tsx       | 268 +++++++++++++++++++++++++++++++++++++
+ mobile/eas.json                             |   6 +-
+ mobile/lib/api.ts                           |  17 ++-
+ mobile/lib/push-notifications.ts            |  13 +-
+ mobile/lib/queryClient.ts                   |  17 ++-
+ mobile/package.json                         |   4 +
+ server/jwt-utils.ts                         |  11 +-
+ server/routes.ts                            | 740 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---------
+ server/routes/admin.ts                      | 491 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ server/routes/auth.ts                       | 525 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ server/routes/elections.ts                  | 308 ++++++++++++++++++++++++++++++++++++++++++
+ server/routes/events.ts                     | 472 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ server/routes/knowledge.ts                  | 250 ++++++++++++++++++++++++++++++++++
+ server/routes/members.ts                    | 680 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ server/routes/news.ts                       | 378 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ server/storage.ts                           |   3 +-
+ 36 files changed, 6015 insertions(+), 448 deletions(-)
+ create mode 100644 APC_Connect_Full_Code_Audit_Feb2026.docx
+ create mode 100644 CHANGELOG_2026-02-18.md
+ create mode 100644 apclogo.png
+ create mode 100644 client/src/components/error-boundary.tsx
+ create mode 100644 client/src/pages/admin/agent-management.tsx
+ create mode 100644 mobile/components/OfflineBanner.tsx
+ create mode 100644 mobile/components/PaystackPayment.tsx
+ create mode 100644 server/routes/admin.ts
+ create mode 100644 server/routes/auth.ts
+ create mode 100644 server/routes/elections.ts
+ create mode 100644 server/routes/events.ts
+ create mode 100644 server/routes/knowledge.ts
+ create mode 100644 server/routes/members.ts
+ create mode 100644 server/routes/news.ts
+~/workspace$ 

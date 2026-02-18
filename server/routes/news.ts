@@ -22,19 +22,16 @@ interface AuthRequest extends Request {
 
 const router = Router();
 
-// Get all news posts
 router.get("/api/news", async (req: Request, res: Response) => {
   try {
     const { limit = "20", offset = "0" } = req.query;
 
     const posts = await db.query.newsPosts.findMany({
-      orderBy: desc(schema.newsPosts.createdAt),
+      orderBy: desc(schema.newsPosts.publishedAt),
       limit: parseInt(limit as string),
       offset: parseInt(offset as string),
       with: {
-        author: {
-          with: { user: true }
-        }
+        author: true
       }
     });
 
@@ -52,15 +49,12 @@ router.get("/api/news", async (req: Request, res: Response) => {
   }
 });
 
-// Get single news post
 router.get("/api/news/:id", async (req: Request, res: Response) => {
   try {
     const post = await db.query.newsPosts.findFirst({
       where: eq(schema.newsPosts.id, req.params.id),
       with: {
-        author: {
-          with: { user: true }
-        }
+        author: true
       }
     });
 
@@ -68,29 +62,18 @@ router.get("/api/news/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "News post not found" });
     }
 
-    // Update view count
-    await db.update(schema.newsPosts)
-      .set({
-        views: (post.views || 0) + 1
-      })
-      .where(eq(schema.newsPosts.id, req.params.id));
-
     res.json({
       success: true,
-      data: {
-        ...post,
-        views: (post.views || 0) + 1
-      }
+      data: post
     });
   } catch (error) {
     res.status(500).json({ success: false, error: "Failed to fetch news post" });
   }
 });
 
-// Create news post
 router.post("/api/news", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
   try {
-    const { title, content, imageUrl } = req.body;
+    const { title, content, imageUrl, category } = req.body;
 
     if (!title || !content) {
       return res.status(400).json({ success: false, error: "Title and content are required" });
@@ -106,10 +89,11 @@ router.post("/api/news", requireAuth, requireRole("admin"), async (req: AuthRequ
 
     const [post] = await db.insert(schema.newsPosts).values({
       title,
+      excerpt: content.substring(0, 200),
       content,
+      category: category || "General",
       imageUrl: imageUrl || null,
-      authorId: member.id,
-      views: 0,
+      authorId: req.user!.id,
       likes: 0,
       comments: 0
     }).returning();
@@ -132,7 +116,6 @@ router.post("/api/news", requireAuth, requireRole("admin"), async (req: AuthRequ
   }
 });
 
-// Like news post
 router.post("/api/news/:id/like", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const member = await db.query.members.findFirst({
@@ -151,32 +134,31 @@ router.post("/api/news/:id/like", requireAuth, async (req: AuthRequest, res: Res
       return res.status(404).json({ success: false, error: "News post not found" });
     }
 
-    // Check if already liked
-    const existingLike = await db.query.newsLikes.findFirst({
+    const existingLike = await db.query.postEngagement.findFirst({
       where: and(
-        eq(schema.newsLikes.newsPostId, req.params.id),
-        eq(schema.newsLikes.memberId, member.id)
+        eq(schema.postEngagement.postId, req.params.id),
+        eq(schema.postEngagement.memberId, member.id),
+        eq(schema.postEngagement.type, "like")
       )
     });
 
     if (existingLike) {
-      // Unlike
-      await db.delete(schema.newsLikes).where(eq(schema.newsLikes.id, existingLike.id));
+      await db.delete(schema.postEngagement).where(eq(schema.postEngagement.id, existingLike.id));
       await db.update(schema.newsPosts)
-        .set({ likes: (post.likes || 0) - 1 })
+        .set({ likes: sql`GREATEST(${schema.newsPosts.likes} - 1, 0)` })
         .where(eq(schema.newsPosts.id, req.params.id));
 
       return res.json({ success: true, data: { liked: false } });
     }
 
-    // Like
-    await db.insert(schema.newsLikes).values({
-      newsPostId: req.params.id,
-      memberId: member.id
+    await db.insert(schema.postEngagement).values({
+      postId: req.params.id,
+      memberId: member.id,
+      type: "like"
     });
 
     await db.update(schema.newsPosts)
-      .set({ likes: (post.likes || 0) + 1 })
+      .set({ likes: sql`COALESCE(${schema.newsPosts.likes}, 0) + 1` })
       .where(eq(schema.newsPosts.id, req.params.id));
 
     res.json({ success: true, data: { liked: true } });
@@ -185,7 +167,6 @@ router.post("/api/news/:id/like", requireAuth, async (req: AuthRequest, res: Res
   }
 });
 
-// Get news comments
 router.get("/api/news/:id/comments", async (req: Request, res: Response) => {
   try {
     const { limit = "20", offset = "0" } = req.query;
@@ -196,7 +177,7 @@ router.get("/api/news/:id/comments", async (req: Request, res: Response) => {
       limit: parseInt(limit as string),
       offset: parseInt(offset as string),
       with: {
-        author: {
+        member: {
           with: { user: true }
         }
       }
@@ -214,7 +195,6 @@ router.get("/api/news/:id/comments", async (req: Request, res: Response) => {
   }
 });
 
-// Add comment to news post
 router.post("/api/news/:id/comments", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { comment } = req.body;
@@ -241,12 +221,12 @@ router.post("/api/news/:id/comments", requireAuth, async (req: AuthRequest, res:
 
     const [newComment] = await db.insert(schema.newsComments).values({
       newsPostId: req.params.id,
-      authorId: member.id,
-      comment
+      memberId: member.id,
+      content: comment
     }).returning();
 
     await db.update(schema.newsPosts)
-      .set({ comments: (post.comments || 0) + 1 })
+      .set({ comments: sql`COALESCE(${schema.newsPosts.comments}, 0) + 1` })
       .where(eq(schema.newsPosts.id, req.params.id));
 
     res.status(201).json({ success: true, data: newComment });
@@ -255,7 +235,6 @@ router.post("/api/news/:id/comments", requireAuth, async (req: AuthRequest, res:
   }
 });
 
-// Like comment
 router.post("/api/news/comments/:id/like", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const member = await db.query.members.findFirst({
@@ -276,7 +255,7 @@ router.post("/api/news/comments/:id/like", requireAuth, async (req: AuthRequest,
 
     const existingLike = await db.query.newsCommentLikes.findFirst({
       where: and(
-        eq(schema.newsCommentLikes.newsCommentId, req.params.id),
+        eq(schema.newsCommentLikes.commentId, req.params.id),
         eq(schema.newsCommentLikes.memberId, member.id)
       )
     });
@@ -284,19 +263,19 @@ router.post("/api/news/comments/:id/like", requireAuth, async (req: AuthRequest,
     if (existingLike) {
       await db.delete(schema.newsCommentLikes).where(eq(schema.newsCommentLikes.id, existingLike.id));
       await db.update(schema.newsComments)
-        .set({ likes: (comment.likes || 0) - 1 })
+        .set({ likes: sql`GREATEST(${schema.newsComments.likes} - 1, 0)` })
         .where(eq(schema.newsComments.id, req.params.id));
 
       return res.json({ success: true, data: { liked: false } });
     }
 
     await db.insert(schema.newsCommentLikes).values({
-      newsCommentId: req.params.id,
+      commentId: req.params.id,
       memberId: member.id
     });
 
     await db.update(schema.newsComments)
-      .set({ likes: (comment.likes || 0) + 1 })
+      .set({ likes: sql`COALESCE(${schema.newsComments.likes}, 0) + 1` })
       .where(eq(schema.newsComments.id, req.params.id));
 
     res.json({ success: true, data: { liked: true } });
@@ -305,7 +284,6 @@ router.post("/api/news/comments/:id/like", requireAuth, async (req: AuthRequest,
   }
 });
 
-// Reply to comment
 router.post("/api/news/comments/:id/reply", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { reply } = req.body;
@@ -332,14 +310,10 @@ router.post("/api/news/comments/:id/reply", requireAuth, async (req: AuthRequest
 
     const [replyComment] = await db.insert(schema.newsComments).values({
       newsPostId: parentComment.newsPostId,
-      authorId: member.id,
-      comment: reply,
-      parentCommentId: req.params.id
+      memberId: member.id,
+      content: reply,
+      parentId: req.params.id
     }).returning();
-
-    await db.update(schema.newsComments)
-      .set({ replies: (parentComment.replies || 0) + 1 })
-      .where(eq(schema.newsComments.id, req.params.id));
 
     res.status(201).json({ success: true, data: replyComment });
   } catch (error) {
@@ -347,26 +321,25 @@ router.post("/api/news/comments/:id/reply", requireAuth, async (req: AuthRequest
   }
 });
 
-// Delete comment
 router.delete("/api/news/comments/:id", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const comment = await db.query.newsComments.findFirst({
       where: eq(schema.newsComments.id, req.params.id),
-      with: { author: { with: { user: true } } }
+      with: { member: { with: { user: true } } }
     });
 
     if (!comment) {
       return res.status(404).json({ success: false, error: "Comment not found" });
     }
 
-    if (req.user!.id !== comment.author.user.id && req.user!.role !== "admin") {
+    if (req.user!.id !== comment.member.user.id && req.user!.role !== "admin") {
       return res.status(403).json({ success: false, error: "Unauthorized" });
     }
 
     await db.delete(schema.newsComments).where(eq(schema.newsComments.id, req.params.id));
 
     await db.update(schema.newsPosts)
-      .set({ comments: sql`${schema.newsPosts.comments} - 1` })
+      .set({ comments: sql`GREATEST(${schema.newsPosts.comments} - 1, 0)` })
       .where(eq(schema.newsPosts.id, comment.newsPostId));
 
     res.json({ success: true, data: { message: "Comment deleted" } });
