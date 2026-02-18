@@ -47,24 +47,26 @@ import { format } from "date-fns";
 interface Election {
   id: string;
   title: string;
+  description?: string;
   position: string;
+  stateId?: string;
+  lgaId?: string;
+  wardId?: string;
   startDate: string;
   endDate: string;
-  status: "upcoming" | "active" | "completed";
+  status: "upcoming" | "ongoing" | "completed";
   totalVotes: number;
-  isActive: boolean;
-  requiresVerification: boolean;
   candidates?: any[];
   createdAt: string;
 }
 
 const electionSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
-  position: z.string().min(2, "Position is required"),
   description: z.string().optional(),
+  position: z.string().min(2, "Position is required"),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
-  requiresVerification: z.boolean().default(false),
+  status: z.enum(["upcoming", "ongoing", "completed"]).default("upcoming"),
 });
 
 type ElectionFormData = z.infer<typeof electionSchema>;
@@ -88,11 +90,11 @@ export default function AdminElections() {
     resolver: zodResolver(electionSchema),
     defaultValues: {
       title: "",
-      position: "",
       description: "",
+      position: "",
       startDate: "",
       endDate: "",
-      requiresVerification: false,
+      status: "upcoming",
     },
   });
 
@@ -114,7 +116,7 @@ export default function AdminElections() {
       render: (election) => (
         <Badge
           variant={
-            election.status === "active"
+            election.status === "ongoing"
               ? "default"
               : election.status === "completed"
               ? "secondary"
@@ -127,8 +129,9 @@ export default function AdminElections() {
       ),
     },
     {
-      key: "dates",
-      header: "Date Range",
+      key: "startDate",
+      header: "Dates",
+      sortable: true,
       render: (election) => (
         <div className="text-sm" data-testid={`text-dates-${election.id}`}>
           <p>{format(new Date(election.startDate), "MMM d, yyyy")}</p>
@@ -168,11 +171,11 @@ export default function AdminElections() {
               setEditingElection(election);
               form.reset({
                 title: election.title,
+                description: election.description || "",
                 position: election.position,
-                description: "",
-                startDate: election.startDate.split('T')[0],
-                endDate: election.endDate.split('T')[0],
-                requiresVerification: election.requiresVerification,
+                startDate: election.startDate?.split('T')[0] || "",
+                endDate: election.endDate?.split('T')[0] || "",
+                status: election.status as "upcoming" | "ongoing" | "completed",
               });
               setDrawerOpen(true);
             }}
@@ -284,7 +287,7 @@ export default function AdminElections() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="ongoing">Ongoing</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -421,24 +424,23 @@ export default function AdminElections() {
 
             <FormField
               control={form.control}
-              name="requiresVerification"
+              name="status"
               render={({ field }) => (
-                <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">Require Verification</FormLabel>
-                    <p className="text-sm text-muted-foreground">
-                      Only verified members can vote
-                    </p>
-                  </div>
-                  <FormControl>
-                    <input
-                      type="checkbox"
-                      checked={field.value}
-                      onChange={field.onChange}
-                      className="h-4 w-4"
-                      data-testid="checkbox-require-verification"
-                    />
-                  </FormControl>
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                      <SelectItem value="ongoing">Ongoing</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
                 </FormItem>
               )}
             />

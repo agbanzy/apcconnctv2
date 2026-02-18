@@ -59,12 +59,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:5000",
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "5033efda-5d7f-4441-9bb5-09ad1239b6e3"
       }
     }
   }

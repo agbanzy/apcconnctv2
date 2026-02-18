@@ -46,27 +46,24 @@ import { format } from "date-fns";
 
 interface Incident {
   id: string;
-  title: string;
-  description: string;
+  pollingUnitId: string | null;
+  reporterId: string | null;
   severity: "low" | "medium" | "high";
-  location: string;
-  stateId: string | null;
-  status: "pending" | "investigating" | "resolved" | "closed";
-  assignedTo: string | null;
-  resolution: string | null;
-  reporter?: { firstName: string; lastName: string };
+  description: string;
+  location: string | null;
+  coordinates: { lat: number; lng: number } | null;
+  status: "reported" | "investigating" | "resolved";
   createdAt: string;
+  pollingUnit?: { name: string; unitCode: string };
+  reporter?: { user: { firstName: string; lastName: string } };
+  media?: Array<{ id: string; mediaUrl: string; mediaType: string }>;
 }
 
 const incidentSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().min(20, "Description must be at least 20 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
   severity: z.enum(["low", "medium", "high"]),
-  location: z.string().min(3, "Location is required"),
-  stateId: z.string().optional(),
-  status: z.enum(["pending", "investigating", "resolved", "closed"]),
-  assignedTo: z.string().optional(),
-  resolution: z.string().optional(),
+  location: z.string().optional(),
+  status: z.enum(["reported", "investigating", "resolved"]),
 });
 
 type IncidentFormData = z.infer<typeof incidentSchema>;
@@ -89,26 +86,41 @@ export default function AdminIncidents() {
   const form = useForm<IncidentFormData>({
     resolver: zodResolver(incidentSchema),
     defaultValues: {
-      title: "",
       description: "",
       severity: "medium",
       location: "",
-      stateId: "",
-      status: "pending",
-      assignedTo: "",
-      resolution: "",
+      status: "reported",
     },
   });
 
   const columns: Column<Incident>[] = [
     {
-      key: "title",
-      header: "Title",
+      key: "description",
+      header: "Description",
       render: (incident) => (
-        <div className="max-w-md" data-testid={`text-title-${incident.id}`}>
-          <p className="font-medium">{incident.title}</p>
-          <p className="text-xs text-muted-foreground mt-1">{incident.location}</p>
+        <div className="max-w-md" data-testid={`text-description-${incident.id}`}>
+          <p className="text-sm font-medium truncate">{incident.description.substring(0, 50)}...</p>
         </div>
+      ),
+    },
+    {
+      key: "pollingUnit",
+      header: "Polling Unit",
+      render: (incident) => (
+        <span className="text-sm" data-testid={`text-polling-unit-${incident.id}`}>
+          {incident.pollingUnit ? incident.pollingUnit.name : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "reporter",
+      header: "Reporter",
+      render: (incident) => (
+        <span className="text-sm" data-testid={`text-reporter-${incident.id}`}>
+          {incident.reporter
+            ? `${incident.reporter.user.firstName} ${incident.reporter.user.lastName}`
+            : "Anonymous"}
+        </span>
       ),
     },
     {
@@ -131,13 +143,11 @@ export default function AdminIncidents() {
       ),
     },
     {
-      key: "reporter",
-      header: "Reporter",
+      key: "location",
+      header: "Location",
       render: (incident) => (
-        <span className="text-sm" data-testid={`text-reporter-${incident.id}`}>
-          {incident.reporter
-            ? `${incident.reporter.firstName} ${incident.reporter.lastName}`
-            : "Anonymous"}
+        <span className="text-sm" data-testid={`text-location-${incident.id}`}>
+          {incident.location || "—"}
         </span>
       ),
     },
@@ -161,8 +171,17 @@ export default function AdminIncidents() {
       ),
     },
     {
+      key: "media",
+      header: "Media",
+      render: (incident) => (
+        <span className="text-sm" data-testid={`text-media-count-${incident.id}`}>
+          {incident.media ? incident.media.length : 0}
+        </span>
+      ),
+    },
+    {
       key: "createdAt",
-      header: "Reported",
+      header: "Created At",
       sortable: true,
       render: (incident) => (
         <span className="text-sm" data-testid={`text-created-${incident.id}`}>
@@ -181,14 +200,10 @@ export default function AdminIncidents() {
             onClick={() => {
               setEditingIncident(incident);
               form.reset({
-                title: incident.title,
                 description: incident.description,
                 severity: incident.severity,
-                location: incident.location,
-                stateId: incident.stateId || "",
+                location: incident.location || "",
                 status: incident.status,
-                assignedTo: incident.assignedTo || "",
-                resolution: incident.resolution || "",
               });
               setDrawerOpen(true);
             }}
@@ -212,14 +227,10 @@ export default function AdminIncidents() {
   const onSubmit = async (data: IncidentFormData) => {
     try {
       const incidentData = {
-        title: data.title,
         description: data.description,
         severity: data.severity,
-        location: data.location,
-        stateId: data.stateId || null,
+        location: data.location || null,
         status: data.status,
-        assignedTo: data.assignedTo || null,
-        resolution: data.resolution || null,
       };
 
       if (editingIncident) {
@@ -329,10 +340,9 @@ export default function AdminIncidents() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="reported">Reported</SelectItem>
                   <SelectItem value="investigating">Investigating</SelectItem>
                   <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -377,31 +387,13 @@ export default function AdminIncidents() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Incident title"
-                      {...field}
-                      data-testid="input-title"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Detailed description..."
+                      placeholder="Detailed description of the incident..."
                       rows={6}
                       {...field}
                       data-testid="input-description"
@@ -449,10 +441,9 @@ export default function AdminIncidents() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="reported">Reported</SelectItem>
                         <SelectItem value="investigating">Investigating</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -466,67 +457,12 @@ export default function AdminIncidents() {
               name="location"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Location</FormLabel>
+                  <FormLabel>Location (Optional)</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Incident location"
                       {...field}
                       data-testid="input-location"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="stateId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>State (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="State ID"
-                      {...field}
-                      data-testid="input-state-id"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="assignedTo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assigned To (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="User ID or email"
-                      {...field}
-                      data-testid="input-assigned-to"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="resolution"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Resolution (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Resolution details..."
-                      rows={3}
-                      {...field}
-                      data-testid="input-resolution"
                     />
                   </FormControl>
                   <FormMessage />

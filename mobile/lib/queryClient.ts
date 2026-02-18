@@ -1,4 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
+import { createAsyncStoragePersister } from '@tanstack/react-query-persist-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
 
 export const queryClient = new QueryClient({
@@ -6,12 +8,25 @@ export const queryClient = new QueryClient({
     queries: {
       retry: 2,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
+      gcTime: 24 * 60 * 60 * 1000, // 24 hours for offline persistence
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
     },
     mutations: {
       retry: 1,
+    },
+  },
+});
+
+// Create persister for offline cache storage
+export const persister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  hydrateOptions: {
+    // Only persist GET queries (queries), not mutations
+    shouldDehydrateQuery: (query) => {
+      const queryState = query.state;
+      return queryState.status === 'success';
     },
   },
 });

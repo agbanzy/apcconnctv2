@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 const AGENT_STORAGE_KEY = 'apc_agent_session';
 
@@ -78,13 +79,21 @@ interface AgentSession {
   elections: ElectionInfo[];
 }
 
+interface IncidentMedia {
+  id: string;
+  mediaUrl: string;
+  mediaType: string;
+}
+
 interface Incident {
   id: string;
   severity: string;
   description: string;
   location: string;
+  coordinates: { lat: number; lng: number } | null;
   status: string;
   createdAt: string;
+  media?: IncidentMedia[];
 }
 
 type ActiveView = 'dashboard' | 'report-incident' | 'submit-results' | 'my-incidents' | 'result-sheets';
@@ -127,6 +136,9 @@ export default function ElectionDayScreen() {
   const [incidentSeverity, setIncidentSeverity] = useState<string>('medium');
   const [incidentDescription, setIncidentDescription] = useState('');
   const [incidentLocation, setIncidentLocation] = useState('');
+  const [incidentImages, setIncidentImages] = useState<Array<{ uri: string; name: string; type: string }>>([]);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [incidentCoords, setIncidentCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [selectedElectionIndex, setSelectedElectionIndex] = useState(0);
   const [voteCountsByElection, setVoteCountsByElection] = useState<Record<string, Record<string, string>>>({});
@@ -231,13 +243,30 @@ export default function ElectionDayScreen() {
   });
 
   const reportIncidentMutation = useMutation({
-    mutationFn: async (params: { severity: string; description: string; location?: string }) => {
+    mutationFn: async (params: { severity: string; description: string; location?: string; latitude?: number; longitude?: number; images?: Array<{ uri: string; name: string; type: string }> }) => {
       if (!agentSession) throw new Error('No session');
-      const response = await api.post('/api/agent/report-incident', {
-        agentCode: agentSession.agentCode,
-        agentPin: agentSession.agentPin,
-        ...params,
-      });
+
+      const formData = new FormData();
+      formData.append('agentCode', agentSession.agentCode);
+      formData.append('agentPin', agentSession.agentPin);
+      formData.append('severity', params.severity);
+      formData.append('description', params.description);
+      if (params.location) formData.append('location', params.location);
+      if (params.latitude) formData.append('latitude', String(params.latitude));
+      if (params.longitude) formData.append('longitude', String(params.longitude));
+
+      // Attach images
+      if (params.images && params.images.length > 0) {
+        for (const img of params.images) {
+          formData.append('images', {
+            uri: img.uri,
+            name: img.name || 'incident_photo.jpg',
+            type: img.type || 'image/jpeg',
+          } as any);
+        }
+      }
+
+      const response = await api.upload('/api/agent/report-incident', formData);
       if (!response.success) throw new Error(response.error || 'Report failed');
       return response.data;
     },
@@ -246,6 +275,8 @@ export default function ElectionDayScreen() {
       setIncidentDescription('');
       setIncidentLocation('');
       setIncidentSeverity('medium');
+      setIncidentImages([]);
+      setIncidentCoords(null);
       setActiveView('dashboard');
       queryClient.invalidateQueries({ queryKey: ['/api/agent/my-incidents'] });
     },
@@ -355,7 +386,85 @@ export default function ElectionDayScreen() {
       severity: incidentSeverity,
       description: incidentDescription.trim(),
       location: incidentLocation.trim() || undefined,
+      latitude: incidentCoords?.lat,
+      longitude: incidentCoords?.lng,
+      images: incidentImages,
     });
+  };
+
+  const handlePickIncidentImage = async () => {
+    if (incidentImages.length >= 5) {
+      Alert.alert('Limit Reached', 'Maximum 5 images per incident.');
+      return;
+    }
+
+    Alert.alert('Add Photo', 'Choose a source', [
+      {
+        text: 'Camera',
+        onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert('Permission needed', 'Camera access is required.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+          if (!result.canceled && result.assets[0]) {
+            const asset = result.assets[0];
+            setIncidentImages(prev => [...prev, {
+              uri: asset.uri,
+              name: `incident_${Date.now()}.jpg`,
+              type: asset.mimeType || 'image/jpeg',
+            }]);
+          }
+        }
+      },
+      {
+        text: 'Gallery',
+        onPress: async () => {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert('Permission needed', 'Photo library access is required.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+            allowsMultipleSelection: true,
+            selectionLimit: 5 - incidentImages.length,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const newImages = result.assets.map((asset, i) => ({
+              uri: asset.uri,
+              name: `incident_${Date.now()}_${i}.jpg`,
+              type: asset.mimeType || 'image/jpeg',
+            }));
+            setIncidentImages(prev => [...prev, ...newImages].slice(0, 5));
+          }
+        }
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleGetLocation = async () => {
+    setIsGettingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location access is needed to tag the incident.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setIncidentCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      Alert.alert('Location Tagged', `Lat: ${loc.coords.latitude.toFixed(5)}, Lng: ${loc.coords.longitude.toFixed(5)}`);
+    } catch (err: any) {
+      Alert.alert('Location Error', err.message || 'Could not get current location');
+    } finally {
+      setIsGettingLocation(false);
+    }
   };
 
   const handleSubmitElectionResults = (electionId: string) => {
@@ -547,6 +656,47 @@ export default function ElectionDayScreen() {
               value={incidentLocation}
               onChangeText={setIncidentLocation}
             />
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: incidentCoords ? '#DCFCE7' : '#F3F4F6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, flex: 1 }}
+                onPress={handleGetLocation}
+                disabled={isGettingLocation}
+              >
+                {isGettingLocation ? (
+                  <ActivityIndicator size="small" color="#00A86B" />
+                ) : (
+                  <Ionicons name={incidentCoords ? "checkmark-circle" : "location"} size={18} color={incidentCoords ? "#059669" : "#6B7280"} />
+                )}
+                <Text variant="caption" style={{ color: incidentCoords ? '#059669' : '#6B7280', fontWeight: '600', fontSize: 12 }}>
+                  {incidentCoords ? 'Location Tagged' : 'Tag Location'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text variant="caption" style={[styles.fieldLabel, { marginTop: 16 }]}>Attach Photos (up to 5)</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {incidentImages.map((img, idx) => (
+                <View key={idx} style={{ width: 72, height: 72, borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+                  <Image source={{ uri: img.uri }} style={{ width: 72, height: 72 }} />
+                  <TouchableOpacity
+                    style={{ position: 'absolute', top: 2, right: 2, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' }}
+                    onPress={() => setIncidentImages(prev => prev.filter((_, i) => i !== idx))}
+                  >
+                    <Ionicons name="close" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {incidentImages.length < 5 && (
+                <TouchableOpacity
+                  style={{ width: 72, height: 72, borderRadius: 8, borderWidth: 2, borderColor: '#E5E7EB', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' }}
+                  onPress={handlePickIncidentImage}
+                >
+                  <Ionicons name="camera-outline" size={24} color="#9CA3AF" />
+                  <Text variant="caption" style={{ color: '#9CA3AF', fontSize: 9, marginTop: 2 }}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             <Button
               title={reportIncidentMutation.isPending ? 'Submitting...' : 'Submit Report'}

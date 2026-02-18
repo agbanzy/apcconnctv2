@@ -14,6 +14,10 @@ web-build/
 # Dependencies
 node_modules/
 
+# Credentials & Secrets
+credentials.json
+*.jks
+
 # Environment
 .env
 .env.local

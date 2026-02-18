@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { PaystackPayment } from '@/components/PaystackPayment';
 import { api } from '@/lib/api';
 
 interface DonationCampaign {
@@ -38,6 +39,20 @@ export default function DonationsScreen() {
   const [customAmount, setCustomAmount] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [message, setMessage] = useState('');
+  const [paystackVisible, setPaystackVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [paymentReference, setPaymentReference] = useState('');
+  const paystackPublicKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
+
+  const { data: userProfile } = useQuery({
+    queryKey: ['/api/profile'],
+    queryFn: async () => {
+      const response = await api.get('/api/profile');
+      if (!response.success) throw new Error(response.error || 'Failed to load profile');
+      return response.data;
+    },
+  });
 
   const { data: campaignsData, isLoading, isError, error, refetch: refetchCampaigns } = useQuery({
     queryKey: ['/api/donation-campaigns'],
@@ -57,21 +72,38 @@ export default function DonationsScreen() {
     },
   });
 
-  const donateMutation = useMutation({
+  const initializeDonationMutation = useMutation({
     mutationFn: async (params: { amount: number; campaignId?: string | null; isAnonymous: boolean; message?: string | null }) => {
-      const response = await api.post('/api/donations/create', params);
-      if (!response.success) throw new Error(response.error || 'Donation failed');
+      const response = await api.post('/api/donations/initialize', params);
+      if (!response.success) throw new Error(response.error || 'Failed to initialize donation');
       return response.data;
     },
     onSuccess: (data: any) => {
-      if (data?.authorization_url) {
-        Alert.alert('Payment', 'Please complete payment in your browser. The payment link has been generated.');
+      if (data?.reference) {
+        setPaymentReference(data.reference);
+        setPaystackVisible(true);
       } else {
-        Alert.alert('Thank You', 'Your donation has been recorded!');
+        Alert.alert('Error', 'Failed to get payment reference');
       }
+    },
+    onError: (err: Error) => {
+      Alert.alert('Error', err.message);
+    },
+  });
+
+  const verifyDonationMutation = useMutation({
+    mutationFn: async (reference: string) => {
+      const response = await api.post('/api/donations/verify', { reference });
+      if (!response.success) throw new Error(response.error || 'Failed to verify donation');
+      return response.data;
+    },
+    onSuccess: () => {
+      Alert.alert('Thank You', 'Your donation has been recorded!');
       setSelectedAmount(null);
       setCustomAmount('');
       setMessage('');
+      setPaymentAmount(0);
+      setSelectedCampaignId(null);
       queryClient.invalidateQueries({ queryKey: ['/api/donations/recent'] });
       queryClient.invalidateQueries({ queryKey: ['/api/donation-campaigns'] });
     },
@@ -96,6 +128,9 @@ export default function DonationsScreen() {
       return;
     }
 
+    setPaymentAmount(amount);
+    setSelectedCampaignId(campaignId || null);
+
     Alert.alert(
       'Confirm Donation',
       `Donate N${amount.toLocaleString()}${campaignId ? '' : ' (General)'}?`,
@@ -103,7 +138,7 @@ export default function DonationsScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Donate',
-          onPress: () => donateMutation.mutate({
+          onPress: () => initializeDonationMutation.mutate({
             amount,
             campaignId: campaignId || null,
             isAnonymous,
@@ -112,6 +147,20 @@ export default function DonationsScreen() {
         },
       ]
     );
+  };
+
+  const handlePaystackSuccess = (response: any) => {
+    setPaystackVisible(false);
+    if (response.reference) {
+      verifyDonationMutation.mutate(response.reference);
+    }
+  };
+
+  const handlePaystackCancel = () => {
+    setPaystackVisible(false);
+    setPaymentAmount(0);
+    setSelectedCampaignId(null);
+    Alert.alert('Cancelled', 'Payment was cancelled');
   };
 
   const formatDate = (dateString: string) => {
@@ -183,10 +232,10 @@ export default function DonationsScreen() {
       />
 
       <Button
-        title={donateMutation.isPending ? 'Processing...' : 'Donate Now'}
+        title={initializeDonationMutation.isPending ? 'Processing...' : 'Donate Now'}
         onPress={() => handleDonate()}
-        loading={donateMutation.isPending}
-        disabled={donateMutation.isPending || (!selectedAmount && !customAmount)}
+        loading={initializeDonationMutation.isPending}
+        disabled={initializeDonationMutation.isPending || (!selectedAmount && !customAmount)}
         style={{ marginTop: 16, marginBottom: 28 }}
       />
 
@@ -239,6 +288,25 @@ export default function DonationsScreen() {
       )}
 
       <View style={{ height: 30 }} />
+
+      <PaystackPayment
+        visible={paystackVisible}
+        amount={paymentAmount}
+        email={userProfile?.user?.email || ''}
+        reference={paymentReference}
+        publicKey={paystackPublicKey}
+        metadata={{
+          campaignId: selectedCampaignId,
+          isAnonymous,
+          message,
+        }}
+        onSuccess={handlePaystackSuccess}
+        onCancel={handlePaystackCancel}
+        onError={(error) => {
+          setPaystackVisible(false);
+          Alert.alert('Payment Error', error);
+        }}
+      />
     </ScrollView>
   );
 }

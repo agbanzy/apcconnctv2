@@ -82,7 +82,7 @@ export default function NotificationSettingsScreen() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: NotificationPrefs) => {
-      const response = await api.put('/api/notifications/preferences', data);
+      const response = await api.post('/api/notifications/preferences', data);
       if (!response.success) throw new Error(response.error || 'Failed to save preferences');
       return response.data;
     },

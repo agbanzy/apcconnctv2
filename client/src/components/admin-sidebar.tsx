@@ -18,6 +18,7 @@ import {
   Coins,
   FileSearch,
   HelpCircle,
+  UserCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +70,11 @@ const adminMenuItems = [
     title: "Campaigns",
     url: "/admin/campaigns",
     icon: MessageSquare,
+  },
+  {
+    title: "Agent Management",
+    url: "/admin/agent-management",
+    icon: UserCheck,
   },
   {
     title: "Incidents",

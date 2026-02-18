@@ -1,3 +1,7 @@
+// NOTE: Requires 'expo-notifications' dependency
+// Install with: npm install expo-notifications
+// or: yarn add expo-notifications
+
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { api } from './api';
@@ -12,6 +16,7 @@ export async function registerForPushNotifications(): Promise<{ success: boolean
       return { success: false, message: 'Push notifications not available in this environment' };
     }
 
+    // Request notification permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -24,6 +29,7 @@ export async function registerForPushNotifications(): Promise<{ success: boolean
       return { success: false, message: 'Push notification permission denied' };
     }
 
+    // Get Expo push token
     const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -32,7 +38,8 @@ export async function registerForPushNotifications(): Promise<{ success: boolean
 
     const expoPushToken = tokenData.data;
 
-    const response = await api.post('/api/push/subscribe/mobile', {
+    // Send token to backend
+    const response = await api.post('/api/push/register', {
       token: expoPushToken,
       platform: Platform.OS,
       deviceName: Constants.deviceName || 'Unknown Device',
@@ -43,6 +50,7 @@ export async function registerForPushNotifications(): Promise<{ success: boolean
       return { success: false, message: response.error || 'Failed to register with server' };
     }
 
+    // Configure Android notification channel
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Default',
@@ -51,6 +59,9 @@ export async function registerForPushNotifications(): Promise<{ success: boolean
         lightColor: '#00A86B',
       });
     }
+
+    // Store token locally for reference
+    await storage.setItem('pushToken', expoPushToken);
 
     console.log('Push notification token registered:', expoPushToken);
     return { success: true, token: expoPushToken };
