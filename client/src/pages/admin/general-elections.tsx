@@ -53,6 +53,7 @@ import {
   ChevronUp,
   Play,
   Pause,
+  UserPlus,
 } from "lucide-react";
 
 type GeneralElection = {
@@ -107,6 +108,10 @@ export default function AdminGeneralElections() {
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null);
+  const [candidateElection, setCandidateElection] = useState<GeneralElection | null>(null);
+  const [newCandidateName, setNewCandidateName] = useState("");
+  const [newCandidateParty, setNewCandidateParty] = useState("");
+  const [newCandidateRunningMate, setNewCandidateRunningMate] = useState("");
 
   const [bulkYear, setBulkYear] = useState(new Date().getFullYear());
   const [bulkDate, setBulkDate] = useState("");
@@ -124,8 +129,52 @@ export default function AdminGeneralElections() {
     queryKey: ["/api/states"],
   });
 
+  const { data: partiesResp } = useQuery<{ success: boolean; data: Array<{ id: string; name: string; abbreviation: string; color: string; logoUrl?: string }> }>({
+    queryKey: ["/api/parties"],
+  });
+
   const elections = electionsResp?.data || [];
   const states = statesResp?.data || [];
+  const parties = partiesResp?.data || [];
+
+  const addCandidateMutation = useMutation({
+    mutationFn: async ({ electionId, name, partyId, runningMate }: { electionId: string; name: string; partyId: string; runningMate?: string }) => {
+      const res = await apiRequest("POST", `/api/general-elections/${electionId}/candidates`, { name, partyId, runningMate: runningMate || undefined });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to add candidate");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Candidate Added", description: "Candidate added successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
+      setNewCandidateName("");
+      setNewCandidateParty("");
+      setNewCandidateRunningMate("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteCandidateMutation = useMutation({
+    mutationFn: async ({ electionId, candidateId }: { electionId: string; candidateId: string }) => {
+      const res = await apiRequest("DELETE", `/api/general-elections/${electionId}/candidates/${candidateId}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to delete candidate");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Candidate Removed", description: "Candidate removed successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const bulkCreateMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -417,9 +466,16 @@ export default function AdminGeneralElections() {
                             <Badge variant={cfg.variant} data-testid={`badge-status-${e.id}`}>
                               {e.status}
                             </Badge>
-                            <span className="text-xs text-muted-foreground hidden md:inline">
-                              {e.candidates?.length || 0} candidates
-                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCandidateElection(e)}
+                              data-testid={`button-candidates-${e.id}`}
+                            >
+                              <UserPlus className="w-3 h-3 mr-1" />
+                              <span className="hidden md:inline">{e.candidates?.length || 0}</span>
+                              <span className="md:hidden">{e.candidates?.length || 0}</span>
+                            </Button>
                             <Button
                               size="icon"
                               variant="ghost"
@@ -642,6 +698,119 @@ export default function AdminGeneralElections() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!candidateElection} onOpenChange={(open) => { if (!open) setCandidateElection(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manage Candidates</DialogTitle>
+            <DialogDescription>{candidateElection?.title}</DialogDescription>
+          </DialogHeader>
+
+          {candidateElection && (
+            <div className="space-y-4" data-testid="candidate-management-panel">
+              {(() => {
+                const currentElection = elections.find(e => e.id === candidateElection.id);
+                const currentCandidates = currentElection?.candidates || [];
+                return (
+                  <>
+                    {currentCandidates.length > 0 ? (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Current Candidates ({currentCandidates.length})</Label>
+                        {currentCandidates.map((c: any) => (
+                          <div key={c.id} className="flex items-center justify-between gap-2 p-2 border border-border rounded-md" data-testid={`candidate-row-${c.id}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: c.party?.color || '#888' }}
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{c.name}</p>
+                                <p className="text-xs text-muted-foreground">{c.party?.abbreviation || 'Unknown Party'}{c.runningMate ? ` / ${c.runningMate}` : ''}</p>
+                              </div>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => deleteCandidateMutation.mutate({ electionId: candidateElection.id, candidateId: c.id })}
+                              disabled={deleteCandidateMutation.isPending}
+                              data-testid={`button-remove-candidate-${c.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No candidates added yet.</p>
+                    )}
+
+                    <div className="border-t border-border pt-4 space-y-3">
+                      <Label className="text-sm font-medium">Add New Candidate</Label>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Candidate Name</Label>
+                        <Input
+                          value={newCandidateName}
+                          onChange={(e) => setNewCandidateName(e.target.value)}
+                          placeholder="Full name of candidate"
+                          data-testid="input-candidate-name"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Party</Label>
+                        <Select value={newCandidateParty} onValueChange={setNewCandidateParty}>
+                          <SelectTrigger data-testid="select-candidate-party">
+                            <SelectValue placeholder="Select party" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {parties.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color }} />
+                                  {p.name} ({p.abbreviation})
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(candidateElection.position === "presidential" || candidateElection.position === "governorship") && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Running Mate (optional)</Label>
+                          <Input
+                            value={newCandidateRunningMate}
+                            onChange={(e) => setNewCandidateRunningMate(e.target.value)}
+                            placeholder="Running mate name"
+                            data-testid="input-running-mate"
+                          />
+                        </div>
+                      )}
+                      <Button
+                        onClick={() => {
+                          if (!newCandidateName.trim() || !newCandidateParty) {
+                            toast({ title: "Validation Error", description: "Name and party are required.", variant: "destructive" });
+                            return;
+                          }
+                          addCandidateMutation.mutate({
+                            electionId: candidateElection.id,
+                            name: newCandidateName.trim(),
+                            partyId: newCandidateParty,
+                            runningMate: newCandidateRunningMate.trim() || undefined,
+                          });
+                        }}
+                        disabled={addCandidateMutation.isPending || !newCandidateName.trim() || !newCandidateParty}
+                        data-testid="button-add-candidate"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        {addCandidateMutation.isPending ? "Adding..." : "Add Candidate"}
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

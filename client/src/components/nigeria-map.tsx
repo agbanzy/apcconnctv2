@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Calendar, Megaphone, TrendingUp, MapPin, Award, X, Vote, Newspaper, ClipboardList } from "lucide-react";
+import { Users, Calendar, Megaphone, TrendingUp, MapPin, Award, X, Vote, Newspaper, ClipboardList, Landmark, Building2 } from "lucide-react";
 import { NIGERIA_STATE_PATHS, NIGERIA_MAP_VIEWBOX, STATE_NAME_ALIASES } from "@/lib/nigeria-svg-paths";
 
 interface StateData {
@@ -22,16 +22,25 @@ interface StateData {
   pollingUnitsCount: number;
   newsCount: number;
   tasksCount: number;
+  senatorialDistrictsCount: number;
+  federalConstituenciesCount: number;
+  generalElectionsCount: number;
+}
+
+interface ElectoralDetail {
+  senatorialDistricts: Array<{ id: string; code: string; districtName: string }>;
+  federalConstituencies: Array<{ id: string; code: string; name: string }>;
+  elections: Array<{ id: string; title: string; position: string; status: string; electionDate: string; year: number }>;
 }
 
 interface NigeriaMapProps {
-  mode?: 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
+  mode?: MapMode;
   onStateClick?: (stateId: string, stateName: string) => void;
   highlightStates?: string[];
   showLegend?: boolean;
 }
 
-type MapMode = 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
+type MapMode = 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks' | 'elections';
 
 function findStateData(states: StateData[] | undefined, svgName: string): StateData | undefined {
   if (!states) return undefined;
@@ -49,11 +58,17 @@ export function NigeriaMap({
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<StateData | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; name: string; data: StateData | undefined } | null>(null);
+  const [showElectoralDetail, setShowElectoralDetail] = useState(false);
 
   const { data: rawData, isLoading } = useQuery<{ success: boolean; data: { states: StateData[] } }>({
     queryKey: ['/api/analytics/map-data'],
   });
   const statesData = rawData?.data?.states;
+
+  const { data: electoralData } = useQuery<{ success: boolean; data: ElectoralDetail }>({
+    queryKey: ['/api/analytics/state-electoral', selectedState?.stateId],
+    enabled: !!selectedState?.stateId && showElectoralDetail,
+  });
 
   const getModeValue = useCallback((s: StateData): number => {
     switch (selectedMode) {
@@ -63,6 +78,7 @@ export function NigeriaMap({
       case 'polling': return s.pollingUnitsCount || 0;
       case 'news': return s.newsCount || 0;
       case 'tasks': return s.tasksCount || 0;
+      case 'elections': return (s.senatorialDistrictsCount || 0) + (s.federalConstituenciesCount || 0) + (s.generalElectionsCount || 0);
       case 'activity': return s.memberCount + s.upcomingEvents + s.activeCampaigns + (s.tasksCount || 0);
       default: return 0;
     }
@@ -78,13 +94,18 @@ export function NigeriaMap({
     const value = getModeValue(stateData);
     if (value === 0) return 'hsl(220, 13%, 88%)';
     const intensity = Math.min(value / maxValue, 1);
+    if (selectedMode === 'elections') {
+      const lightness = 60 - (intensity * 25);
+      return `hsl(210, 70%, ${lightness}%)`;
+    }
     const lightness = 65 - (intensity * 30);
     return `hsl(142, 65%, ${lightness}%)`;
-  }, [getModeValue, maxValue]);
+  }, [getModeValue, maxValue, selectedMode]);
 
   const handleStateClick = useCallback((svgName: string) => {
     const stateData = findStateData(statesData, svgName);
     setSelectedState(stateData || null);
+    setShowElectoralDetail(false);
     if (stateData && onStateClick) {
       onStateClick(stateData.stateId, stateData.name);
     }
@@ -110,6 +131,8 @@ export function NigeriaMap({
     );
   }
 
+  const elDetail = electoralData?.data;
+
   return (
     <div className="space-y-4" data-testid="nigeria-map">
       <div className="flex flex-wrap items-center gap-2">
@@ -119,6 +142,7 @@ export function NigeriaMap({
           { mode: 'events' as MapMode, icon: Calendar, label: 'Events' },
           { mode: 'campaigns' as MapMode, icon: Megaphone, label: 'Campaigns' },
           { mode: 'polling' as MapMode, icon: Vote, label: 'Polling Units' },
+          { mode: 'elections' as MapMode, icon: Landmark, label: 'Elections' },
           { mode: 'news' as MapMode, icon: Newspaper, label: 'News' },
           { mode: 'tasks' as MapMode, icon: ClipboardList, label: 'Tasks' },
           { mode: 'activity' as MapMode, icon: TrendingUp, label: 'Activity' },
@@ -304,12 +328,16 @@ export function NigeriaMap({
                     <div className="font-bold text-sm" data-testid="tooltip-polling-count">{(tooltipInfo.data.pollingUnitsCount || 0).toLocaleString()}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">News</span>
-                    <div className="font-bold text-sm" data-testid="tooltip-news-count">{tooltipInfo.data.newsCount || 0}</div>
+                    <span className="text-muted-foreground">Sen. Districts</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-districts-count">{tooltipInfo.data.senatorialDistrictsCount || 0}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Tasks</span>
-                    <div className="font-bold text-sm" data-testid="tooltip-tasks-count">{tooltipInfo.data.tasksCount || 0}</div>
+                    <span className="text-muted-foreground">Fed. Constituencies</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-constituencies-count">{tooltipInfo.data.federalConstituenciesCount || 0}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Elections</span>
+                    <div className="font-bold text-sm" data-testid="tooltip-elections-count">{tooltipInfo.data.generalElectionsCount || 0}</div>
                   </div>
                   <div className="col-span-2 text-muted-foreground border-t border-border pt-1 mt-1" data-testid="tooltip-coverage">
                     {tooltipInfo.data.lgasCovered} LGAs, {tooltipInfo.data.wardsCovered} wards
@@ -329,17 +357,18 @@ export function NigeriaMap({
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <MapPin className="h-5 w-5 text-primary" />
               {selectedState.name}
+              {selectedState.code && <Badge variant="outline">{selectedState.code}</Badge>}
             </h3>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setSelectedState(null)}
+              onClick={() => { setSelectedState(null); setShowElectoralDetail(false); }}
               data-testid="button-close-selected-state"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="text-xs text-muted-foreground">Total Members</div>
               <div className="text-2xl font-bold text-primary" data-testid="text-member-count">{selectedState.memberCount.toLocaleString()}</div>
@@ -365,10 +394,6 @@ export function NigeriaMap({
               <div className="text-2xl font-bold" data-testid="text-news-count">{selectedState.newsCount || 0}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Tasks</div>
-              <div className="text-2xl font-bold" data-testid="text-tasks-count">{selectedState.tasksCount || 0}</div>
-            </div>
-            <div>
               <div className="text-xs text-muted-foreground">LGAs</div>
               <div className="text-2xl font-bold" data-testid="text-lgas-count">{selectedState.totalLgas}</div>
             </div>
@@ -377,6 +402,104 @@ export function NigeriaMap({
               <div className="text-2xl font-bold" data-testid="text-wards-count">{selectedState.totalWards}</div>
             </div>
           </div>
+
+          <div className="border-t border-border mt-4 pt-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-muted-foreground" />
+                Electoral Geography
+              </h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowElectoralDetail(!showElectoralDetail)}
+                data-testid="button-toggle-electoral-detail"
+              >
+                {showElectoralDetail ? 'Hide Details' : 'View Details'}
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Senatorial Districts</div>
+                <div className="text-xl font-bold" data-testid="text-senatorial-count">{selectedState.senatorialDistrictsCount || 0}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Fed. Constituencies</div>
+                <div className="text-xl font-bold" data-testid="text-constituency-count">{selectedState.federalConstituenciesCount || 0}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Active Elections</div>
+                <div className="text-xl font-bold" data-testid="text-elections-count">{selectedState.generalElectionsCount || 0}</div>
+              </div>
+            </div>
+          </div>
+
+          {showElectoralDetail && elDetail && (
+            <div className="border-t border-border mt-4 pt-4 space-y-4" data-testid="electoral-detail-panel">
+              {elDetail.senatorialDistricts.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                    <Landmark className="h-3 w-3" />
+                    Senatorial Districts ({elDetail.senatorialDistricts.length})
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {elDetail.senatorialDistricts.map((d) => (
+                      <Badge key={d.id} variant="secondary" data-testid={`badge-district-${d.id}`}>
+                        {d.districtName}
+                        <span className="ml-1 text-muted-foreground">({d.code})</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {elDetail.federalConstituencies.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />
+                    Federal Constituencies ({elDetail.federalConstituencies.length})
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {elDetail.federalConstituencies.map((c) => (
+                      <Badge key={c.id} variant="outline" data-testid={`badge-constituency-${c.id}`}>
+                        {c.name}
+                        <span className="ml-1 text-muted-foreground">({c.code})</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {elDetail.elections.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                    <Vote className="h-3 w-3" />
+                    Elections ({elDetail.elections.length})
+                  </h5>
+                  <div className="space-y-1">
+                    {elDetail.elections.map((el) => (
+                      <div key={el.id} className="flex items-center justify-between gap-2 text-sm py-1" data-testid={`row-election-${el.id}`}>
+                        <span className="truncate">{el.title}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Badge variant="outline" className="text-xs">{el.position}</Badge>
+                          <Badge
+                            variant={el.status === 'active' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {el.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {elDetail.senatorialDistricts.length === 0 && elDetail.federalConstituencies.length === 0 && elDetail.elections.length === 0 && (
+                <p className="text-sm text-muted-foreground">No electoral geography data available for this state.</p>
+              )}
+            </div>
+          )}
         </Card>
       )}
 
@@ -391,6 +514,7 @@ export function NigeriaMap({
                    selectedMode === 'events' ? 'Events' :
                    selectedMode === 'campaigns' ? 'Campaigns' :
                    selectedMode === 'polling' ? 'Polling Units' :
+                   selectedMode === 'elections' ? 'Electoral Districts' :
                    selectedMode === 'news' ? 'News Posts' :
                    selectedMode === 'tasks' ? 'Tasks' : 'Overall Activity'}
                 </Badge>
@@ -400,7 +524,7 @@ export function NigeriaMap({
                   <div
                     key={i}
                     className={`h-5 w-10 ${i === 0 ? 'rounded-l-md' : ''} ${i === 4 ? 'rounded-r-md' : ''}`}
-                    style={{ backgroundColor: l === 88 ? 'hsl(220, 13%, 88%)' : `hsl(142, 65%, ${l}%)` }}
+                    style={{ backgroundColor: l === 88 ? 'hsl(220, 13%, 88%)' : selectedMode === 'elections' ? `hsl(210, 70%, ${l}%)` : `hsl(142, 65%, ${l}%)` }}
                   />
                 ))}
               </div>

@@ -372,7 +372,7 @@ export default function SituationRoom() {
   const filteredAgents = agentSearch
     ? allAgents.filter(a =>
         a.agentCode.toLowerCase().includes(agentSearch.toLowerCase()) ||
-        `${a.member.user.firstName} ${a.member.user.lastName}`.toLowerCase().includes(agentSearch.toLowerCase()) ||
+        `${a.member?.user?.firstName || ""} ${a.member?.user?.lastName || ""}`.toLowerCase().includes(agentSearch.toLowerCase()) ||
         a.pollingUnit.name.toLowerCase().includes(agentSearch.toLowerCase())
       )
     : allAgents;
@@ -1298,7 +1298,7 @@ export default function SituationRoom() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <p className="font-medium text-sm">
-                                {agent.member.user.firstName} {agent.member.user.lastName}
+                                {agent.member?.user?.firstName || "Unknown"} {agent.member?.user?.lastName || ""}
                               </p>
                               <Badge
                                 variant={

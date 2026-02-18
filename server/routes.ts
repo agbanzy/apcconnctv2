@@ -5754,7 +5754,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           COALESCE(pu_counts.polling_units, 0)::int AS "pollingUnitsCount",
           COALESCE(news_counts.news_count, 0)::int AS "newsCount",
           COALESCE(task_counts.task_count, 0)::int AS "tasksCount",
-          COALESCE(campaign_counts.campaign_count, 0)::int AS "activeCampaigns"
+          COALESCE(campaign_counts.campaign_count, 0)::int AS "activeCampaigns",
+          COALESCE(sd_counts.senatorial_districts, 0)::int AS "senatorialDistrictsCount",
+          COALESCE(fc_counts.federal_constituencies, 0)::int AS "federalConstituenciesCount",
+          COALESCE(ge_counts.general_elections, 0)::int AS "generalElectionsCount"
         FROM states s
         LEFT JOIN (
           SELECT state_id, COUNT(*)::int AS total_lgas FROM lgas GROUP BY state_id
@@ -5803,6 +5806,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           WHERE ic.status = 'active'
           GROUP BY l.state_id
         ) campaign_counts ON campaign_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS senatorial_districts FROM senatorial_districts GROUP BY state_id
+        ) sd_counts ON sd_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS federal_constituencies FROM federal_constituencies GROUP BY state_id
+        ) fc_counts ON fc_counts.state_id = s.id
+        LEFT JOIN (
+          SELECT state_id, COUNT(*)::int AS general_elections FROM general_elections WHERE status != 'cancelled' GROUP BY state_id
+        ) ge_counts ON ge_counts.state_id = s.id
         ORDER BY s.name
       `);
 
@@ -5810,6 +5822,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Map data error:", error);
       res.status(500).json({ success: false, error: "Failed to fetch map data" });
+    }
+  });
+
+  app.get("/api/analytics/state-electoral/:stateId", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.params;
+      const districts = await db.query.senatorialDistricts.findMany({
+        where: eq(schema.senatorialDistricts.stateId, stateId),
+      });
+      const constituencies = await db.query.federalConstituencies.findMany({
+        where: eq(schema.federalConstituencies.stateId, stateId),
+      });
+      const elections = await db.execute(sql`
+        SELECT ge.id, ge.title, ge.position, ge.status, ge.election_date AS "electionDate",
+          ge.year, ge.state_id AS "stateId"
+        FROM general_elections ge
+        WHERE ge.state_id = ${stateId} AND ge.status != 'cancelled'
+        ORDER BY ge.election_date DESC NULLS LAST
+        LIMIT 20
+      `);
+      res.json({
+        success: true,
+        data: {
+          senatorialDistricts: districts,
+          federalConstituencies: constituencies,
+          elections: elections.rows,
+        },
+      });
+    } catch (error) {
+      console.error("State electoral data error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch state electoral data" });
     }
   });
 

@@ -61,12 +61,20 @@ interface Election {
 }
 
 const electionSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().optional(),
+  title: z.string().min(5, "Title must be at least 5 characters").max(200, "Title must be less than 200 characters"),
+  description: z.string().max(2000, "Description must be less than 2000 characters").optional(),
   position: z.string().min(2, "Position is required"),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   status: z.enum(["upcoming", "ongoing", "completed"]).default("upcoming"),
+}).refine((data) => {
+  if (data.startDate && data.endDate) {
+    return new Date(data.endDate) >= new Date(data.startDate);
+  }
+  return true;
+}, {
+  message: "End date must be on or after start date",
+  path: ["endDate"],
 });
 
 type ElectionFormData = z.infer<typeof electionSchema>;
@@ -354,13 +362,24 @@ export default function AdminElections() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Position</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g., President"
-                      {...field}
-                      data-testid="input-position"
-                    />
-                  </FormControl>
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-position">
+                        <SelectValue placeholder="Select position" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="President">President</SelectItem>
+                      <SelectItem value="Governor">Governor</SelectItem>
+                      <SelectItem value="Senator">Senator</SelectItem>
+                      <SelectItem value="House of Representatives">House of Representatives</SelectItem>
+                      <SelectItem value="State Assembly">State Assembly</SelectItem>
+                      <SelectItem value="LGA Chairman">LGA Chairman</SelectItem>
+                      <SelectItem value="Councillor">Councillor</SelectItem>
+                      <SelectItem value="Party Chairman">Party Chairman</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

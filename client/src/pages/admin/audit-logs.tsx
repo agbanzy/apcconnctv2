@@ -84,7 +84,7 @@ export default function AdminAuditLogs() {
           {log.user ? (
             <>
               <div className="font-medium">
-                {log.user.firstName} {log.user.lastName}
+                {log.user?.firstName || "Unknown"} {log.user?.lastName || ""}
               </div>
               <div className="text-xs text-muted-foreground">{log.user.email}</div>
             </>
@@ -290,7 +290,7 @@ export default function AdminAuditLogs() {
                   <p className="text-sm font-medium text-muted-foreground">User</p>
                   <p className="text-sm">
                     {selectedLog.user
-                      ? `${selectedLog.user.firstName} ${selectedLog.user.lastName}`
+                      ? `${selectedLog.user?.firstName || "Unknown"} ${selectedLog.user?.lastName || ""}`
                       : "System"}
                   </p>
                 </div>

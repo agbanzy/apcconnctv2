@@ -60,10 +60,10 @@ interface Incident {
 }
 
 const incidentSchema = z.object({
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  severity: z.enum(["low", "medium", "high"]),
-  location: z.string().optional(),
-  status: z.enum(["reported", "investigating", "resolved"]),
+  description: z.string().min(10, "Description must be at least 10 characters").max(2000, "Description must be less than 2000 characters"),
+  severity: z.enum(["low", "medium", "high"], { required_error: "Please select a severity level" }),
+  location: z.string().max(500, "Location must be less than 500 characters").optional(),
+  status: z.enum(["reported", "investigating", "resolved"], { required_error: "Please select a status" }),
 });
 
 type IncidentFormData = z.infer<typeof incidentSchema>;

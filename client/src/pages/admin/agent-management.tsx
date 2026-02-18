@@ -91,10 +91,10 @@ export default function AdminAgentManagement() {
   const pageSize = 50;
 
   // Batch generation state
-  const [selectedState, setSelectedState] = useState<string>("");
-  const [selectedLga, setSelectedLga] = useState<string>("");
-  const [selectedWard, setSelectedWard] = useState<string>("");
-  const [selectedElection, setSelectedElection] = useState<string>("");
+  const [selectedState, setSelectedState] = useState<string>("all");
+  const [selectedLga, setSelectedLga] = useState<string>("all");
+  const [selectedWard, setSelectedWard] = useState<string>("all");
+  const [selectedElection, setSelectedElection] = useState<string>("all");
   const [defaultPassword, setDefaultPassword] = useState("");
   const [showBatchResults, setShowBatchResults] = useState(false);
   const [batchResults, setBatchResults] = useState<BatchGenerationResult | null>(null);
@@ -111,12 +111,12 @@ export default function AdminAgentManagement() {
 
   const { data: lgasData } = useQuery<{ success: boolean; data: LGA[] }>({
     queryKey: ["/api/lgas", selectedState],
-    enabled: !!selectedState,
+    enabled: selectedState !== "all",
   });
 
   const { data: wardsData } = useQuery<{ success: boolean; data: Ward[] }>({
     queryKey: ["/api/wards", selectedLga],
-    enabled: !!selectedLga,
+    enabled: selectedLga !== "all",
   });
 
   const { data: electionsData } = useQuery<{ success: boolean; data: Election[] }>({
@@ -145,7 +145,7 @@ export default function AdminAgentManagement() {
   // Mutations
   const batchGenerateMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedState) {
+      if (selectedState === "all") {
         throw new Error("State is required");
       }
       if (!defaultPassword) {
@@ -157,9 +157,9 @@ export default function AdminAgentManagement() {
         defaultPassword,
       };
 
-      if (selectedLga) body.lgaId = selectedLga;
-      if (selectedWard) body.wardId = selectedWard;
-      if (selectedElection) body.electionId = selectedElection;
+      if (selectedLga && selectedLga !== "all") body.lgaId = selectedLga;
+      if (selectedWard && selectedWard !== "all") body.wardId = selectedWard;
+      if (selectedElection && selectedElection !== "all") body.electionId = selectedElection;
 
       const response = await apiRequest("POST", "/api/admin/polling-agents/batch", body);
       if (!response.ok) throw new Error("Failed to generate agents");
@@ -230,10 +230,10 @@ export default function AdminAgentManagement() {
   const handleExport = async () => {
     try {
       const params = new URLSearchParams();
-      if (selectedState) params.append("stateId", selectedState);
-      if (selectedLga) params.append("lgaId", selectedLga);
-      if (selectedWard) params.append("wardId", selectedWard);
-      if (selectedElection) params.append("electionId", selectedElection);
+      if (selectedState && selectedState !== "all") params.append("stateId", selectedState);
+      if (selectedLga && selectedLga !== "all") params.append("lgaId", selectedLga);
+      if (selectedWard && selectedWard !== "all") params.append("wardId", selectedWard);
+      if (selectedElection && selectedElection !== "all") params.append("electionId", selectedElection);
 
       const response = await fetch(
         `/api/admin/polling-agents/export?${params.toString()}`
@@ -387,7 +387,7 @@ export default function AdminAgentManagement() {
                 <SelectValue placeholder="Select State" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All States</SelectItem>
+                <SelectItem value="all">All States</SelectItem>
                 {statesData?.data?.map((state) => (
                   <SelectItem key={state.id} value={state.id}>
                     {state.name}
@@ -399,13 +399,13 @@ export default function AdminAgentManagement() {
             <Select
               value={selectedLga}
               onValueChange={setSelectedLga}
-              disabled={!selectedState}
+              disabled={!selectedState || selectedState === "all"}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select LGA" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All LGAs</SelectItem>
+                <SelectItem value="all">All LGAs</SelectItem>
                 {lgasData?.data?.map((lga) => (
                   <SelectItem key={lga.id} value={lga.id}>
                     {lga.name}
@@ -417,13 +417,13 @@ export default function AdminAgentManagement() {
             <Select
               value={selectedWard}
               onValueChange={setSelectedWard}
-              disabled={!selectedLga}
+              disabled={!selectedLga || selectedLga === "all"}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select Ward" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Wards</SelectItem>
+                <SelectItem value="all">All Wards</SelectItem>
                 {wardsData?.data?.map((ward) => (
                   <SelectItem key={ward.id} value={ward.id}>
                     {ward.name}
@@ -437,7 +437,7 @@ export default function AdminAgentManagement() {
                 <SelectValue placeholder="Election (Optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Elections</SelectItem>
+                <SelectItem value="all">All Elections</SelectItem>
                 {electionsData?.data?.map((election) => (
                   <SelectItem key={election.id} value={election.id}>
                     {election.name}
