@@ -29,13 +29,21 @@ import {
 interface Donation {
   id: string;
   amount: number;
-  purpose: string;
-  status: "pending" | "completed" | "failed";
-  date: string;
-  donor?: {
-    firstName: string;
-    lastName: string;
-  };
+  donorName?: string | null;
+  donorEmail?: string | null;
+  paymentStatus: "pending" | "completed" | "failed" | "refunded";
+  member?: {
+    id: string;
+    user: {
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  } | null;
+  campaign?: {
+    title: string;
+    category: string;
+  } | null;
   createdAt: string;
 }
 
@@ -65,8 +73,10 @@ export default function AdminDonations() {
       header: "Donor",
       render: (donation) => (
         <span className="text-sm" data-testid={`text-donor-${donation.id}`}>
-          {donation.donor
-            ? `${donation.donor.firstName} ${donation.donor.lastName}`
+          {donation.donorName
+            ? donation.donorName
+            : donation.member?.user
+            ? `${donation.member.user.firstName} ${donation.member.user.lastName}`
             : "Anonymous"}
         </span>
       ),
@@ -86,7 +96,7 @@ export default function AdminDonations() {
       header: "Purpose",
       render: (donation) => (
         <span className="text-sm" data-testid={`text-purpose-${donation.id}`}>
-          {donation.purpose}
+          {donation.campaign?.title || "General"}
         </span>
       ),
     },
@@ -97,15 +107,15 @@ export default function AdminDonations() {
       render: (donation) => (
         <Badge
           variant={
-            donation.status === "completed"
+            donation.paymentStatus === "completed"
               ? "default"
-              : donation.status === "pending"
+              : donation.paymentStatus === "pending"
               ? "outline"
               : "destructive"
           }
           data-testid={`badge-status-${donation.id}`}
         >
-          {donation.status}
+          {donation.paymentStatus}
         </Badge>
       ),
     },
@@ -115,7 +125,7 @@ export default function AdminDonations() {
       sortable: true,
       render: (donation) => (
         <span className="text-sm" data-testid={`text-date-${donation.id}`}>
-          {format(new Date(donation.date), "MMM d, yyyy h:mm a")}
+          {format(new Date(donation.createdAt), "MMM d, yyyy h:mm a")}
         </span>
       ),
     },
