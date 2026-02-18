@@ -1,0 +1,482 @@
+{
+  "election": {
+    "name": "2026 Federal Capital Territory (FCT) Area Council Election",
+    "date": "Saturday, February 21, 2026",
+    "time": "8:30 AM",
+    "conducting_body": "Independent National Electoral Commission (INEC)",
+    "total_registered_voters": 1680315,
+    "total_polling_units": 2822,
+    "total_constituencies": 68,
+    "total_candidates": 570,
+    "total_chairmanship_candidates": 65,
+    "total_councillorship_candidates": 507,
+    "positions": {
+      "chairmanship_and_vice": 6,
+      "councillorship": 62
+    },
+    "accreditation_system": "Bimodal Voter Accreditation System (BVAS)",
+    "result_upload_portal": "IReV Portal",
+    "voter_verification_url": "https://voters.inecnigeria.org",
+    "inec_candidate_list_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/",
+    "key_notes": [
+      "No PVC, No Voting",
+      "BVAS shall be used for voter accreditation",
+      "Only persons whose names appear on the Register of Voters with valid PVC can vote",
+      "Eligible voters shall vote at polling units where they are registered",
+      "Labour Party (LP) excluded from the election due to internal leadership disputes and court rulings",
+      "Campaign cessation deadline: Thursday, February 19, 2026 at midnight"
+    ]
+  },
+
+  "political_parties_contesting": [
+    {
+      "sn": 1,
+      "acronym": "A",
+      "full_name": "Accord",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/Accord.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=accord"
+    },
+    {
+      "sn": 2,
+      "acronym": "AA",
+      "full_name": "Action Alliance",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/AA.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=action-alliance"
+    },
+    {
+      "sn": 3,
+      "acronym": "AAC",
+      "full_name": "African Action Congress",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/AAC.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=african-action-congress"
+    },
+    {
+      "sn": 4,
+      "acronym": "ADC",
+      "full_name": "African Democratic Congress",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/ADC.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=african-democratic-congress",
+      "note": "Court-ordered candidate substitutions following FHC/ABJ/CS/1907/2025 judgment (January 20, 2026)"
+    },
+    {
+      "sn": 5,
+      "acronym": "ADP",
+      "full_name": "Action Democratic Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/ADP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=action-democratic-party"
+    },
+    {
+      "sn": 6,
+      "acronym": "APC",
+      "full_name": "All Progressives Congress",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/APC.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=all-progressives-congress"
+    },
+    {
+      "sn": 7,
+      "acronym": "APGA",
+      "full_name": "All Progressives Grand Alliance",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/APGA.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=all-progressives-grand-alliance"
+    },
+    {
+      "sn": 8,
+      "acronym": "APM",
+      "full_name": "Allied Peoples Movement",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/APM.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=allied-peoples-movement"
+    },
+    {
+      "sn": 9,
+      "acronym": "APP",
+      "full_name": "Action Peoples Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/APP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=action-peoples-party"
+    },
+    {
+      "sn": 10,
+      "acronym": "BP",
+      "full_name": "Boot Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/BP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=boot-party"
+    },
+    {
+      "sn": 11,
+      "acronym": "NNPP",
+      "full_name": "New Nigeria Peoples Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/NNPP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=new-nigeria-peoples-party"
+    },
+    {
+      "sn": 12,
+      "acronym": "NRM",
+      "full_name": "National Rescue Movement",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/NRM.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=national-rescue-movement"
+    },
+    {
+      "sn": 13,
+      "acronym": "PDP",
+      "full_name": "Peoples Democratic Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/PDP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=peoples-democratic-party"
+    },
+    {
+      "sn": 14,
+      "acronym": "PRP",
+      "full_name": "Peoples Redemption Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/PRP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=peoples-redemption-party"
+    },
+    {
+      "sn": 15,
+      "acronym": "SDP",
+      "full_name": "Social Democratic Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/SDP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=social-democratic-party"
+    },
+    {
+      "sn": 16,
+      "acronym": "YPP",
+      "full_name": "Young Progressives Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/YPP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=young-progressive-party"
+    },
+    {
+      "sn": 17,
+      "acronym": "ZLP",
+      "full_name": "Zenith Labour Party",
+      "logo_url": "https://www.inecnigeria.org/wp-content/uploads/2020/06/ZLP.png",
+      "inec_page": "https://inecnigeria.org/?poltical_parties=zenith-labour-party"
+    }
+  ],
+
+  "excluded_parties": [
+    {
+      "acronym": "LP",
+      "full_name": "Labour Party",
+      "reason": "Excluded due to internal leadership disputes, factionalism, and court rulings. LP sued INEC but lost when courts determined the suit was filed outside the statutory window for pre-election matters."
+    }
+  ],
+
+  "area_councils": [
+    {
+      "name": "Abaji Area Council",
+      "total_wards": 10,
+      "chairmanship_candidates": 7,
+      "councillorship_candidates": 69,
+      "wards": [
+        "Abaji Central", "Agyana", "Gawu", "Gurdi", "Nuku",
+        "Pandagi", "Rimba", "Sabon Gari", "Yaba", "Gado"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/abaji-chairman-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/abaji-councillorship/",
+      "key_chairmanship_candidates": [
+        {
+          "name": "Umar Abdullahi",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC flagbearer seeking to retain the seat"
+        },
+        {
+          "name": "Sokodabo Musa Bilyaminu",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "PDP consensus chairmanship candidate, secured all delegate votes in June 2025 primary"
+        },
+        {
+          "name": "Mohammed Ibrahim",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer"
+        }
+      ],
+      "parties_with_full_slate": ["ADC", "APC", "PDP", "SDP"]
+    },
+    {
+      "name": "Abuja Municipal Area Council (AMAC)",
+      "total_wards": 12,
+      "chairmanship_candidates": 16,
+      "councillorship_candidates": 127,
+      "female_chairmanship_candidates": 1,
+      "female_vice_chairmanship_candidates": 5,
+      "female_councillorship_candidates": 3,
+      "wards": [
+        "City Centre", "Garki", "Gui", "Gwagwa", "Jiwa",
+        "Kabusa", "Karshi", "Karu", "Nyanya", "Orozo",
+        "Wuse", "Gwarinpa"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/amac-chairman-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/amac-councillorship-2026/",
+      "key_chairmanship_candidates": [
+        {
+          "name": "Zakka Christopher",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC flagbearer. Previous PDP chairman Christopher Maikalangu defected to APC in 2025"
+        },
+        {
+          "name": "Zadna Dintani",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "Won PDP primary with 24 votes defeating William Gaje (12 votes)"
+        },
+        {
+          "name": "Paul Moses Ogidi",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer"
+        }
+      ],
+      "parties_fielding_candidates": ["AA", "AAC", "ADC", "ADP", "APC", "APGA", "APM", "APP", "BP", "NNPP", "NRM", "PDP", "SDP", "YPP"]
+    },
+    {
+      "name": "Bwari Area Council",
+      "total_wards": 10,
+      "chairmanship_candidates": 11,
+      "councillorship_candidates": 84,
+      "wards": [
+        "Bwari Central", "Byazhin", "Igu", "Kawu",
+        "Kuduru", "Dutse Alhaji", "Kubwa", "Ushafa",
+        "Shere", "Usuma"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/bwari-chairmanship-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/wp-content/uploads/BWARI-COUNCILLORSHIP-LIST.pdf",
+      "key_chairmanship_candidates": [
+        {
+          "name": "Haruna Shekwoloaudi",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC flagbearer seeking to win Bwari"
+        },
+        {
+          "name": "Adamu Julius",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "Won PDP primary with 19 votes. PDP previously won chairmanship in Bwari (2022)"
+        },
+        {
+          "name": "Musa Josiah Abinto",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer"
+        }
+      ]
+    },
+    {
+      "name": "Gwagwalada Area Council",
+      "total_wards": 10,
+      "chairmanship_candidates": 11,
+      "councillorship_candidates": 81,
+      "female_vice_chairmanship_candidates": 1,
+      "female_councillorship_candidates": 6,
+      "wards": [
+        "Anagada", "Central", "Dobi", "Gwako",
+        "Ikwa", "Kutunku", "Paikon-Kore", "Park",
+        "Quarters C", "Zuba"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/gwagwalada-chairmanship-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/gwagwalada-councillorship/",
+      "key_chairmanship_candidates": [
+        {
+          "name": "APC Candidate",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC seeking to reclaim Gwagwalada"
+        },
+        {
+          "name": "Mohammed Kasim",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "Won PDP primary with 19 votes defeating Rabiu Adamu (11 votes)"
+        },
+        {
+          "name": "ADC Candidate",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer"
+        }
+      ]
+    },
+    {
+      "name": "Kuje Area Council",
+      "total_wards": 10,
+      "chairmanship_candidates": 11,
+      "councillorship_candidates": 80,
+      "female_chairmanship_candidates": 0,
+      "female_councillorship_candidates": 4,
+      "wards": [
+        "Chibiri", "Gaube", "Gudun Karya", "Jikwoyi",
+        "Kuje Central", "Kuchiyako", "Kwaku", "Pasali",
+        "Rubuchi", "Yenche"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/kuje-chairmanship-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/kuje-councillorship/",
+      "key_chairmanship_candidates": [
+        {
+          "name": "APC Candidate",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC flagbearer"
+        },
+        {
+          "name": "Zacharia Danlami",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "Won PDP primary unopposed with all 30 votes after Michael Jigu withdrew"
+        },
+        {
+          "name": "ADC Candidate",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer"
+        }
+      ]
+    },
+    {
+      "name": "Kwali Area Council",
+      "total_wards": 10,
+      "chairmanship_candidates": 9,
+      "councillorship_candidates": 66,
+      "female_councillorship_candidates": 1,
+      "wards": [
+        "Ashara", "Dafa", "Giri", "Kilankwa",
+        "Kwali Central", "Pai", "Pida", "Sheda",
+        "Wako", "Yebu"
+      ],
+      "inec_chairmanship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/kwali-chairmanship-and-vice/",
+      "inec_councillorship_url": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/kwali-councillorship/",
+      "key_chairmanship_candidates": [
+        {
+          "name": "Daniel Nuhu Kwali",
+          "party": "APC",
+          "party_full": "All Progressives Congress",
+          "position": "Chairman",
+          "note": "APC flagbearer leading campaign to regain council previously controlled by APC"
+        },
+        {
+          "name": "Haruna Pai Mohammed",
+          "party": "PDP",
+          "party_full": "Peoples Democratic Party",
+          "position": "Chairman",
+          "note": "Won PDP primary with 13 votes in three-way contest"
+        },
+        {
+          "name": "Bandoj Jeremiah",
+          "party": "ADC",
+          "party_full": "African Democratic Congress",
+          "position": "Chairman",
+          "note": "ADC flagbearer, won ADC ticket defeating other contenders"
+        }
+      ]
+    }
+  ],
+
+  "adc_court_ordered_candidates": {
+    "description": "Sequel to the judgment of the Federal High Court delivered on January 20, 2026 in suit FHC/ABJ/CS/1907/2025, INEC published substitute candidates for ADC in compliance with the court order",
+    "document_url": "https://wp1.inecnigeria.org/wp-content/uploads/2026-FCT-COURT-ORDERED-CANDIDATES-ADC.pdf",
+    "inec_page_url": "https://www.inecnigeria.org/re-court-order-for-adc-substitute-candidates-for-the-febuary-21st-2026-fct-area-council-elections/"
+  },
+
+  "election_statistics": {
+    "total_area_councils": 6,
+    "total_wards": 62,
+    "ward_distribution": {
+      "AMAC": 12,
+      "Abaji": 10,
+      "Bwari": 10,
+      "Gwagwalada": 10,
+      "Kuje": 10,
+      "Kwali": 10
+    },
+    "candidate_breakdown_by_council": {
+      "AMAC": {
+        "chairmanship": 16,
+        "councillorship": 127,
+        "total": 143
+      },
+      "Bwari": {
+        "chairmanship": 11,
+        "councillorship": 84,
+        "total": 95
+      },
+      "Gwagwalada": {
+        "chairmanship": 11,
+        "councillorship": 81,
+        "total": 92
+      },
+      "Kuje": {
+        "chairmanship": 11,
+        "councillorship": 80,
+        "total": 91
+      },
+      "Abaji": {
+        "chairmanship": 7,
+        "councillorship": 69,
+        "total": 76
+      },
+      "Kwali": {
+        "chairmanship": 9,
+        "councillorship": 66,
+        "total": 75
+      }
+    },
+    "gender_statistics": {
+      "note": "Poor female participation across all councils. Zero percent representation of persons with disabilities.",
+      "female_chairmanship_candidates": "1 (SDP, in AMAC)",
+      "all_male_chairmanship": true,
+      "disability_representation": "0%"
+    }
+  },
+
+  "previous_election_results_2022": {
+    "note": "Results from the last FCT Area Council Elections (February 2022) for reference",
+    "results": [
+      { "council": "AMAC", "winner": "Christopher Zakka (Maikalangu)", "party": "PDP", "votes": 19302, "runner_up": "Murtala Karshi", "runner_up_party": "APC", "runner_up_votes": 13249 },
+      { "council": "Bwari", "winner": "Shekwogaza Gabaya", "party": "PDP", "votes": 13045, "runner_up": "Audi Shekwolo", "runner_up_party": "APC", "runner_up_votes": 7697 },
+      { "council": "Gwagwalada", "winner": "Jubrin Abubakar", "party": "APC", "votes": 11125, "runner_up": "Mohammed Kassim", "runner_up_party": "PDP", "runner_up_votes": 9597 },
+      { "council": "Kuje", "winner": "Suleman Sabo", "party": "PDP", "votes": null, "runner_up": null, "runner_up_party": "APC", "runner_up_votes": null },
+      { "council": "Kwali", "winner": "Danladi Chiya", "party": "APC", "votes": 7646, "runner_up": "Haruna Pai", "runner_up_party": "PDP", "runner_up_votes": 7345 },
+      { "council": "Abaji", "winner": "APC Candidate", "party": "APC", "votes": 7289, "runner_up": "Yahaya Garba Gawu", "runner_up_party": "PDP", "runner_up_votes": 4062 }
+    ],
+    "summary": "PDP won 3 (AMAC, Bwari, Kuje), APC won 3 (Gwagwalada, Kwali, Abaji)"
+  },
+
+  "useful_links": {
+    "inec_website": "https://www.inecnigeria.org",
+    "candidate_list": "https://www.inecnigeria.org/list-of-candidates-for-the-february-2026-fct-area-council-elections/",
+    "polling_units_locator": "https://www.inecnigeria.org/polling-units/",
+    "voter_verification": "https://cvr.inecnigeria.org/vvs",
+    "political_parties_list": "https://www.inecnigeria.org/list-of-political-parties/",
+    "election_results_portal": "https://www.inecnigeria.org/election-results/",
+    "how_to_vote": "https://www.inecnigeria.org/how-to-vote/",
+    "adc_court_ordered_candidates_pdf": "https://wp1.inecnigeria.org/wp-content/uploads/2026-FCT-COURT-ORDERED-CANDIDATES-ADC.pdf"
+  },
+
+  "data_sources": [
+    "INEC Nigeria Official Website (inecnigeria.org)",
+    "INEC Chairman's Consultative Meeting Remarks (February 4, 2026)",
+    "The ICIR Nigeria",
+    "Daily Trust",
+    "The Authority News",
+    "Punch Newspapers",
+    "Voice of Nigeria (VON)"
+  ],
+
+  "disclaimer": "This data was compiled from publicly available sources including INEC's official publications and verified news reports. For the complete and most up-to-date list of all 570+ candidates (including councillorship candidates), please visit INEC's official website at inecnigeria.org. Some candidate names for APC/ADC in certain councils could not be independently verified from public reports and are marked accordingly. Ward names may vary slightly from official INEC designations."
+}
