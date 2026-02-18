@@ -82,6 +82,7 @@ const AgentLogin = lazy(() => import("@/pages/agent-login"));
 const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
 const AdminMembers = lazy(() => import("@/pages/admin/members"));
 const AdminElections = lazy(() => import("@/pages/admin/elections"));
+const AdminGeneralElections = lazy(() => import("@/pages/admin/general-elections"));
 const AdminEvents = lazy(() => import("@/pages/admin/events"));
 const AdminContent = lazy(() => import("@/pages/admin/content"));
 const AdminCampaigns = lazy(() => import("@/pages/admin/campaigns"));
@@ -200,6 +201,7 @@ function AppContent() {
                     <Route path="/admin/members" component={() => <AdminRoute component={AdminMembers} />} />
                     <Route path="/admin/dues" component={() => <AdminRoute component={AdminDues} />} />
                     <Route path="/admin/elections" component={() => <AdminRoute component={AdminElections} />} />
+                    <Route path="/admin/general-elections" component={() => <AdminRoute component={AdminGeneralElections} />} />
                     <Route path="/admin/events" component={() => <AdminRoute component={AdminEvents} />} />
                     <Route path="/admin/content" component={() => <AdminRoute component={AdminContent} />} />
                     <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />

@@ -10415,11 +10415,12 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
   app.get("/api/general-elections", async (req: Request, res: Response) => {
     try {
-      const { status, position, year } = req.query;
+      const { status, position, year, stateId } = req.query;
       let conditions: any[] = [];
       if (status) conditions.push(eq(schema.generalElections.status, status as any));
       if (position) conditions.push(eq(schema.generalElections.position, position as any));
       if (year) conditions.push(eq(schema.generalElections.electionYear, parseInt(year as string)));
+      if (stateId) conditions.push(eq(schema.generalElections.stateId, stateId as string));
 
       const elections = await db.query.generalElections.findMany({
         where: conditions.length > 0 ? and(...conditions) : undefined,
@@ -10427,6 +10428,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
           state: true,
           lga: true,
           ward: true,
+          senatorialDistrict: true,
+          federalConstituency: true,
           candidates: {
             with: { party: true },
           },
@@ -10436,6 +10439,86 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: elections });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to fetch general elections" });
+    }
+  });
+
+  app.get("/api/general-elections/my-elections", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { includeCompleted } = req.query;
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, user.id),
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member profile not found" });
+      }
+
+      const lga = member.lgaId ? await db.query.lgas.findFirst({ where: eq(schema.lgas.id, member.lgaId) }) : null;
+      const state = member.stateId ? await db.query.states.findFirst({ where: eq(schema.states.id, member.stateId) }) : null;
+      const ward = member.wardId ? await db.query.wards.findFirst({ where: eq(schema.wards.id, member.wardId) }) : null;
+
+      const statusFilter = includeCompleted === "true"
+        ? undefined
+        : drizzleOr(
+            eq(schema.generalElections.status, "ongoing"),
+            eq(schema.generalElections.status, "upcoming")
+          );
+
+      const allActiveElections = await db.query.generalElections.findMany({
+        where: statusFilter,
+        with: {
+          state: true,
+          lga: true,
+          ward: true,
+          senatorialDistrict: true,
+          federalConstituency: true,
+          candidates: {
+            with: { party: true },
+          },
+        },
+        orderBy: asc(schema.generalElections.position),
+      });
+
+      const myElections = allActiveElections.filter(election => {
+        switch (election.position) {
+          case "presidential":
+            return true;
+          case "governorship":
+          case "state_assembly":
+            return state && election.stateId === state.id;
+          case "senatorial":
+            if (election.senatorialDistrictId && lga?.senatorialDistrictId) {
+              return election.senatorialDistrictId === lga.senatorialDistrictId;
+            }
+            return state && election.stateId === state.id;
+          case "house_of_reps":
+            if (election.federalConstituencyId && lga?.federalConstituencyId) {
+              return election.federalConstituencyId === lga.federalConstituencyId;
+            }
+            return state && election.stateId === state.id;
+          case "lga_chairman":
+            return lga && election.lgaId === lga.id;
+          case "councillorship":
+            return ward && election.wardId === ward.id;
+          default:
+            return state && election.stateId === state.id;
+        }
+      });
+
+      res.json({
+        success: true,
+        data: myElections,
+        userLocation: {
+          state: state?.name || null,
+          lga: lga?.name || null,
+          ward: ward?.name || null,
+          senatorialDistrict: lga?.senatorialDistrictId || null,
+          federalConstituency: lga?.federalConstituencyId || null,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch user elections" });
     }
   });
 
@@ -10459,6 +10542,37 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  app.get("/api/senatorial-districts", async (req: Request, res: Response) => {
+    try {
+      const { stateId } = req.query;
+      const conditions: any[] = [];
+      if (stateId) conditions.push(eq(schema.senatorialDistricts.stateId, stateId as string));
+      const districts = await db.query.senatorialDistricts.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        orderBy: asc(schema.senatorialDistricts.districtName),
+      });
+      res.json({ success: true, data: districts });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch senatorial districts" });
+    }
+  });
+
+  app.get("/api/federal-constituencies", async (req: Request, res: Response) => {
+    try {
+      const { stateId, senatorialDistrictId } = req.query;
+      const conditions: any[] = [];
+      if (stateId) conditions.push(eq(schema.federalConstituencies.stateId, stateId as string));
+      if (senatorialDistrictId) conditions.push(eq(schema.federalConstituencies.senatorialDistrictId, senatorialDistrictId as string));
+      const constituencies = await db.query.federalConstituencies.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        orderBy: asc(schema.federalConstituencies.name),
+      });
+      res.json({ success: true, data: constituencies });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch federal constituencies" });
+    }
+  });
+
   app.post("/api/general-elections", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
       const electionData = schema.insertGeneralElectionSchema.parse(req.body);
@@ -10466,6 +10580,204 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: election });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to create election" });
+    }
+  });
+
+  app.post("/api/general-elections/bulk-create", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const bulkSchema = z.object({
+        electionYear: z.number(),
+        electionDate: z.string(),
+        positions: z.array(z.enum(["presidential", "governorship", "senatorial", "house_of_reps", "state_assembly", "lga_chairman", "councillorship"])),
+        stateIds: z.array(z.string()).optional(),
+        status: z.enum(["upcoming", "ongoing", "completed", "cancelled"]).default("upcoming"),
+      });
+
+      const parsed = bulkSchema.parse(req.body);
+      const created: any[] = [];
+      const errors: any[] = [];
+      const electionDate = new Date(parsed.electionDate);
+
+      for (const position of parsed.positions) {
+        if (position === "presidential") {
+          try {
+            const existing = await db.query.generalElections.findFirst({
+              where: and(
+                eq(schema.generalElections.position, "presidential"),
+                eq(schema.generalElections.electionYear, parsed.electionYear)
+              )
+            });
+            if (!existing) {
+              const [e] = await db.insert(schema.generalElections).values({
+                title: `${parsed.electionYear} Presidential Election`,
+                electionYear: parsed.electionYear,
+                electionDate,
+                position: "presidential",
+                status: parsed.status,
+              }).returning();
+              created.push(e);
+            }
+          } catch (err: any) { errors.push({ position, error: err.message }); }
+          continue;
+        }
+
+        const targetStates = parsed.stateIds?.length
+          ? await db.query.states.findMany({ where: sql`${schema.states.id} IN (${sql.join(parsed.stateIds.map(id => sql`${id}`), sql`, `)})` })
+          : await db.query.states.findMany({ orderBy: asc(schema.states.name) });
+
+        for (const state of targetStates) {
+          try {
+            if (position === "governorship") {
+              if (state.name === "Federal Capital Territory") continue;
+              const existing = await db.query.generalElections.findFirst({
+                where: and(
+                  eq(schema.generalElections.position, "governorship"),
+                  eq(schema.generalElections.electionYear, parsed.electionYear),
+                  eq(schema.generalElections.stateId, state.id)
+                )
+              });
+              if (!existing) {
+                const [e] = await db.insert(schema.generalElections).values({
+                  title: `${parsed.electionYear} ${state.name} Governorship Election`,
+                  electionYear: parsed.electionYear,
+                  electionDate,
+                  position: "governorship",
+                  stateId: state.id,
+                  status: parsed.status,
+                }).returning();
+                created.push(e);
+              }
+            } else if (position === "senatorial") {
+              const districts = await db.query.senatorialDistricts.findMany({
+                where: eq(schema.senatorialDistricts.stateId, state.id)
+              });
+              for (const district of districts) {
+                const existing = await db.query.generalElections.findFirst({
+                  where: and(
+                    eq(schema.generalElections.position, "senatorial"),
+                    eq(schema.generalElections.electionYear, parsed.electionYear),
+                    eq(schema.generalElections.senatorialDistrictId, district.id)
+                  )
+                });
+                if (!existing) {
+                  const [e] = await db.insert(schema.generalElections).values({
+                    title: `${parsed.electionYear} ${district.districtName} Senatorial Election`,
+                    electionYear: parsed.electionYear,
+                    electionDate,
+                    position: "senatorial",
+                    stateId: state.id,
+                    senatorialDistrictId: district.id,
+                    status: parsed.status,
+                  }).returning();
+                  created.push(e);
+                }
+              }
+            } else if (position === "house_of_reps") {
+              const constituencies = await db.query.federalConstituencies.findMany({
+                where: eq(schema.federalConstituencies.stateId, state.id)
+              });
+              for (const fc of constituencies) {
+                const existing = await db.query.generalElections.findFirst({
+                  where: and(
+                    eq(schema.generalElections.position, "house_of_reps"),
+                    eq(schema.generalElections.electionYear, parsed.electionYear),
+                    eq(schema.generalElections.federalConstituencyId, fc.id)
+                  )
+                });
+                if (!existing) {
+                  const [e] = await db.insert(schema.generalElections).values({
+                    title: `${parsed.electionYear} ${fc.name} Federal Constituency`,
+                    electionYear: parsed.electionYear,
+                    electionDate,
+                    position: "house_of_reps",
+                    stateId: state.id,
+                    federalConstituencyId: fc.id,
+                    senatorialDistrictId: fc.senatorialDistrictId,
+                    constituency: fc.name,
+                    status: parsed.status,
+                  }).returning();
+                  created.push(e);
+                }
+              }
+            } else if (position === "state_assembly") {
+              const existing = await db.query.generalElections.findFirst({
+                where: and(
+                  eq(schema.generalElections.position, "state_assembly"),
+                  eq(schema.generalElections.electionYear, parsed.electionYear),
+                  eq(schema.generalElections.stateId, state.id)
+                )
+              });
+              if (!existing) {
+                const [e] = await db.insert(schema.generalElections).values({
+                  title: `${parsed.electionYear} ${state.name} State House of Assembly`,
+                  electionYear: parsed.electionYear,
+                  electionDate,
+                  position: "state_assembly",
+                  stateId: state.id,
+                  status: parsed.status,
+                }).returning();
+                created.push(e);
+              }
+            } else if (position === "lga_chairman") {
+              const lgasInState = await db.query.lgas.findMany({
+                where: eq(schema.lgas.stateId, state.id)
+              });
+              for (const lga of lgasInState) {
+                const existing = await db.query.generalElections.findFirst({
+                  where: and(
+                    eq(schema.generalElections.position, "lga_chairman"),
+                    eq(schema.generalElections.electionYear, parsed.electionYear),
+                    eq(schema.generalElections.lgaId, lga.id)
+                  )
+                });
+                if (!existing) {
+                  const [e] = await db.insert(schema.generalElections).values({
+                    title: `${parsed.electionYear} ${lga.name} ${state.name === "Federal Capital Territory" ? "Area Council" : "LGA"} Chairmanship`,
+                    electionYear: parsed.electionYear,
+                    electionDate,
+                    position: "lga_chairman",
+                    stateId: state.id,
+                    lgaId: lga.id,
+                    status: parsed.status,
+                  }).returning();
+                  created.push(e);
+                }
+              }
+            }
+          } catch (err: any) {
+            errors.push({ position, state: state.name, error: err.message });
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          created: created.length,
+          errors: errors.length,
+          elections: created,
+          errorDetails: errors,
+        }
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to bulk create elections" });
+    }
+  });
+
+  app.patch("/api/general-elections/bulk-status", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { electionIds, status } = req.body;
+      if (!electionIds?.length || !status) {
+        return res.status(400).json({ success: false, error: "electionIds and status required" });
+      }
+      const updated = await db.update(schema.generalElections)
+        .set({ status, updatedAt: new Date() })
+        .where(sql`${schema.generalElections.id} IN (${sql.join(electionIds.map((id: string) => sql`${id}`), sql`, `)})`)
+        .returning();
+      io.emit("general-elections:bulk-updated", { status, count: updated.length });
+      res.json({ success: true, data: { updated: updated.length } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
     }
   });
 
@@ -10477,6 +10789,18 @@ Be friendly, informative, and politically neutral when discussing governance. En
         .returning();
       io.emit("general-election:updated", updated);
       res.json({ success: true, data: updated });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/general-elections/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.generalElectionCandidates).where(eq(schema.generalElectionCandidates.electionId, req.params.id));
+      await db.delete(schema.pollingUnitResults).where(eq(schema.pollingUnitResults.electionId, req.params.id));
+      const [deleted] = await db.delete(schema.generalElections).where(eq(schema.generalElections.id, req.params.id)).returning();
+      if (!deleted) return res.status(404).json({ success: false, error: "Election not found" });
+      res.json({ success: true, data: deleted });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
     }
@@ -11249,8 +11573,14 @@ Be friendly, informative, and politically neutral when discussing governance. En
           case "state_assembly":
             return state && election.stateId === state.id;
           case "senatorial":
+            if (election.senatorialDistrictId && lga?.senatorialDistrictId) {
+              return election.senatorialDistrictId === lga.senatorialDistrictId;
+            }
             return state && election.stateId === state.id;
           case "house_of_reps":
+            if (election.federalConstituencyId && lga?.federalConstituencyId) {
+              return election.federalConstituencyId === lga.federalConstituencyId;
+            }
             return state && election.stateId === state.id;
           case "lga_chairman":
             return lga && election.lgaId === lga.id;

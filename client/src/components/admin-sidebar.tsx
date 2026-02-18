@@ -52,8 +52,13 @@ const adminMenuItems = [
     icon: DollarSign,
   },
   {
-    title: "Elections",
+    title: "Party Elections",
     url: "/admin/elections",
+    icon: Vote,
+  },
+  {
+    title: "General Elections",
+    url: "/admin/general-elections",
     icon: Vote,
   },
   {

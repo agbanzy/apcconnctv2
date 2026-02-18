@@ -42,9 +42,10 @@ export const lgas = pgTable("lgas", {
   stateId: varchar("state_id").notNull().references(() => states.id),
   name: text("name").notNull(),
   code: text("code").notNull().unique(),
+  senatorialDistrictId: varchar("senatorial_district_id"),
+  federalConstituencyId: varchar("federal_constituency_id"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
-  // Add unique constraint on stateId + name combination
   uniqueLGAPerState: unique().on(table.stateId, table.name),
 }));
 
@@ -63,9 +64,18 @@ export const wards = pgTable("wards", {
 // Electoral System
 export const senatorialDistricts = pgTable("senatorial_districts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(), // AB-SD1, AB-SD2, etc.
+  code: text("code").notNull().unique(),
   stateId: varchar("state_id").notNull().references(() => states.id),
-  districtName: text("district_name").notNull(), // "Abia Central"
+  districtName: text("district_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const federalConstituencies = pgTable("federal_constituencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  stateId: varchar("state_id").notNull().references(() => states.id),
+  senatorialDistrictId: varchar("senatorial_district_id").references(() => senatorialDistricts.id),
+  name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -685,6 +695,7 @@ export const generalElections = pgTable("general_elections", {
   lgaId: varchar("lga_id").references(() => lgas.id),
   wardId: varchar("ward_id").references(() => wards.id),
   senatorialDistrictId: varchar("senatorial_district_id").references(() => senatorialDistricts.id),
+  federalConstituencyId: varchar("federal_constituency_id").references(() => federalConstituencies.id),
   constituency: text("constituency"),
   status: generalElectionStatusEnum("status").default("upcoming"),
   totalRegisteredVoters: integer("total_registered_voters").default(0),
@@ -1083,10 +1094,41 @@ export const statesRelations = relations(states, ({ many }) => ({
   issueCampaigns: many(issueCampaigns),
 }));
 
+export const senatorialDistrictsRelations = relations(senatorialDistricts, ({ one, many }) => ({
+  state: one(states, {
+    fields: [senatorialDistricts.stateId],
+    references: [states.id],
+  }),
+  lgas: many(lgas),
+  federalConstituencies: many(federalConstituencies),
+  generalElections: many(generalElections),
+}));
+
+export const federalConstituenciesRelations = relations(federalConstituencies, ({ one, many }) => ({
+  state: one(states, {
+    fields: [federalConstituencies.stateId],
+    references: [states.id],
+  }),
+  senatorialDistrict: one(senatorialDistricts, {
+    fields: [federalConstituencies.senatorialDistrictId],
+    references: [senatorialDistricts.id],
+  }),
+  lgas: many(lgas),
+  generalElections: many(generalElections),
+}));
+
 export const lgasRelations = relations(lgas, ({ one, many }) => ({
   state: one(states, {
     fields: [lgas.stateId],
     references: [states.id],
+  }),
+  senatorialDistrict: one(senatorialDistricts, {
+    fields: [lgas.senatorialDistrictId],
+    references: [senatorialDistricts.id],
+  }),
+  federalConstituency: one(federalConstituencies, {
+    fields: [lgas.federalConstituencyId],
+    references: [federalConstituencies.id],
   }),
   wards: many(wards),
   generalElections: many(generalElections),
@@ -1423,6 +1465,14 @@ export const generalElectionsRelations = relations(generalElections, ({ one, man
     fields: [generalElections.wardId],
     references: [wards.id],
   }),
+  senatorialDistrict: one(senatorialDistricts, {
+    fields: [generalElections.senatorialDistrictId],
+    references: [senatorialDistricts.id],
+  }),
+  federalConstituency: one(federalConstituencies, {
+    fields: [generalElections.federalConstituencyId],
+    references: [federalConstituencies.id],
+  }),
   candidates: many(generalElectionCandidates),
   results: many(pollingUnitResults),
 }));
@@ -1739,6 +1789,7 @@ export const insertStateSchema = createInsertSchema(states).omit({ id: true, cre
 export const insertLgaSchema = createInsertSchema(lgas).omit({ id: true, createdAt: true });
 export const insertWardSchema = createInsertSchema(wards).omit({ id: true, createdAt: true });
 export const insertSenatorialDistrictSchema = createInsertSchema(senatorialDistricts).omit({ id: true, createdAt: true });
+export const insertFederalConstituencySchema = createInsertSchema(federalConstituencies).omit({ id: true, createdAt: true });
 export const insertElectoralStatsSchema = createInsertSchema(electoralStats).omit({ id: true, createdAt: true });
 export const insertRegionalElectoralStatsSchema = createInsertSchema(regionalElectoralStats).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
@@ -1809,6 +1860,8 @@ export type InsertWard = z.infer<typeof insertWardSchema>;
 export type Ward = typeof wards.$inferSelect;
 export type InsertSenatorialDistrict = z.infer<typeof insertSenatorialDistrictSchema>;
 export type SenatorialDistrict = typeof senatorialDistricts.$inferSelect;
+export type InsertFederalConstituency = z.infer<typeof insertFederalConstituencySchema>;
+export type FederalConstituency = typeof federalConstituencies.$inferSelect;
 export type InsertElectoralStats = z.infer<typeof insertElectoralStatsSchema>;
 export type ElectoralStats = typeof electoralStats.$inferSelect;
 export type InsertRegionalElectoralStats = z.infer<typeof insertRegionalElectoralStatsSchema>;
