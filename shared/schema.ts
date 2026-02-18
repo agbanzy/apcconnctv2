@@ -682,6 +682,8 @@ export const generalElections = pgTable("general_elections", {
   electionDate: timestamp("election_date").notNull(),
   position: generalElectionPositionEnum("position").notNull(),
   stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
   senatorialDistrictId: varchar("senatorial_district_id").references(() => senatorialDistricts.id),
   constituency: text("constituency"),
   status: generalElectionStatusEnum("status").default("upcoming"),
@@ -1087,6 +1089,7 @@ export const lgasRelations = relations(lgas, ({ one, many }) => ({
     references: [states.id],
   }),
   wards: many(wards),
+  generalElections: many(generalElections),
 }));
 
 export const wardsRelations = relations(wards, ({ one, many }) => ({
@@ -1096,6 +1099,7 @@ export const wardsRelations = relations(wards, ({ one, many }) => ({
   }),
   members: many(members),
   pollingUnits: many(pollingUnits),
+  generalElections: many(generalElections),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -1410,6 +1414,14 @@ export const generalElectionsRelations = relations(generalElections, ({ one, man
   state: one(states, {
     fields: [generalElections.stateId],
     references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [generalElections.lgaId],
+    references: [lgas.id],
+  }),
+  ward: one(wards, {
+    fields: [generalElections.wardId],
+    references: [wards.id],
   }),
   candidates: many(generalElectionCandidates),
   results: many(pollingUnitResults),

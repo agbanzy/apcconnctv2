@@ -10425,6 +10425,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         where: conditions.length > 0 ? and(...conditions) : undefined,
         with: {
           state: true,
+          lga: true,
+          ward: true,
           candidates: {
             with: { party: true },
           },
@@ -10443,6 +10445,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         where: eq(schema.generalElections.id, req.params.id),
         with: {
           state: true,
+          lga: true,
+          ward: true,
           candidates: {
             with: { party: true },
           },
@@ -11237,8 +11241,28 @@ Be friendly, informative, and politically neutral when discussing governance. En
         orderBy: asc(schema.generalElections.position),
       });
 
+      const applicableElections = allActiveElections.filter(election => {
+        switch (election.position) {
+          case "presidential":
+            return true;
+          case "governorship":
+          case "state_assembly":
+            return state && election.stateId === state.id;
+          case "senatorial":
+            return state && election.stateId === state.id;
+          case "house_of_reps":
+            return state && election.stateId === state.id;
+          case "lga_chairman":
+            return lga && election.lgaId === lga.id;
+          case "councillorship":
+            return ward && election.wardId === ward.id;
+          default:
+            return state && election.stateId === state.id;
+        }
+      });
+
       const electionsWithCandidates = await Promise.all(
-        allActiveElections.map(async (election) => {
+        applicableElections.map(async (election) => {
           const candidates = await db.query.generalElectionCandidates.findMany({
             where: eq(schema.generalElectionCandidates.electionId, election.id),
             with: { party: true }
