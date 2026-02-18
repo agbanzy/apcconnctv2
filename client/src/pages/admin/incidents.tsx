@@ -117,7 +117,7 @@ export default function AdminIncidents() {
       header: "Reporter",
       render: (incident) => (
         <span className="text-sm" data-testid={`text-reporter-${incident.id}`}>
-          {incident.reporter
+          {incident.reporter?.user
             ? `${incident.reporter.user.firstName} ${incident.reporter.user.lastName}`
             : "Anonymous"}
         </span>

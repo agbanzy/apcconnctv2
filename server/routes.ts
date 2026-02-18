@@ -8463,7 +8463,11 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const completions = await db.query.taskCompletions.findMany({
         where: eq(schema.taskCompletions.status, "pending"),
         with: {
-          member: true,
+          member: {
+            with: {
+              user: true
+            }
+          },
           task: true
         },
         orderBy: desc(schema.taskCompletions.completedAt)
