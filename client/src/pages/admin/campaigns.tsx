@@ -53,8 +53,11 @@ interface Campaign {
   category: string;
   targetDate: string | null;
   status: "active" | "approved" | "rejected";
-  votes: number;
+  votes: any[] | number;
+  currentVotes?: number;
+  targetVotes?: number;
   creator?: { firstName: string; lastName: string };
+  author?: { user: { firstName: string; lastName: string; email: string } };
   createdAt: string;
 }
 
@@ -133,7 +136,9 @@ export default function AdminCampaigns() {
       header: "Creator",
       render: (campaign) => (
         <span className="text-sm" data-testid={`text-creator-${campaign.id}`}>
-          {campaign.creator
+          {campaign.author?.user
+            ? `${campaign.author.user.firstName} ${campaign.author.user.lastName}`
+            : campaign.creator
             ? `${campaign.creator.firstName} ${campaign.creator.lastName}`
             : "System"}
         </span>
@@ -145,7 +150,7 @@ export default function AdminCampaigns() {
       sortable: true,
       render: (campaign) => (
         <span className="text-sm font-mono" data-testid={`text-votes-${campaign.id}`}>
-          {campaign.votes || 0}
+          {campaign.currentVotes ?? (Array.isArray(campaign.votes) ? campaign.votes.length : campaign.votes) ?? 0}
         </span>
       ),
     },

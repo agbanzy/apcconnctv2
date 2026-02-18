@@ -699,7 +699,7 @@ export default function AdminGeneralElections() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={!!candidateElection} onOpenChange={(open) => { if (!open) setCandidateElection(null); }}>
+      <Dialog open={!!candidateElection} onOpenChange={(open) => { if (!open) { setCandidateElection(null); setNewCandidateName(""); setNewCandidateParty(""); setNewCandidateRunningMate(""); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Manage Candidates</DialogTitle>

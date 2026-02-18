@@ -698,10 +698,14 @@ class DbStorage implements IStorage {
         offset,
         with: {
           creator: {
-            columns: {
-              firstName: true,
-              lastName: true,
-              email: true,
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                }
+              }
             }
           },
           applications: true,
@@ -715,8 +719,7 @@ class DbStorage implements IStorage {
     const total = Number(countResult[0]?.count || 0);
     const totalPages = Math.ceil(total / pageSize);
     
-    // Add application counts
-    const tasksWithCounts = data.map(task => ({
+    const tasksWithCounts = data.map((task: any) => ({
       ...task,
       applicationsCount: task.applications?.length || 0,
     }));
