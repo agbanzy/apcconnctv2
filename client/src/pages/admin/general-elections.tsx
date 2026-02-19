@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,13 @@ import {
   Building2,
   MapPin,
   Users,
-  Calendar,
-  CheckCircle,
-  Clock,
-  XCircle,
-  Layers,
   UserPlus,
+  Layers,
+  BarChart3,
+  Pencil,
+  X,
+  Check,
+  Eye,
 } from "lucide-react";
 
 const POSITION_OPTIONS = [
@@ -40,10 +41,10 @@ const POSITION_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: "upcoming", label: "Upcoming", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  { value: "ongoing", label: "Ongoing", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  { value: "completed", label: "Completed", color: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200" },
-  { value: "cancelled", label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  { value: "upcoming", label: "Upcoming", variant: "outline" as const },
+  { value: "ongoing", label: "Ongoing", variant: "default" as const },
+  { value: "completed", label: "Completed", variant: "secondary" as const },
+  { value: "cancelled", label: "Cancelled", variant: "destructive" as const },
 ];
 
 const POSITION_LABELS: Record<string, string> = {
@@ -55,6 +56,16 @@ const POSITION_LABELS: Record<string, string> = {
   lga_chairman: "LGA Chairman",
   councillorship: "Councillorship",
 };
+
+interface Candidate {
+  id: string;
+  name: string;
+  runningMate?: string;
+  imageUrl?: string;
+  totalVotes: number;
+  partyId: string;
+  party?: { id: string; name: string; abbreviation: string; color: string; logoUrl?: string };
+}
 
 interface Election {
   id: string;
@@ -71,7 +82,7 @@ interface Election {
   totalAccreditedVoters: number;
   totalVotesCast: number;
   state?: { name: string } | null;
-  candidates?: any[];
+  candidates?: Candidate[];
   createdAt: string;
 }
 
@@ -82,6 +93,7 @@ export default function AdminGeneralElections() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedElection, setSelectedElection] = useState<Election | null>(null);
   const [filterPosition, setFilterPosition] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -109,10 +121,16 @@ export default function AdminGeneralElections() {
   const [candidateName, setCandidateName] = useState("");
   const [candidateRunningMate, setCandidateRunningMate] = useState("");
   const [candidatePartyId, setCandidatePartyId] = useState("");
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [editCandidateName, setEditCandidateName] = useState("");
+  const [editCandidateRunningMate, setEditCandidateRunningMate] = useState("");
+  const [editCandidatePartyId, setEditCandidatePartyId] = useState("");
 
   const [editTitle, setEditTitle] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editYear, setEditYear] = useState("");
 
   const qp = new URLSearchParams();
   if (filterPosition) qp.set("position", filterPosition);
@@ -128,8 +146,8 @@ export default function AdminGeneralElections() {
   });
   const elections = electionsRaw?.data || [];
 
-  const { data: statesRaw } = useQuery<any>({ queryKey: ["/api/states"] });
-  const states = Array.isArray(statesRaw) ? statesRaw : (statesRaw?.data || []);
+  const { data: statesResponse } = useQuery<any>({ queryKey: ["/api/states"] });
+  const states: any[] = statesResponse?.data || statesResponse || [];
 
   const { data: partiesRaw } = useQuery<{ success: boolean; data: any[] }>({
     queryKey: ["/api/parties"],
@@ -156,7 +174,7 @@ export default function AdminGeneralElections() {
       return res.json();
     },
   });
-  const lgas = lgasRaw?.success ? lgasRaw.data : lgasRaw || [];
+  const lgas = lgasRaw?.success ? lgasRaw.data : (Array.isArray(lgasRaw) ? lgasRaw : []);
 
   const { data: wardsRaw } = useQuery<any>({
     queryKey: ["/api/wards", bulkFilterLga],
@@ -166,7 +184,7 @@ export default function AdminGeneralElections() {
       return res.json();
     },
   });
-  const wards = wardsRaw?.success ? wardsRaw.data : wardsRaw || [];
+  const wards = wardsRaw?.success ? wardsRaw.data : (Array.isArray(wardsRaw) ? wardsRaw : []);
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -259,6 +277,39 @@ export default function AdminGeneralElections() {
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const editCandidateMutation = useMutation({
+    mutationFn: async ({ electionId, candidateId, payload }: { electionId: string; candidateId: string; payload: any }) => {
+      const res = await apiRequest("PATCH", `/api/general-elections/${electionId}/candidates/${candidateId}`, payload);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: "Candidate Updated" });
+        queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
+        setEditingCandidate(null);
+      } else {
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      }
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteCandidateMutation = useMutation({
+    mutationFn: async ({ electionId, candidateId }: { electionId: string; candidateId: string }) => {
+      const res = await apiRequest("DELETE", `/api/general-elections/${electionId}/candidates/${candidateId}`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: "Candidate Removed" });
+        queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
+      } else {
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      }
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   function resetCreateForm() {
     setCreatePosition("");
     setCreateTitle("");
@@ -321,6 +372,8 @@ export default function AdminGeneralElections() {
     setEditTitle(election.title);
     setEditStatus(election.status);
     setEditDescription(election.description || "");
+    setEditDate(election.electionDate ? new Date(election.electionDate).toISOString().slice(0, 10) : "");
+    setEditYear(election.electionYear.toString());
     setEditDialogOpen(true);
   }
 
@@ -328,7 +381,33 @@ export default function AdminGeneralElections() {
     if (!selectedElection) return;
     updateMutation.mutate({
       id: selectedElection.id,
-      payload: { title: editTitle, status: editStatus, description: editDescription },
+      payload: {
+        title: editTitle,
+        status: editStatus,
+        description: editDescription,
+        electionDate: editDate || undefined,
+        electionYear: editYear ? parseInt(editYear) : undefined,
+      },
+    });
+  }
+
+  function startEditCandidate(candidate: Candidate) {
+    setEditingCandidate(candidate);
+    setEditCandidateName(candidate.name);
+    setEditCandidateRunningMate(candidate.runningMate || "");
+    setEditCandidatePartyId(candidate.partyId);
+  }
+
+  function saveEditCandidate() {
+    if (!editingCandidate || !selectedElection) return;
+    editCandidateMutation.mutate({
+      electionId: selectedElection.id,
+      candidateId: editingCandidate.id,
+      payload: {
+        name: editCandidateName,
+        runningMate: editCandidateRunningMate || undefined,
+        partyId: editCandidatePartyId,
+      },
     });
   }
 
@@ -363,7 +442,7 @@ export default function AdminGeneralElections() {
 
   const statusBadge = (status: string) => {
     const s = STATUS_OPTIONS.find((o) => o.value === status);
-    return <Badge className={s?.color || ""}>{s?.label || status}</Badge>;
+    return <Badge variant={s?.variant || "outline"}>{s?.label || status}</Badge>;
   };
 
   const scopeNeeded = (pos: string) => {
@@ -374,6 +453,18 @@ export default function AdminGeneralElections() {
     if (pos === "councillorship") return "wards";
     return "none";
   };
+
+  const summaryStats = useMemo(() => {
+    const total = elections.length;
+    const upcoming = elections.filter((e) => e.status === "upcoming").length;
+    const ongoing = elections.filter((e) => e.status === "ongoing").length;
+    const completed = elections.filter((e) => e.status === "completed").length;
+    const totalCandidates = elections.reduce((sum, e) => sum + (e.candidates?.length || 0), 0);
+    const totalVotes = elections.reduce((sum, e) => sum + (e.totalVotesCast || 0), 0);
+    return { total, upcoming, ongoing, completed, totalCandidates, totalVotes };
+  }, [elections]);
+
+  const safeStates = Array.isArray(states) ? states : [];
 
   return (
     <div className="space-y-6" data-testid="admin-general-elections">
@@ -392,6 +483,45 @@ export default function AdminGeneralElections() {
             Bulk Create
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-2xl font-bold" data-testid="stat-total">{summaryStats.total}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Upcoming</p>
+            <p className="text-2xl font-bold" data-testid="stat-upcoming">{summaryStats.upcoming}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Ongoing</p>
+            <p className="text-2xl font-bold text-green-600" data-testid="stat-ongoing">{summaryStats.ongoing}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Completed</p>
+            <p className="text-2xl font-bold" data-testid="stat-completed">{summaryStats.completed}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Candidates</p>
+            <p className="text-2xl font-bold" data-testid="stat-candidates">{summaryStats.totalCandidates}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground">Total Votes</p>
+            <p className="text-2xl font-bold" data-testid="stat-votes">{summaryStats.totalVotes.toLocaleString()}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -459,7 +589,7 @@ export default function AdminGeneralElections() {
                 </thead>
                 <tbody>
                   {elections.map((election) => (
-                    <tr key={election.id} className="border-b hover-elevate" data-testid={`row-election-${election.id}`}>
+                    <tr key={election.id} className="border-b" data-testid={`row-election-${election.id}`}>
                       <td className="p-3 font-medium max-w-[250px] truncate">{election.title}</td>
                       <td className="p-3">
                         <Badge variant="outline">{POSITION_LABELS[election.position] || election.position}</Badge>
@@ -475,6 +605,17 @@ export default function AdminGeneralElections() {
                       <td className="p-3">{(election.totalVotesCast || 0).toLocaleString()}</td>
                       <td className="p-3 text-right">
                         <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedElection(election);
+                              setDetailDialogOpen(true);
+                            }}
+                            data-testid={`button-view-${election.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -554,7 +695,7 @@ export default function AdminGeneralElections() {
                 <Select value={createStateId} onValueChange={setCreateStateId}>
                   <SelectTrigger data-testid="create-select-state"><SelectValue placeholder="Select state" /></SelectTrigger>
                   <SelectContent>
-                    {states.map((s: any) => (
+                    {safeStates.map((s: any) => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -633,20 +774,20 @@ export default function AdminGeneralElections() {
 
             {bulkPosition && scopeNeeded(bulkPosition) === "states" && (
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between gap-1 mb-2">
                   <Label>Select States ({bulkSelectedStates.length} selected)</Label>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setBulkSelectedStates(bulkSelectedStates.length === states.length ? [] : states.map((s: any) => s.id))}
+                    onClick={() => setBulkSelectedStates(bulkSelectedStates.length === safeStates.length ? [] : safeStates.map((s: any) => s.id))}
                     data-testid="button-select-all-states"
                   >
-                    {bulkSelectedStates.length === states.length ? "Deselect All" : "Select All"}
+                    {bulkSelectedStates.length === safeStates.length ? "Deselect All" : "Select All"}
                   </Button>
                 </div>
                 <div className="grid grid-cols-3 gap-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
-                  {states.map((s: any) => (
-                    <label key={s.id} className="flex items-center gap-2 text-sm p-1 hover-elevate rounded cursor-pointer">
+                  {safeStates.map((s: any) => (
+                    <label key={s.id} className="flex items-center gap-2 text-sm p-1 rounded cursor-pointer">
                       <input
                         type="checkbox"
                         checked={bulkSelectedStates.includes(s.id)}
@@ -667,13 +808,13 @@ export default function AdminGeneralElections() {
                     <SelectTrigger><SelectValue placeholder="All States" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__clear__">All States</SelectItem>
-                      {states.map((s: any) => (
+                      {safeStates.map((s: any) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between gap-1 mb-2">
                   <Label>Select Senatorial Districts ({bulkSelectedDistricts.length} selected)</Label>
                   <Button
                     variant="outline"
@@ -686,7 +827,7 @@ export default function AdminGeneralElections() {
                 </div>
                 <div className="grid grid-cols-2 gap-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
                   {districts.map((d: any) => (
-                    <label key={d.id} className="flex items-center gap-2 text-sm p-1 hover-elevate rounded cursor-pointer">
+                    <label key={d.id} className="flex items-center gap-2 text-sm p-1 rounded cursor-pointer">
                       <input
                         type="checkbox"
                         checked={bulkSelectedDistricts.includes(d.id)}
@@ -707,7 +848,7 @@ export default function AdminGeneralElections() {
                     <SelectTrigger><SelectValue placeholder="Select State" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__clear__">All States</SelectItem>
-                      {states.map((s: any) => (
+                      {safeStates.map((s: any) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -715,7 +856,7 @@ export default function AdminGeneralElections() {
                 </div>
                 {bulkFilterState && (
                   <>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between gap-1 mb-2">
                       <Label>Select LGAs ({bulkSelectedLgas.length} selected)</Label>
                       <Button
                         variant="outline"
@@ -727,7 +868,7 @@ export default function AdminGeneralElections() {
                     </div>
                     <div className="grid grid-cols-2 gap-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
                       {lgas.map((l: any) => (
-                        <label key={l.id} className="flex items-center gap-2 text-sm p-1 hover-elevate rounded cursor-pointer">
+                        <label key={l.id} className="flex items-center gap-2 text-sm p-1 rounded cursor-pointer">
                           <input
                             type="checkbox"
                             checked={bulkSelectedLgas.includes(l.id)}
@@ -751,7 +892,7 @@ export default function AdminGeneralElections() {
                       <SelectTrigger><SelectValue placeholder="Select State" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__clear__">All States</SelectItem>
-                        {states.map((s: any) => (
+                        {safeStates.map((s: any) => (
                           <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -774,7 +915,7 @@ export default function AdminGeneralElections() {
                 </div>
                 {bulkFilterLga && (
                   <>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between gap-1 mb-2">
                       <Label>Select Wards ({bulkSelectedWards.length} selected)</Label>
                       <Button
                         variant="outline"
@@ -786,7 +927,7 @@ export default function AdminGeneralElections() {
                     </div>
                     <div className="grid grid-cols-2 gap-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
                       {wards.map((w: any) => (
-                        <label key={w.id} className="flex items-center gap-2 text-sm p-1 hover-elevate rounded cursor-pointer">
+                        <label key={w.id} className="flex items-center gap-2 text-sm p-1 rounded cursor-pointer">
                           <input
                             type="checkbox"
                             checked={bulkSelectedWards.includes(w.id)}
@@ -823,11 +964,22 @@ export default function AdminGeneralElections() {
         <DialogContent data-testid="dialog-edit-election">
           <DialogHeader>
             <DialogTitle>Edit Election</DialogTitle>
+            <DialogDescription>Update election details</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Title</Label>
               <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} data-testid="input-edit-title" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Year</Label>
+                <Input type="number" value={editYear} onChange={(e) => setEditYear(e.target.value)} data-testid="input-edit-year" />
+              </div>
+              <div>
+                <Label>Election Date</Label>
+                <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} data-testid="input-edit-date" />
+              </div>
             </div>
             <div>
               <Label>Status</Label>
@@ -855,25 +1007,112 @@ export default function AdminGeneralElections() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={candidateDialogOpen} onOpenChange={setCandidateDialogOpen}>
-        <DialogContent className="max-w-lg" data-testid="dialog-candidates">
+      <Dialog open={candidateDialogOpen} onOpenChange={(open) => { setCandidateDialogOpen(open); if (!open) setEditingCandidate(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-candidates">
           <DialogHeader>
-            <DialogTitle>Manage Candidates - {selectedElection?.title}</DialogTitle>
-            <DialogDescription>Add candidates from registered parties</DialogDescription>
+            <DialogTitle>Manage Candidates</DialogTitle>
+            <DialogDescription>{selectedElection?.title}</DialogDescription>
           </DialogHeader>
           {selectedElection && (
             <div className="space-y-4">
               {selectedElection.candidates && selectedElection.candidates.length > 0 && (
-                <div className="border rounded-md p-3 space-y-2">
+                <div className="space-y-2">
                   <Label className="text-sm font-medium">Current Candidates ({selectedElection.candidates.length})</Label>
-                  {selectedElection.candidates.map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
-                      <span>{c.name}</span>
-                      <Badge variant="outline" style={{ borderColor: c.party?.color || "#666" }}>
-                        {c.party?.abbreviation || "N/A"}
-                      </Badge>
-                    </div>
-                  ))}
+                  <div className="border rounded-md divide-y">
+                    {selectedElection.candidates.map((c: Candidate) => (
+                      <div key={c.id} className="p-3" data-testid={`candidate-row-${c.id}`}>
+                        {editingCandidate?.id === c.id ? (
+                          <div className="space-y-2">
+                            <Input
+                              value={editCandidateName}
+                              onChange={(e) => setEditCandidateName(e.target.value)}
+                              placeholder="Candidate name"
+                              data-testid="input-edit-candidate-name"
+                            />
+                            <Select value={editCandidatePartyId} onValueChange={setEditCandidatePartyId}>
+                              <SelectTrigger data-testid="select-edit-candidate-party">
+                                <SelectValue placeholder="Select party" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {parties.map((p: any) => (
+                                  <SelectItem key={p.id} value={p.id}>{p.abbreviation} - {p.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {(selectedElection.position === "presidential" || selectedElection.position === "governorship") && (
+                              <Input
+                                value={editCandidateRunningMate}
+                                onChange={(e) => setEditCandidateRunningMate(e.target.value)}
+                                placeholder="Running mate"
+                                data-testid="input-edit-candidate-running-mate"
+                              />
+                            )}
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingCandidate(null)}
+                                data-testid="button-cancel-edit-candidate"
+                              >
+                                <X className="h-4 w-4 mr-1" /> Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={saveEditCandidate}
+                                disabled={!editCandidateName || editCandidateMutation.isPending}
+                                data-testid="button-save-edit-candidate"
+                              >
+                                {editCandidateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+                                Save
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm">{c.name}</span>
+                                <Badge variant="outline" style={{ borderColor: c.party?.color || "#666" }}>
+                                  {c.party?.abbreviation || "N/A"}
+                                </Badge>
+                              </div>
+                              {c.runningMate && (
+                                <p className="text-xs text-muted-foreground mt-0.5">Running mate: {c.runningMate}</p>
+                              )}
+                              {(c.totalVotes || 0) > 0 && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{c.totalVotes?.toLocaleString()} votes</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => startEditCandidate(c)}
+                                data-testid={`button-edit-candidate-${c.id}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (confirm(`Remove ${c.name} from this election?`)) {
+                                    deleteCandidateMutation.mutate({
+                                      electionId: selectedElection.id,
+                                      candidateId: c.id,
+                                    });
+                                  }
+                                }}
+                                data-testid={`button-delete-candidate-${c.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="border-t pt-4 space-y-3">
@@ -928,6 +1167,113 @@ export default function AdminGeneralElections() {
                 >
                   {addCandidateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
                   Add Candidate
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="dialog-election-detail">
+          <DialogHeader>
+            <DialogTitle>{selectedElection?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedElection && POSITION_LABELS[selectedElection.position]} - {selectedElection?.state?.name || "National"}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedElection && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <div className="mt-1">{statusBadge(selectedElection.status)}</div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Election Date</p>
+                  <p className="text-sm font-medium mt-1">
+                    {new Date(selectedElection.electionDate).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Registered Voters</p>
+                  <p className="text-sm font-medium mt-1">{(selectedElection.totalRegisteredVoters || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Votes Cast</p>
+                  <p className="text-sm font-medium mt-1">{(selectedElection.totalVotesCast || 0).toLocaleString()}</p>
+                </div>
+              </div>
+
+              {selectedElection.description && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Description</p>
+                  <p className="text-sm">{selectedElection.description}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm font-medium mb-2">Candidates ({selectedElection.candidates?.length || 0})</p>
+                {selectedElection.candidates && selectedElection.candidates.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedElection.candidates
+                      .sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0))
+                      .map((c, i) => {
+                        const maxVotes = Math.max(...(selectedElection.candidates || []).map(cd => cd.totalVotes || 0), 1);
+                        const pct = maxVotes > 0 ? ((c.totalVotes || 0) / maxVotes) * 100 : 0;
+                        return (
+                          <div key={c.id} className="flex items-center gap-3" data-testid={`detail-candidate-${c.id}`}>
+                            <span className="text-sm w-6 text-muted-foreground">{i + 1}.</span>
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: c.party?.color || "#666" }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium">{c.name}</span>
+                                <Badge variant="outline" style={{ borderColor: c.party?.color || "#666" }}>
+                                  {c.party?.abbreviation || "N/A"}
+                                </Badge>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-2 mt-1">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{ width: `${pct}%`, backgroundColor: c.party?.color || "#666" }}
+                                />
+                              </div>
+                            </div>
+                            <span className="text-sm font-medium whitespace-nowrap">{(c.totalVotes || 0).toLocaleString()}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No candidates added yet.</p>
+                )}
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDetailDialogOpen(false);
+                    setCandidateDialogOpen(true);
+                  }}
+                  data-testid="button-detail-manage-candidates"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Manage Candidates
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDetailDialogOpen(false);
+                    openEdit(selectedElection);
+                  }}
+                  data-testid="button-detail-edit"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
                 </Button>
               </div>
             </div>

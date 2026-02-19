@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,41 @@ import {
   RefreshCw,
   Vote,
   AlertTriangle,
+  Map,
+  X,
+  Radio,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { NIGERIA_STATE_PATHS, NIGERIA_MAP_VIEWBOX, STATE_NAME_ALIASES } from "@/lib/nigeria-svg-paths";
+import { io } from "socket.io-client";
+
+interface StateResult {
+  state_id: string;
+  state_name: string;
+  total_votes: number;
+  total_pus: number;
+  reported_pus: number;
+  leading_party?: string;
+  leading_party_color?: string;
+  leading_party_abbreviation?: string;
+  leading_candidate?: string;
+  leading_votes?: number;
+  candidates?: Array<{
+    candidate_name: string;
+    party_abbreviation: string;
+    party_color: string;
+    total_votes: number;
+  }>;
+}
+
+function findStateResult(states: StateResult[] | undefined, svgName: string): StateResult | undefined {
+  if (!states) return undefined;
+  const aliases = STATE_NAME_ALIASES[svgName] || [svgName];
+  return states.find(s => aliases.some(a => a.toLowerCase() === s.state_name.toLowerCase()));
+}
 
 function ActionBadge({ action }: { action: string }) {
   const config: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -67,11 +99,310 @@ function formatTime(dateStr: string) {
   return d.toLocaleDateString("en-NG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function ElectionResultsMap({
+  stateData,
+  isLoading,
+  electionSelected,
+}: {
+  stateData: StateResult[] | undefined;
+  isLoading: boolean;
+  electionSelected: boolean;
+}) {
+  const [hoveredState, setHoveredState] = useState<string | null>(null);
+  const [selectedState, setSelectedState] = useState<StateResult | null>(null);
+  const [tooltipInfo, setTooltipInfo] = useState<{
+    x: number; y: number; name: string; data: StateResult | undefined;
+  } | null>(null);
+
+  const maxVotes = useMemo(() => {
+    if (!stateData?.length) return 1;
+    return Math.max(1, ...stateData.map(s => s.total_votes));
+  }, [stateData]);
+
+  const getColor = useCallback((svgName: string): string => {
+    if (!electionSelected) return "hsl(var(--muted))";
+    const result = findStateResult(stateData, svgName);
+    if (!result || result.total_votes === 0) return "hsl(220, 13%, 88%)";
+    if (result.leading_party_color) {
+      const intensity = Math.min(result.total_votes / maxVotes, 1);
+      const lightness = 70 - (intensity * 30);
+      const hex = result.leading_party_color.replace("#", "");
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const blended_r = Math.round(r + (255 - r) * (1 - intensity) * 0.6);
+      const blended_g = Math.round(g + (255 - g) * (1 - intensity) * 0.6);
+      const blended_b = Math.round(b + (255 - b) * (1 - intensity) * 0.6);
+      return `rgb(${blended_r}, ${blended_g}, ${blended_b})`;
+    }
+    const intensity = Math.min(result.total_votes / maxVotes, 1);
+    const lightness = 70 - (intensity * 30);
+    return `hsl(142, 50%, ${lightness}%)`;
+  }, [stateData, maxVotes, electionSelected]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGElement>, svgName: string) => {
+    const svg = e.currentTarget.closest("svg");
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    setTooltipInfo({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top - 10,
+      name: svgName,
+      data: findStateResult(stateData, svgName),
+    });
+  }, [stateData]);
+
+  if (isLoading) return <Skeleton className="h-[400px] w-full" />;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2 relative">
+        <svg
+          viewBox={NIGERIA_MAP_VIEWBOX}
+          className="w-full h-auto"
+          style={{ maxHeight: "60vh" }}
+          data-testid="svg-election-results-map"
+        >
+          {Object.entries(NIGERIA_STATE_PATHS).map(([svgName, pathData]) => {
+            const fillColor = getColor(svgName);
+            const isHovered = hoveredState === svgName;
+            const result = findStateResult(stateData, svgName);
+            const isSelected = selectedState?.state_name.toLowerCase() === result?.state_name.toLowerCase();
+
+            return (
+              <path
+                key={pathData.id}
+                d={pathData.d}
+                fill={fillColor}
+                stroke={
+                  isSelected ? "hsl(var(--primary))" :
+                  isHovered ? "hsl(220, 50%, 40%)" :
+                  "hsl(220, 10%, 40%)"
+                }
+                strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 0.5}
+                className="cursor-pointer outline-none"
+                style={{
+                  transition: "fill 0.2s, stroke 0.2s, stroke-width 0.2s",
+                }}
+                onMouseEnter={() => setHoveredState(svgName)}
+                onMouseMove={(e) => handleMouseMove(e, svgName)}
+                onMouseLeave={() => {
+                  setHoveredState(null);
+                  setTooltipInfo(null);
+                }}
+                onClick={() => setSelectedState(result || null)}
+                data-testid={`election-state-${svgName.toLowerCase().replace(/\s+/g, "-")}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${svgName}: ${result?.total_votes || 0} votes`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedState(result || null);
+                  }
+                }}
+              />
+            );
+          })}
+
+          {Object.entries(NIGERIA_STATE_PATHS).map(([svgName, pathData]) => {
+            const abbrev = svgName === "Federal Capital Territory" ? "FCT" :
+                           svgName === "Cross River" ? "C.River" :
+                           svgName === "Akwa Ibom" ? "A.Ibom" :
+                           svgName === "Nassarawa" ? "Nasar." :
+                           svgName;
+            const fontSize = ["Lagos", "Federal Capital Territory", "Ebonyi", "Anambra", "Imo", "Abia", "Bayelsa", "Ekiti"].includes(svgName) ? 6 : 8;
+            return (
+              <text
+                key={`label-${pathData.id}`}
+                x={pathData.labelX}
+                y={pathData.labelY}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="pointer-events-none select-none"
+                fill="hsl(220, 15%, 12%)"
+                fontSize={fontSize}
+                fontWeight={600}
+                paintOrder="stroke"
+                stroke="hsla(0, 0%, 100%, 0.7)"
+                strokeWidth={2}
+              >
+                {abbrev}
+              </text>
+            );
+          })}
+        </svg>
+
+        {tooltipInfo && hoveredState && (
+          <div
+            className="absolute z-50 pointer-events-none bg-popover border border-border rounded-md shadow-lg p-3 min-w-[200px]"
+            style={{
+              left: Math.min(tooltipInfo.x, (typeof window !== "undefined" ? window.innerWidth * 0.5 : 300)),
+              top: tooltipInfo.y,
+              transform: "translate(-50%, -100%)",
+            }}
+            data-testid="tooltip-election-state"
+          >
+            <div className="flex items-center gap-2 border-b border-border pb-2 mb-2">
+              <MapPin className="h-4 w-4" />
+              <span className="font-bold text-sm">{tooltipInfo.name}</span>
+            </div>
+            {tooltipInfo.data && tooltipInfo.data.total_votes > 0 ? (
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Total Votes</span>
+                  <span className="font-bold">{tooltipInfo.data.total_votes.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">PUs Reporting</span>
+                  <span className="font-medium">{tooltipInfo.data.reported_pus} / {tooltipInfo.data.total_pus}</span>
+                </div>
+                {tooltipInfo.data.leading_candidate && (
+                  <div className="border-t border-border pt-1 mt-1">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tooltipInfo.data.leading_party_color || "#888" }} />
+                      <span className="font-medium">{tooltipInfo.data.leading_candidate}</span>
+                    </div>
+                    <span className="text-muted-foreground">
+                      {tooltipInfo.data.leading_party_abbreviation} - {(tooltipInfo.data.leading_votes || 0).toLocaleString()} votes
+                    </span>
+                  </div>
+                )}
+                <div className="text-muted-foreground pt-1">Click for details</div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No results reported</p>
+            )}
+          </div>
+        )}
+
+        {!electionSelected && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-md">
+            <div className="text-center">
+              <Map className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">Select an election to see results on the map</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {selectedState ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  {selectedState.state_name}
+                </CardTitle>
+                <Button variant="ghost" size="icon" onClick={() => setSelectedState(null)} data-testid="button-close-state-detail">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground">Total Votes</div>
+                  <div className="text-xl font-bold">{selectedState.total_votes.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">PUs Reporting</div>
+                  <div className="text-xl font-bold">{selectedState.reported_pus} <span className="text-sm font-normal text-muted-foreground">/ {selectedState.total_pus}</span></div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Reporting Rate</div>
+                <Progress value={selectedState.total_pus > 0 ? (selectedState.reported_pus / selectedState.total_pus) * 100 : 0} className="h-2" />
+                <div className="text-xs text-muted-foreground text-right mt-0.5">
+                  {selectedState.total_pus > 0 ? Math.round((selectedState.reported_pus / selectedState.total_pus) * 100) : 0}%
+                </div>
+              </div>
+              {selectedState.candidates && selectedState.candidates.length > 0 && (
+                <div className="border-t pt-3 space-y-2">
+                  <div className="text-xs text-muted-foreground font-medium">Candidate Results</div>
+                  {selectedState.candidates.map((c, i) => {
+                    const pct = selectedState.total_votes > 0 ? Math.round((c.total_votes / selectedState.total_votes) * 100) : 0;
+                    return (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.party_color || "#888" }} />
+                            <span className="truncate">{c.candidate_name}</span>
+                            <Badge variant="outline" className="text-xs shrink-0">{c.party_abbreviation}</Badge>
+                          </div>
+                          <span className="font-bold shrink-0">{c.total_votes.toLocaleString()}</span>
+                        </div>
+                        <div className="bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: c.party_color || "#888" }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <MapPin className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {electionSelected ? "Click on a state to see detailed results" : "Select an election first"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {stateData && stateData.filter(s => s.total_votes > 0).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Top States by Votes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {stateData
+                .filter(s => s.total_votes > 0)
+                .sort((a, b) => b.total_votes - a.total_votes)
+                .slice(0, 8)
+                .map((state) => (
+                  <div
+                    key={state.state_id}
+                    className="flex items-center justify-between gap-2 py-1 cursor-pointer hover-elevate rounded-md px-2"
+                    onClick={() => setSelectedState(state)}
+                    data-testid={`topstate-${state.state_id}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {state.leading_party_color && (
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: state.leading_party_color }} />
+                      )}
+                      <span className="text-sm truncate">{state.state_name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {state.leading_party_abbreviation && (
+                        <Badge variant="outline" className="text-xs">{state.leading_party_abbreviation}</Badge>
+                      )}
+                      <span className="text-sm font-bold">{state.total_votes.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ElectionAnalytics() {
   const [, navigate] = useLocation();
   const [selectedElection, setSelectedElection] = useState<string>("");
   const [activityFilter, setActivityFilter] = useState<string>("all");
   const [sheetFilter, setSheetFilter] = useState<string>("all");
+  const [isLive, setIsLive] = useState(false);
+  const [liveEvents, setLiveEvents] = useState<Array<{ type: string; time: Date; data?: any }>>([]);
 
   const { data: dashboardData, isLoading: dashLoading } = useQuery<any>({
     queryKey: ["/api/analytics/dashboard"],
@@ -83,12 +414,12 @@ export default function ElectionAnalytics() {
 
   const { data: electionAnalytics, isLoading: electionLoading } = useQuery<any>({
     queryKey: ["/api/analytics/elections", selectedElection],
-    enabled: !!selectedElection,
+    enabled: !!selectedElection && selectedElection !== "__all__",
   });
 
-  const { data: stateBreakdown } = useQuery<any>({
+  const { data: stateBreakdown, isLoading: stateLoading } = useQuery<any>({
     queryKey: ["/api/analytics/elections", selectedElection, "by-state"],
-    enabled: !!selectedElection,
+    enabled: !!selectedElection && selectedElection !== "__all__",
   });
 
   const buildActivityUrl = () => {
@@ -118,9 +449,63 @@ export default function ElectionAnalytics() {
   const dashboard = dashboardData?.data;
   const analytics = electionAnalytics?.data;
   const elections = electionsData?.data || [];
+  const stateResults: StateResult[] | undefined = stateBreakdown?.data;
+
+  useEffect(() => {
+    const socket = io(window.location.origin, { transports: ["websocket", "polling"] });
+
+    socket.on("connect", () => setIsLive(true));
+    socket.on("disconnect", () => setIsLive(false));
+
+    const handleResultUpdate = (data: any) => {
+      setLiveEvents(prev => [{
+        type: "result",
+        time: new Date(),
+        data,
+      }, ...prev].slice(0, 20));
+
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      if (selectedElection && selectedElection !== "__all__") {
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/elections", selectedElection] });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/elections", selectedElection, "by-state"] });
+      }
+    };
+
+    const handleAgentActivity = (data: any) => {
+      setLiveEvents(prev => [{
+        type: "agent",
+        time: new Date(),
+        data,
+      }, ...prev].slice(0, 20));
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/agent-activity"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+    };
+
+    const handleSheetUpload = (data: any) => {
+      setLiveEvents(prev => [{
+        type: "sheet",
+        time: new Date(),
+        data,
+      }, ...prev].slice(0, 20));
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/result-sheets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+    };
+
+    socket.on("general-election:result-updated", handleResultUpdate);
+    socket.on("agent-activity:updated", handleAgentActivity);
+    socket.on("result-sheet:uploaded", handleSheetUpload);
+
+    return () => {
+      socket.off("general-election:result-updated", handleResultUpdate);
+      socket.off("agent-activity:updated", handleAgentActivity);
+      socket.off("result-sheet:uploaded", handleSheetUpload);
+      socket.disconnect();
+    };
+  }, [selectedElection]);
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
   };
 
   return (
@@ -136,6 +521,19 @@ export default function ElectionAnalytics() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 mr-2">
+            {isLive ? (
+              <Badge variant="default" className="gap-1" data-testid="badge-live-status">
+                <Radio className="w-3 h-3 animate-pulse" />
+                Live
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1" data-testid="badge-offline-status">
+                <WifiOff className="w-3 h-3" />
+                Offline
+              </Badge>
+            )}
+          </div>
           <Select value={selectedElection} onValueChange={setSelectedElection}>
             <SelectTrigger className="w-[280px]" data-testid="select-election">
               <SelectValue placeholder="Select an election" />
@@ -203,9 +601,42 @@ export default function ElectionAnalytics() {
         </div>
       )}
 
+      {liveEvents.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Radio className="w-4 h-4 animate-pulse text-green-500" />
+                Live Feed
+              </CardTitle>
+              <Button variant="ghost" size="icon" onClick={() => setLiveEvents([])} data-testid="button-clear-feed">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {liveEvents.slice(0, 8).map((evt, i) => (
+                <Badge key={i} variant={evt.type === "result" ? "default" : evt.type === "agent" ? "secondary" : "outline"} className="shrink-0">
+                  {evt.type === "result" && <Send className="w-3 h-3 mr-1" />}
+                  {evt.type === "agent" && <Users className="w-3 h-3 mr-1" />}
+                  {evt.type === "sheet" && <Upload className="w-3 h-3 mr-1" />}
+                  {evt.type === "result" ? "Result update" : evt.type === "agent" ? "Agent activity" : "Sheet upload"}
+                  <span className="text-xs ml-1 opacity-70">{formatTime(evt.time.toISOString())}</span>
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList data-testid="tabs-analytics">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+          <TabsTrigger value="map" data-testid="tab-map">
+            <Map className="w-4 h-4 mr-1" />
+            Results Map
+          </TabsTrigger>
           <TabsTrigger value="results" data-testid="tab-results">Results</TabsTrigger>
           <TabsTrigger value="agents" data-testid="tab-agents">Agent Activity</TabsTrigger>
           <TabsTrigger value="sheets" data-testid="tab-sheets">Result Sheets</TabsTrigger>
@@ -328,6 +759,25 @@ export default function ElectionAnalytics() {
               </Card>
             </div>
           ) : null}
+        </TabsContent>
+
+        <TabsContent value="map" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Map className="h-4 w-4" />
+                Election Results Map
+                {isLive && <Badge variant="default" className="ml-auto gap-1"><Radio className="w-3 h-3 animate-pulse" /> Live</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ElectionResultsMap
+                stateData={stateResults}
+                isLoading={stateLoading}
+                electionSelected={!!selectedElection && selectedElection !== "__all__"}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="results" className="space-y-4">
@@ -480,7 +930,6 @@ export default function ElectionAnalytics() {
                 <SelectItem value="all">All Sheets</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="verified">Verified</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -509,19 +958,13 @@ export default function ElectionAnalytics() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {sheet.verification_status === "verified" && (
+                      {sheet.is_verified === true ? (
                         <Badge variant="default" className="gap-1">
                           <CheckCircle className="w-3 h-3" /> Verified
                         </Badge>
-                      )}
-                      {sheet.verification_status === "pending" && (
+                      ) : (
                         <Badge variant="outline" className="gap-1">
                           <Clock className="w-3 h-3" /> Pending
-                        </Badge>
-                      )}
-                      {sheet.verification_status === "rejected" && (
-                        <Badge variant="destructive" className="gap-1">
-                          <XCircle className="w-3 h-3" /> Rejected
                         </Badge>
                       )}
                       <span className="text-xs text-muted-foreground">{formatTime(sheet.uploaded_at)}</span>
@@ -541,17 +984,23 @@ export default function ElectionAnalytics() {
         </TabsContent>
 
         <TabsContent value="states" className="space-y-4">
-          {selectedElection && selectedElection !== "__all__" && stateBreakdown?.data?.length > 0 ? (
+          {selectedElection && selectedElection !== "__all__" && stateResults && stateResults.length > 0 ? (
             <div className="space-y-3">
               <h3 className="text-lg font-semibold">State-Level Breakdown</h3>
               <div className="grid gap-3">
-                {stateBreakdown.data.map((s: any) => (
+                {stateResults.map((s: any) => (
                   <Card key={s.state_id} data-testid={`card-state-${s.state_id}`}>
                     <CardContent className="p-4">
                       <div className="flex flex-row flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-muted-foreground" />
                           <span className="font-medium">{s.state_name}</span>
+                          {s.leading_party_abbreviation && (
+                            <Badge variant="outline" className="text-xs gap-1">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.leading_party_color || "#888" }} />
+                              {s.leading_party_abbreviation}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 text-sm">
                           <div className="text-right">

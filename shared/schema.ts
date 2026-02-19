@@ -728,6 +728,8 @@ export const incidents = pgTable("incidents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   pollingUnitId: varchar("polling_unit_id").references(() => pollingUnits.id),
   reporterId: varchar("reporter_id").references(() => members.id),
+  stateId: varchar("state_id").references(() => states.id),
+  lgaId: varchar("lga_id").references(() => lgas.id),
   severity: incidentSeverityEnum("severity").notNull(),
   description: text("description").notNull(),
   location: text("location"),
@@ -1098,6 +1100,14 @@ export const statesRelations = relations(states, ({ many }) => ({
   newsPosts: many(newsPosts),
   volunteerTasks: many(volunteerTasks),
   issueCampaigns: many(issueCampaigns),
+  senatorialDistricts: many(senatorialDistricts),
+}));
+
+export const senatorialDistrictsRelations = relations(senatorialDistricts, ({ one }) => ({
+  state: one(states, {
+    fields: [senatorialDistricts.stateId],
+    references: [states.id],
+  }),
 }));
 
 export const lgasRelations = relations(lgas, ({ one, many }) => ({
@@ -1496,6 +1506,14 @@ export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   reporter: one(members, {
     fields: [incidents.reporterId],
     references: [members.id],
+  }),
+  state: one(states, {
+    fields: [incidents.stateId],
+    references: [states.id],
+  }),
+  lga: one(lgas, {
+    fields: [incidents.lgaId],
+    references: [lgas.id],
   }),
   media: many(incidentMedia),
 }));

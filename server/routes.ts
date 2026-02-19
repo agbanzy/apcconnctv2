@@ -5691,6 +5691,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/incident-map-data", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const allIncidents = await db.query.incidents.findMany({
+        with: {
+          state: true,
+          lga: true,
+          pollingUnit: {
+            with: {
+              ward: {
+                with: {
+                  lga: { with: { state: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const allStates = await db.query.states.findMany();
+      const stateMap: Record<string, { name: string; total: number; high: number; medium: number; low: number; reported: number; investigating: number; resolved: number }> = {};
+
+      for (const s of allStates) {
+        stateMap[s.id] = { name: s.name, total: 0, high: 0, medium: 0, low: 0, reported: 0, investigating: 0, resolved: 0 };
+      }
+
+      for (const inc of allIncidents) {
+        const stateId = inc.stateId || (inc as any).pollingUnit?.ward?.lga?.state?.id;
+        if (stateId && stateMap[stateId]) {
+          stateMap[stateId].total++;
+          const sev = inc.severity as string;
+          if (sev === "high") stateMap[stateId].high++;
+          else if (sev === "medium") stateMap[stateId].medium++;
+          else stateMap[stateId].low++;
+          const st = (inc.status || "reported") as string;
+          if (st === "reported") stateMap[stateId].reported++;
+          else if (st === "investigating") stateMap[stateId].investigating++;
+          else if (st === "resolved") stateMap[stateId].resolved++;
+        }
+      }
+
+      const states = Object.entries(stateMap).map(([id, data]) => ({
+        stateId: id,
+        ...data,
+      }));
+
+      res.json({ success: true, data: { states } });
+    } catch (error) {
+      console.error("Incident map data error:", error);
+      res.status(500).json({ success: false, error: "Failed to get incident map data" });
+    }
+  });
+
   app.get("/api/analytics/map-data", async (req: Request, res: Response) => {
     try {
       const result = await db.execute(sql`
@@ -10304,6 +10356,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
     try {
       const allIncidents = await db.query.incidents.findMany({
         with: {
+          state: true,
+          lga: true,
           pollingUnit: {
             with: {
               ward: {
@@ -10327,7 +10381,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const bySeverity = { low: 0, medium: 0, high: 0 };
       const byStatus = { reported: 0, investigating: 0, resolved: 0 };
       const byState: Record<string, { total: number; high: number; medium: number; low: number; resolved: number; stateName: string }> = {};
-      const byLga: Record<string, { total: number; lgaName: string; stateName: string }> = {};
+      const byLga: Record<string, { total: number; lgaName: string; stateName: string; lgaId: string }> = {};
       const recent24h = allIncidents.filter(i => {
         const created = new Date(i.createdAt!);
         return Date.now() - created.getTime() < 24 * 60 * 60 * 1000;
@@ -10339,8 +10393,12 @@ Be friendly, informative, and politically neutral when discussing governance. En
         const st = (inc.status || "reported") as "reported" | "investigating" | "resolved";
         if (byStatus[st] !== undefined) byStatus[st]++;
 
-        const stateName = (inc as any).pollingUnit?.ward?.lga?.state?.name || "Unknown";
-        const stateId = (inc as any).pollingUnit?.ward?.lga?.state?.id || "unknown";
+        const stateName = (inc as any).state?.name 
+          || (inc as any).pollingUnit?.ward?.lga?.state?.name 
+          || "Unknown";
+        const stateId = (inc as any).state?.id 
+          || (inc as any).pollingUnit?.ward?.lga?.state?.id 
+          || "unknown";
         if (!byState[stateId]) {
           byState[stateId] = { total: 0, high: 0, medium: 0, low: 0, resolved: 0, stateName };
         }
@@ -10350,10 +10408,14 @@ Be friendly, informative, and politically neutral when discussing governance. En
         if (sev === "low") byState[stateId].low++;
         if (st === "resolved") byState[stateId].resolved++;
 
-        const lgaName = (inc as any).pollingUnit?.ward?.lga?.name || "Unknown";
-        const lgaId = (inc as any).pollingUnit?.ward?.lga?.id || "unknown";
+        const lgaName = (inc as any).lga?.name 
+          || (inc as any).pollingUnit?.ward?.lga?.name 
+          || "Unknown";
+        const lgaId = (inc as any).lga?.id 
+          || (inc as any).pollingUnit?.ward?.lga?.id 
+          || "unknown";
         if (!byLga[lgaId]) {
-          byLga[lgaId] = { total: 0, lgaName, stateName };
+          byLga[lgaId] = { total: 0, lgaName, stateName, lgaId };
         }
         byLga[lgaId].total++;
       }
@@ -10386,8 +10448,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
             createdAt: inc.createdAt,
             reporter: (inc as any).reporter?.user ? `${(inc as any).reporter.user.firstName} ${(inc as any).reporter.user.lastName}` : "Unknown",
             pollingUnit: (inc as any).pollingUnit?.name || "N/A",
-            state: (inc as any).pollingUnit?.ward?.lga?.state?.name || "Unknown",
-            lga: (inc as any).pollingUnit?.ward?.lga?.name || "Unknown",
+            state: (inc as any).state?.name || (inc as any).pollingUnit?.ward?.lga?.state?.name || "Unknown",
+            lga: (inc as any).lga?.name || (inc as any).pollingUnit?.ward?.lga?.name || "Unknown",
             mediaCount: (inc as any).media?.length || 0,
           })),
         },
@@ -12059,18 +12121,33 @@ Be friendly, informative, and politically neutral when discussing governance. En
         return res.status(404).json({ success: false, error: "Election not found" });
       }
 
+      // Determine scope from position type
+      const isNational = election.position === 'presidential';
+      const isState = ['governorship', 'senatorial', 'house_of_reps', 'state_assembly'].includes(election.position || '');
+      const isLga = ['lga_chairman', 'councillorship'].includes(election.position || '');
+
       // Total PUs in scope
-      const totalPUsResult = await db.execute(sql`
-        SELECT COUNT(DISTINCT pu.id)::int as total
-        FROM polling_units pu
-        JOIN wards w ON pu.ward_id = w.id
-        JOIN lgas l ON w.lga_id = l.id
-        JOIN states s ON l.state_id = s.id
-        WHERE (${election.scope} = 'national')
-           OR (${election.scope} = 'state' AND s.id = ${election.stateId || ''})
-           OR (${election.scope} = 'lga' AND l.id = ${election.lgaId || ''})
-           OR (${election.scope} = 'constituency' AND w.lga_id = ${election.lgaId || ''})
-      `);
+      let totalPUsResult;
+      if (isNational) {
+        totalPUsResult = await db.execute(sql`SELECT COUNT(DISTINCT id)::int as total FROM polling_units`);
+      } else if (isState && election.stateId) {
+        totalPUsResult = await db.execute(sql`
+          SELECT COUNT(DISTINCT pu.id)::int as total
+          FROM polling_units pu
+          JOIN wards w ON pu.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          WHERE l.state_id = ${election.stateId}
+        `);
+      } else if (isLga && election.lgaId) {
+        totalPUsResult = await db.execute(sql`
+          SELECT COUNT(DISTINCT pu.id)::int as total
+          FROM polling_units pu
+          JOIN wards w ON pu.ward_id = w.id
+          WHERE w.lga_id = ${election.lgaId}
+        `);
+      } else {
+        totalPUsResult = await db.execute(sql`SELECT COUNT(DISTINCT id)::int as total FROM polling_units`);
+      }
       const totalPUs = totalPUsResult.rows?.[0]?.total || 0;
 
       // PUs that reported results
@@ -12125,9 +12202,9 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const sheetStats = await db.execute(sql`
         SELECT 
           COUNT(*)::int as total_sheets,
-          COUNT(CASE WHEN verification_status = 'verified' THEN 1 END)::int as verified_sheets,
-          COUNT(CASE WHEN verification_status = 'pending' THEN 1 END)::int as pending_sheets,
-          COUNT(CASE WHEN verification_status = 'rejected' THEN 1 END)::int as rejected_sheets
+          COUNT(CASE WHEN is_verified = true THEN 1 END)::int as verified_sheets,
+          COUNT(CASE WHEN is_verified = false OR is_verified IS NULL THEN 1 END)::int as pending_sheets,
+          0::int as rejected_sheets
         FROM result_sheets
         WHERE election_id = ${electionId}
       `);
@@ -12191,11 +12268,56 @@ Be friendly, informative, and politically neutral when discussing governance. En
         JOIN polling_units pu ON pu.ward_id = w.id
         LEFT JOIN polling_unit_results pur ON pur.polling_unit_id = pu.id AND pur.election_id = ${electionId}
         GROUP BY s.id, s.name
-        HAVING COUNT(DISTINCT pur.polling_unit_id) > 0
         ORDER BY total_votes DESC
       `);
 
-      res.json({ success: true, data: stateBreakdown.rows || [] });
+      const candidateByState = await db.execute(sql`
+        SELECT 
+          s.id as state_id,
+          gec.id as candidate_id,
+          gec.candidate_name,
+          p.name as party_name,
+          p.abbreviation as party_abbreviation,
+          p.color as party_color,
+          COALESCE(SUM(pur.votes), 0)::int as total_votes
+        FROM states s
+        JOIN lgas l ON l.state_id = s.id
+        JOIN wards w ON w.lga_id = l.id
+        JOIN polling_units pu ON pu.ward_id = w.id
+        JOIN polling_unit_results pur ON pur.polling_unit_id = pu.id AND pur.election_id = ${electionId}
+        JOIN general_election_candidates gec ON pur.candidate_id = gec.id AND gec.election_id = ${electionId}
+        LEFT JOIN political_parties p ON gec.party_id = p.id
+        GROUP BY s.id, gec.id, gec.candidate_name, p.name, p.abbreviation, p.color
+        ORDER BY s.id, total_votes DESC
+      `);
+
+      const candidatesByStateMap: Record<string, any[]> = {};
+      for (const row of (candidateByState.rows || [])) {
+        const sid = row.state_id as string;
+        if (!candidatesByStateMap[sid]) candidatesByStateMap[sid] = [];
+        candidatesByStateMap[sid].push({
+          candidate_name: row.candidate_name,
+          party_abbreviation: row.party_abbreviation,
+          party_color: row.party_color,
+          total_votes: row.total_votes,
+        });
+      }
+
+      const enrichedStates = (stateBreakdown.rows || []).map((state: any) => {
+        const candidates = candidatesByStateMap[state.state_id] || [];
+        const leading = candidates[0] || null;
+        return {
+          ...state,
+          candidates,
+          leading_party: leading?.party_abbreviation || null,
+          leading_party_color: leading?.party_color || null,
+          leading_party_abbreviation: leading?.party_abbreviation || null,
+          leading_candidate: leading?.candidate_name || null,
+          leading_votes: leading?.total_votes || 0,
+        };
+      });
+
+      res.json({ success: true, data: enrichedStates });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to fetch state breakdown" });
     }
@@ -12220,14 +12342,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const logs = await db.execute(sql`
         SELECT 
           aal.*,
-          m.full_name as agent_name,
-          m.phone as agent_phone,
+          COALESCE(u.first_name || ' ' || u.last_name, 'Unknown') as agent_name,
+          u.phone as agent_phone,
           pu.name as polling_unit_name,
-          pu.code as polling_unit_code,
+          pu.unit_code as polling_unit_code,
           ge.title as election_title,
-          ge.position_type as election_position
+          ge.position as election_position
         FROM agent_activity_logs aal
         LEFT JOIN members m ON aal.member_id = m.id
+        LEFT JOIN users u ON m.user_id = u.id
         LEFT JOIN polling_units pu ON aal.polling_unit_id = pu.id
         LEFT JOIN general_elections ge ON aal.election_id = ge.id
         WHERE ${whereClause}
@@ -12269,18 +12392,23 @@ Be friendly, informative, and politically neutral when discussing governance. En
         whereClause = sql`${whereClause} AND rs.election_id = ${electionId}`;
       }
       if (verificationStatus) {
-        whereClause = sql`${whereClause} AND rs.verification_status = ${verificationStatus}`;
+        if (verificationStatus === "verified") {
+          whereClause = sql`${whereClause} AND rs.is_verified = true`;
+        } else if (verificationStatus === "pending") {
+          whereClause = sql`${whereClause} AND rs.is_verified = false`;
+        }
       }
 
       const sheets = await db.execute(sql`
         SELECT 
           rs.*,
-          m.full_name as uploader_name,
+          COALESCE(u.first_name || ' ' || u.last_name, 'Unknown') as uploader_name,
           pu.name as polling_unit_name,
-          pu.code as polling_unit_code,
+          pu.unit_code as polling_unit_code,
           ge.title as election_title
         FROM result_sheets rs
         LEFT JOIN members m ON rs.uploaded_by = m.id
+        LEFT JOIN users u ON m.user_id = u.id
         LEFT JOIN polling_units pu ON rs.polling_unit_id = pu.id
         LEFT JOIN general_elections ge ON rs.election_id = ge.id
         WHERE ${whereClause}
@@ -12316,7 +12444,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const activeElections = await db.execute(sql`
         SELECT COUNT(*)::int as total
         FROM general_elections
-        WHERE status IN ('ongoing', 'scheduled')
+        WHERE status IN ('ongoing', 'upcoming')
       `);
 
       // Total agents
@@ -12352,8 +12480,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const totalSheets = await db.execute(sql`
         SELECT 
           COUNT(*)::int as total,
-          COUNT(CASE WHEN verification_status = 'verified' THEN 1 END)::int as verified,
-          COUNT(CASE WHEN verification_status = 'pending' THEN 1 END)::int as pending
+          COUNT(CASE WHEN is_verified = true THEN 1 END)::int as verified,
+          COUNT(CASE WHEN is_verified = false OR is_verified IS NULL THEN 1 END)::int as pending
         FROM result_sheets
       `);
 
@@ -12362,15 +12490,15 @@ Be friendly, informative, and politically neutral when discussing governance. En
         SELECT 
           ge.id,
           ge.title,
-          ge.position_type,
+          ge.position as position_type,
           ge.election_year,
           ge.status,
           COUNT(DISTINCT pur.polling_unit_id)::int as reporting_pus,
           COALESCE(SUM(pur.votes), 0)::int as total_votes
         FROM general_elections ge
         LEFT JOIN polling_unit_results pur ON pur.election_id = ge.id
-        WHERE ge.status IN ('ongoing', 'completed', 'scheduled')
-        GROUP BY ge.id, ge.title, ge.position_type, ge.election_year, ge.status
+        WHERE ge.status IN ('ongoing', 'completed', 'upcoming')
+        GROUP BY ge.id, ge.title, ge.position, ge.election_year, ge.status
         ORDER BY total_votes DESC
         LIMIT 10
       `);
