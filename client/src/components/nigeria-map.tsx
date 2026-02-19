@@ -24,16 +24,36 @@ interface StateData {
   tasksCount: number;
 }
 
+interface ElectionMapState {
+  stateId: string;
+  name: string;
+  totalVotes: number;
+  pusReported: number;
+  totalPus: number;
+  leadingParty: string | null;
+  leadingPartyColor: string | null;
+  leadingPartyVotes: number | null;
+  totalElections: number;
+  ongoingElections: number;
+}
+
 interface NigeriaMapProps {
-  mode?: 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
+  mode?: 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks' | 'elections';
   onStateClick?: (stateId: string, stateName: string) => void;
   highlightStates?: string[];
   showLegend?: boolean;
+  electionId?: string;
 }
 
-type MapMode = 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks';
+type MapMode = 'members' | 'events' | 'campaigns' | 'activity' | 'polling' | 'news' | 'tasks' | 'elections';
 
 function findStateData(states: StateData[] | undefined, svgName: string): StateData | undefined {
+  if (!states) return undefined;
+  const aliases = STATE_NAME_ALIASES[svgName] || [svgName];
+  return states.find(s => aliases.some(a => a.toLowerCase() === s.name.toLowerCase()));
+}
+
+function findElectionStateData(states: ElectionMapState[] | undefined, svgName: string): ElectionMapState | undefined {
   if (!states) return undefined;
   const aliases = STATE_NAME_ALIASES[svgName] || [svgName];
   return states.find(s => aliases.some(a => a.toLowerCase() === s.name.toLowerCase()));
@@ -43,17 +63,29 @@ export function NigeriaMap({
   mode = 'members', 
   onStateClick, 
   highlightStates = [],
-  showLegend = true 
+  showLegend = true,
+  electionId 
 }: NigeriaMapProps) {
   const [selectedMode, setSelectedMode] = useState<MapMode>(mode);
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<StateData | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; name: string; data: StateData | undefined } | null>(null);
+  const [selectedElectionId, setSelectedElectionId] = useState<string>(electionId || "");
 
   const { data: rawData, isLoading } = useQuery<{ success: boolean; data: { states: StateData[] } }>({
     queryKey: ['/api/analytics/map-data'],
   });
   const statesData = rawData?.data?.states;
+
+  const electionMapUrl = selectedElectionId
+    ? `/api/analytics/election-map-data?electionId=${selectedElectionId}`
+    : '/api/analytics/election-map-data';
+  const { data: electionMapRaw, isLoading: electionMapLoading } = useQuery<{ success: boolean; data: { states: ElectionMapState[]; elections: any[] } }>({
+    queryKey: [electionMapUrl],
+    enabled: selectedMode === 'elections',
+  });
+  const electionStatesData = electionMapRaw?.data?.states;
+  const availableElections = electionMapRaw?.data?.elections || [];
 
   const getModeValue = useCallback((s: StateData): number => {
     switch (selectedMode) {
@@ -73,14 +105,27 @@ export function NigeriaMap({
     return Math.max(1, ...statesData.map(getModeValue));
   }, [statesData, getModeValue]);
 
-  const getColorIntensity = useCallback((stateData: StateData | undefined): string => {
+  const getElectionColor = useCallback((svgName: string): string => {
+    const eData = findElectionStateData(electionStatesData, svgName);
+    if (!eData || eData.totalVotes === 0) return 'hsl(220, 13%, 88%)';
+    if (eData.leadingPartyColor) return eData.leadingPartyColor;
+    const maxVotes = Math.max(1, ...(electionStatesData || []).map(s => s.totalVotes));
+    const intensity = Math.min(eData.totalVotes / maxVotes, 1);
+    const lightness = 65 - (intensity * 30);
+    return `hsl(142, 65%, ${lightness}%)`;
+  }, [electionStatesData]);
+
+  const getColorIntensity = useCallback((stateData: StateData | undefined, svgName?: string): string => {
+    if (selectedMode === 'elections' && svgName) {
+      return getElectionColor(svgName);
+    }
     if (!stateData) return 'hsl(220, 13%, 88%)';
     const value = getModeValue(stateData);
     if (value === 0) return 'hsl(220, 13%, 88%)';
     const intensity = Math.min(value / maxValue, 1);
     const lightness = 65 - (intensity * 30);
     return `hsl(142, 65%, ${lightness}%)`;
-  }, [getModeValue, maxValue]);
+  }, [getModeValue, maxValue, selectedMode, getElectionColor]);
 
   const handleStateClick = useCallback((svgName: string) => {
     const stateData = findStateData(statesData, svgName);
@@ -121,6 +166,7 @@ export function NigeriaMap({
           { mode: 'polling' as MapMode, icon: Vote, label: 'Polling Units' },
           { mode: 'news' as MapMode, icon: Newspaper, label: 'News' },
           { mode: 'tasks' as MapMode, icon: ClipboardList, label: 'Tasks' },
+          { mode: 'elections' as MapMode, icon: Vote, label: 'Elections' },
           { mode: 'activity' as MapMode, icon: TrendingUp, label: 'Activity' },
         ]).map(({ mode: m, icon: Icon, label }) => (
           <Button
@@ -135,6 +181,23 @@ export function NigeriaMap({
           </Button>
         ))}
       </div>
+
+      {selectedMode === 'elections' && availableElections.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Election:</span>
+          <select
+            className="text-sm border rounded-md px-2 py-1 bg-background"
+            value={selectedElectionId}
+            onChange={(e) => setSelectedElectionId(e.target.value)}
+            data-testid="select-map-election"
+          >
+            <option value="">All Elections</option>
+            {availableElections.map((e: any) => (
+              <option key={e.id} value={e.id}>{e.title} ({e.status})</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <Card className="p-2 sm:p-4">
         <div className="relative">
@@ -160,7 +223,7 @@ export function NigeriaMap({
 
             {Object.entries(NIGERIA_STATE_PATHS).map(([svgName, pathData]) => {
               const stateData = findStateData(statesData, svgName);
-              const fillColor = getColorIntensity(stateData);
+              const fillColor = getColorIntensity(stateData, svgName);
               const isHovered = hoveredState === svgName;
               const isHighlighted = highlightStates.some(h => {
                 const aliases = STATE_NAME_ALIASES[svgName] || [svgName];
@@ -281,7 +344,39 @@ export function NigeriaMap({
                   <Badge variant="outline" className="text-xs">{tooltipInfo.data.code}</Badge>
                 )}
               </div>
-              {tooltipInfo.data ? (
+              {selectedMode === 'elections' ? (() => {
+                const eData = findElectionStateData(electionStatesData, tooltipInfo.name);
+                return eData ? (
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Total Votes</span>
+                      <div className="font-bold text-sm">{eData.totalVotes.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">PUs Reported</span>
+                      <div className="font-bold text-sm">{eData.pusReported} / {eData.totalPus}</div>
+                    </div>
+                    {eData.leadingParty && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Leading Party</span>
+                        <div className="font-bold text-sm" style={{ color: eData.leadingPartyColor || undefined }}>
+                          {eData.leadingParty} ({(eData.leadingPartyVotes || 0).toLocaleString()} votes)
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-muted-foreground">Elections</span>
+                      <div className="font-bold text-sm">{eData.totalElections}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Ongoing</span>
+                      <div className="font-bold text-sm">{eData.ongoingElections}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No election data</p>
+                );
+              })() : tooltipInfo.data ? (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-muted-foreground">Members</span>

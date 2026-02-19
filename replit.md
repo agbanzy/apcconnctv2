@@ -52,7 +52,8 @@ Preferred communication style: Simple, everyday language.
 - **Communication Frameworks**: Email, SMS, and Push Notifications with templating and scheduling.
 - **Automation & Scheduling**: `CronService` for scheduled jobs (reminders, renewals, cleanup) with Nigerian timezone support.
 - **Membership Dues System**: Recurring membership dues with payment integration, status tracking, and admin management.
-- **Interactive Map**: Displays real-time, state-level analytics for members, events, and campaigns.
+- **Interactive Map**: Displays real-time, state-level analytics for members, events, campaigns, polling units, news, tasks, and election results. Supports "Elections" mode with party-color heatmap showing leading party per state, election selector dropdown, and per-state vote totals.
+- **General Elections Management**: Full system supporting all 7 classes of Nigerian elections (Presidential, Governorship, Senatorial, House of Reps, State Assembly, LGA Chairman, Councillorship). Admin page at `/admin/general-elections` with single/bulk creation, scope-aware forms, cascading selectors, candidate management with party integration. 21 INEC-registered parties seeded. API endpoints for CRUD, results submission, live feed, and map visualization.
 - **Custom Point Purchases**: Flexible system allowing users to buy custom amounts of points with configurable exchange rates.
 - **Task Approval System**: Workflow for image-based micro-tasks requiring admin approval, with proof image uploads and status tracking.
 - **Multi-Language Translation**: Comprehensive translation infrastructure supporting English, Igbo (ig), Hausa (ha), and Yoruba (yo) via `useLanguage()` hook. Translation keys defined in `client/src/lib/translations.ts`, language selector in app header with localStorage persistence.
@@ -68,7 +69,7 @@ Preferred communication style: Simple, everyday language.
   - Dashboard: Time-based greetings, member stats, rank display, news/events previews, quick actions grid, Election Day Mode live banner.
   - News: Category filtering, like/share functionality, featured news highlighting.
   - Events: Full RSVP functionality, event details modal, cancel RSVP, online meeting support.
-  - Elections: Candidate selection, vote confirmation, results display with progress bars.
+  - Elections: Tab switcher between Party Primaries and General Elections. Candidate selection, vote confirmation, results display with progress bars. General elections list with position/year labels, detail modal with candidate/party info.
   - Profile: Edit profile modal, NIN verification, badges display, user stats.
   - Registration: Modal-based state/LGA/ward cascading picker with search.
   - Login: Password visibility toggle, forgot password option.

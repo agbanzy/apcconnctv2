@@ -5725,6 +5725,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/election-map-data", async (req: Request, res: Response) => {
+    try {
+      const { electionId } = req.query;
+      let electionFilter = "";
+      if (electionId) {
+        electionFilter = `AND pur.election_id = '${(electionId as string).replace(/'/g, "''")}'`;
+      }
+
+      const result = await db.execute(sql.raw(`
+        SELECT 
+          s.id AS "stateId",
+          s.name,
+          COALESCE(election_data.total_votes, 0)::int AS "totalVotes",
+          COALESCE(election_data.pus_reported, 0)::int AS "pusReported",
+          COALESCE(pu_counts.total_pus, 0)::int AS "totalPus",
+          election_data.leading_party AS "leadingParty",
+          election_data.leading_party_color AS "leadingPartyColor",
+          election_data.leading_party_votes::int AS "leadingPartyVotes",
+          COALESCE(ge_counts.total_elections, 0)::int AS "totalElections",
+          COALESCE(ge_counts.ongoing_elections, 0)::int AS "ongoingElections"
+        FROM states s
+        LEFT JOIN (
+          SELECT l.state_id, COUNT(DISTINCT pu.id)::int AS total_pus
+          FROM polling_units pu
+          JOIN wards w ON pu.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          GROUP BY l.state_id
+        ) pu_counts ON pu_counts.state_id = s.id
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(pur.votes)::int AS total_votes,
+            COUNT(DISTINCT pur.polling_unit_id)::int AS pus_reported,
+            (SELECT p.abbreviation FROM parties p
+             JOIN general_election_candidates gec ON gec.party_id = p.id
+             WHERE gec.id = (
+               SELECT pur2.candidate_id FROM polling_unit_results pur2
+               JOIN polling_units pu2 ON pur2.polling_unit_id = pu2.id
+               JOIN wards w2 ON pu2.ward_id = w2.id
+               JOIN lgas l2 ON w2.lga_id = l2.id
+               WHERE l2.state_id = s.id ${electionFilter ? electionFilter.replace('pur.', 'pur2.') : ''}
+               GROUP BY pur2.candidate_id ORDER BY SUM(pur2.votes) DESC LIMIT 1
+             )
+            ) AS leading_party,
+            (SELECT p.color FROM parties p
+             JOIN general_election_candidates gec ON gec.party_id = p.id
+             WHERE gec.id = (
+               SELECT pur2.candidate_id FROM polling_unit_results pur2
+               JOIN polling_units pu2 ON pur2.polling_unit_id = pu2.id
+               JOIN wards w2 ON pu2.ward_id = w2.id
+               JOIN lgas l2 ON w2.lga_id = l2.id
+               WHERE l2.state_id = s.id ${electionFilter ? electionFilter.replace('pur.', 'pur2.') : ''}
+               GROUP BY pur2.candidate_id ORDER BY SUM(pur2.votes) DESC LIMIT 1
+             )
+            ) AS leading_party_color,
+            (SELECT SUM(pur2.votes) FROM polling_unit_results pur2
+             JOIN polling_units pu2 ON pur2.polling_unit_id = pu2.id
+             JOIN wards w2 ON pu2.ward_id = w2.id
+             JOIN lgas l2 ON w2.lga_id = l2.id
+             WHERE l2.state_id = s.id ${electionFilter ? electionFilter.replace('pur.', 'pur2.') : ''}
+             GROUP BY pur2.candidate_id ORDER BY SUM(pur2.votes) DESC LIMIT 1
+            ) AS leading_party_votes
+          FROM polling_unit_results pur
+          JOIN polling_units pu ON pur.polling_unit_id = pu.id
+          JOIN wards w ON pu.ward_id = w.id
+          JOIN lgas l ON w.lga_id = l.id
+          WHERE l.state_id = s.id ${electionFilter}
+        ) election_data ON true
+        LEFT JOIN (
+          SELECT state_id,
+            COUNT(*)::int AS total_elections,
+            COUNT(CASE WHEN status = 'ongoing' THEN 1 END)::int AS ongoing_elections
+          FROM general_elections
+          GROUP BY state_id
+        ) ge_counts ON ge_counts.state_id = s.id
+        ORDER BY s.name
+      `));
+
+      const activeElections = await db.query.generalElections.findMany({
+        where: drizzleOr(
+          eq(schema.generalElections.status, "ongoing"),
+          eq(schema.generalElections.status, "upcoming")
+        ),
+        orderBy: desc(schema.generalElections.electionDate),
+        columns: { id: true, title: true, position: true, status: true, electionYear: true },
+      });
+
+      res.json({ success: true, data: { states: result.rows, elections: activeElections } });
+    } catch (error) {
+      console.error("Election map data error:", error);
+      res.status(500).json({ success: false, error: "Failed to fetch election map data" });
+    }
+  });
+
   app.get("/api/analytics/recent-activity", async (req: Request, res: Response) => {
     try {
       const recentMembers = await db.query.members.findMany({
@@ -10259,6 +10352,204 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: election });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to create election" });
+    }
+  });
+
+  app.post("/api/general-elections/bulk", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const bulkSchema = z.object({
+        position: z.enum(["presidential", "governorship", "senatorial", "house_of_reps", "state_assembly", "lga_chairman", "councillorship"]),
+        electionYear: z.number().int().min(2000).max(2100),
+        electionDate: z.string().min(1),
+        status: z.enum(["upcoming", "ongoing", "completed", "cancelled"]).default("upcoming"),
+        stateIds: z.array(z.string()).optional(),
+        lgaIds: z.array(z.string()).optional(),
+        wardIds: z.array(z.string()).optional(),
+        senatorialDistrictIds: z.array(z.string()).optional(),
+        constituency: z.string().optional(),
+      });
+      const parsed = bulkSchema.parse(req.body);
+      const { position, electionYear, electionDate, status } = parsed;
+      const created: any[] = [];
+      const errors: string[] = [];
+
+      const positionLabels: Record<string, string> = {
+        presidential: "Presidential Election",
+        governorship: "Governorship Election",
+        senatorial: "Senatorial Election",
+        house_of_reps: "House of Representatives Election",
+        state_assembly: "State House of Assembly Election",
+        lga_chairman: "LGA Chairman Election",
+        councillorship: "Councillorship Election",
+      };
+
+      if (position === "presidential") {
+        const [election] = await db.insert(schema.generalElections).values({
+          title: `${electionYear} ${positionLabels[position]}`,
+          electionYear,
+          electionDate: new Date(electionDate),
+          position,
+          status,
+        }).returning();
+        created.push(election);
+      } else if (position === "governorship") {
+        const stateIds = parsed.stateIds || [];
+        if (stateIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one state for governorship elections" });
+        }
+        for (const stateId of stateIds) {
+          try {
+            const state = await db.query.states.findFirst({ where: eq(schema.states.id, stateId) });
+            if (!state) { errors.push(`State ${stateId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${state.name} ${positionLabels[position]}`,
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`State ${stateId}: ${e.message}`); }
+        }
+      } else if (position === "senatorial") {
+        const sdIds = parsed.senatorialDistrictIds || [];
+        if (sdIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one senatorial district" });
+        }
+        for (const sdId of sdIds) {
+          try {
+            const sd = await db.query.senatorialDistricts.findFirst({
+              where: eq(schema.senatorialDistricts.id, sdId),
+              with: { state: true },
+            });
+            if (!sd) { errors.push(`District ${sdId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${sd.districtName} ${positionLabels[position]}`,
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId: sd.stateId,
+              senatorialDistrictId: sdId,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`District ${sdId}: ${e.message}`); }
+        }
+      } else if (position === "house_of_reps") {
+        const stateIds = parsed.stateIds || [];
+        const constituency = parsed.constituency;
+        if (stateIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one state for house of reps elections" });
+        }
+        for (const stateId of stateIds) {
+          try {
+            const state = await db.query.states.findFirst({ where: eq(schema.states.id, stateId) });
+            if (!state) { errors.push(`State ${stateId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${state.name} ${constituency || ""} ${positionLabels[position]}`.trim(),
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId,
+              constituency: constituency || null,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`State ${stateId}: ${e.message}`); }
+        }
+      } else if (position === "state_assembly") {
+        const stateIds = parsed.stateIds || [];
+        if (stateIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one state" });
+        }
+        for (const stateId of stateIds) {
+          try {
+            const state = await db.query.states.findFirst({ where: eq(schema.states.id, stateId) });
+            if (!state) { errors.push(`State ${stateId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${state.name} ${positionLabels[position]}`,
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId,
+              constituency: parsed.constituency || null,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`State ${stateId}: ${e.message}`); }
+        }
+      } else if (position === "lga_chairman") {
+        const lgaIds = parsed.lgaIds || [];
+        if (lgaIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one LGA" });
+        }
+        for (const lgaId of lgaIds) {
+          try {
+            const lga = await db.query.lgas.findFirst({
+              where: eq(schema.lgas.id, lgaId),
+              with: { state: true },
+            });
+            if (!lga) { errors.push(`LGA ${lgaId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${lga.name} ${positionLabels[position]}`,
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId: lga.stateId,
+              constituency: lga.name,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`LGA ${lgaId}: ${e.message}`); }
+        }
+      } else if (position === "councillorship") {
+        const wardIds = parsed.wardIds || [];
+        if (wardIds.length === 0) {
+          return res.status(400).json({ success: false, error: "Select at least one ward" });
+        }
+        for (const wardId of wardIds) {
+          try {
+            const ward = await db.query.wards.findFirst({
+              where: eq(schema.wards.id, wardId),
+              with: { lga: { with: { state: true } } },
+            });
+            if (!ward) { errors.push(`Ward ${wardId} not found`); continue; }
+            const [election] = await db.insert(schema.generalElections).values({
+              title: `${electionYear} ${ward.name} Ward ${positionLabels[position]}`,
+              electionYear,
+              electionDate: new Date(electionDate),
+              position,
+              stateId: (ward.lga as any)?.stateId || null,
+              constituency: `${ward.name} Ward, ${(ward.lga as any)?.name || ""}`,
+              status,
+            }).returning();
+            created.push(election);
+          } catch (e: any) { errors.push(`Ward ${wardId}: ${e.message}`); }
+        }
+      }
+
+      res.json({
+        success: true,
+        data: { created: created.length, errors: errors.length, elections: created, errorDetails: errors },
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Bulk creation failed" });
+    }
+  });
+
+  app.delete("/api/general-elections/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await db.delete(schema.pollingUnitResults).where(eq(schema.pollingUnitResults.electionId, req.params.id));
+      await db.delete(schema.resultSheets).where(eq(schema.resultSheets.electionId, req.params.id));
+      await db.delete(schema.generalElectionCandidates).where(eq(schema.generalElectionCandidates.electionId, req.params.id));
+      const [deleted] = await db.delete(schema.generalElections)
+        .where(eq(schema.generalElections.id, req.params.id))
+        .returning();
+      if (!deleted) return res.status(404).json({ success: false, error: "Election not found" });
+      res.json({ success: true, data: deleted });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to delete election" });
     }
   });
 

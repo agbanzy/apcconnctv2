@@ -57,6 +57,11 @@ const adminMenuItems = [
     icon: Vote,
   },
   {
+    title: "General Elections",
+    url: "/admin/general-elections",
+    icon: Vote,
+  },
+  {
     title: "Agent Management",
     url: "/admin/agent-management",
     icon: UserPlus,

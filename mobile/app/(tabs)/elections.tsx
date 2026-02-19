@@ -32,11 +32,35 @@ interface Election {
   votedCandidateId?: string;
 }
 
+interface GeneralElection {
+  id: string;
+  title: string;
+  position: string;
+  electionYear: number;
+  status: string;
+  electionDate?: string;
+  candidates?: Array<{
+    id: string;
+    name: string;
+    runningMate?: string;
+    party?: {
+      name: string;
+      abbreviation: string;
+      color: string;
+    };
+  }>;
+}
+
+type ElectionTab = 'primaries' | 'general';
+
 export default function ElectionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedElection, setSelectedElection] = useState<Election | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showVoteModal, setShowVoteModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<ElectionTab>('primaries');
+  const [selectedGenElection, setSelectedGenElection] = useState<GeneralElection | null>(null);
+  const [showGenElectionModal, setShowGenElectionModal] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: elections, isLoading, error, refetch } = useQuery({
@@ -75,11 +99,31 @@ export default function ElectionsScreen() {
     },
   });
 
+  const { data: generalElections, isLoading: genLoading, refetch: refetchGen } = useQuery({
+    queryKey: ['/api/general-elections'],
+    queryFn: async () => {
+      const response = await api.get('/api/general-elections');
+      if (!response.success) throw new Error(response.error || 'Failed to load');
+      return response.data as GeneralElection[];
+    },
+  });
+
+  const { data: genElectionDetails } = useQuery({
+    queryKey: ['/api/general-elections', selectedGenElection?.id],
+    queryFn: async () => {
+      if (!selectedGenElection?.id) return null;
+      const response = await api.get(`/api/general-elections/${selectedGenElection.id}`);
+      if (!response.success) throw new Error(response.error || 'Failed to load');
+      return response.data as GeneralElection;
+    },
+    enabled: !!selectedGenElection?.id,
+  });
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), refetchGen()]);
     setRefreshing(false);
-  }, [refetch]);
+  }, [refetch, refetchGen]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -168,6 +212,19 @@ export default function ElectionsScreen() {
     return <ErrorState message="Could not load elections" onRetry={() => refetch()} />;
   }
 
+  const getPositionLabel = (pos: string) => {
+    const labels: Record<string, string> = {
+      presidential: 'Presidential',
+      governorship: 'Governorship',
+      senatorial: 'Senatorial',
+      house_of_reps: 'House of Reps',
+      state_assembly: 'State Assembly',
+      lga_chairman: 'LGA Chairman',
+      councillorship: 'Councillorship',
+    };
+    return labels[pos] || pos;
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -178,13 +235,76 @@ export default function ElectionsScreen() {
         }
       >
         <View style={styles.header}>
-          <Text variant="h2">Party Elections</Text>
-          <Text variant="caption" style={styles.subtitle}>
-            {elections?.length || 0} elections
-          </Text>
+          <Text variant="h2">Elections</Text>
+          <View style={styles.tabRow}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'primaries' && styles.tabActive]}
+              onPress={() => setActiveTab('primaries')}
+            >
+              <Text variant="caption" style={[styles.tabText, activeTab === 'primaries' && styles.tabTextActive]}>
+                Party Primaries ({elections?.length || 0})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'general' && styles.tabActive]}
+              onPress={() => setActiveTab('general')}
+            >
+              <Text variant="caption" style={[styles.tabText, activeTab === 'general' && styles.tabTextActive]}>
+                General Elections ({generalElections?.length || 0})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {elections && elections.length > 0 ? (
+        {activeTab === 'general' ? (
+          genLoading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color="#00A86B" />
+            </View>
+          ) : generalElections && generalElections.length > 0 ? (
+            generalElections.map((ge) => (
+              <Card key={ge.id} style={styles.electionCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.titleSection}>
+                    <Text variant="h3" style={styles.electionTitle}>{ge.title}</Text>
+                    <Text variant="caption" style={styles.position}>
+                      {getPositionLabel(ge.position)} | {ge.electionYear}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(ge.status)}20` }]}>
+                    <Ionicons name={getStatusIcon(ge.status)} size={12} color={getStatusColor(ge.status)} />
+                    <Text variant="caption" style={[styles.statusText, { color: getStatusColor(ge.status) }]}>
+                      {getStatusText(ge.status)}
+                    </Text>
+                  </View>
+                </View>
+                {ge.electionDate && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                    <Text variant="caption" style={styles.infoText}>
+                      {new Date(ge.electionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
+                <Button
+                  title="View Details"
+                  variant="outline"
+                  onPress={() => {
+                    setSelectedGenElection(ge);
+                    setShowGenElectionModal(true);
+                  }}
+                  style={styles.viewButton}
+                />
+              </Card>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
+              <Text variant="h3" style={styles.emptyText}>No general elections</Text>
+              <Text variant="caption" style={styles.emptySubtext}>Check back later</Text>
+            </View>
+          )
+        ) : elections && elections.length > 0 ? (
           elections.map((election) => (
             <Card key={election.id} style={styles.electionCard}>
               <View style={styles.cardHeader}>
@@ -422,6 +542,69 @@ export default function ElectionsScreen() {
           </View>
         )}
       </Modal>
+
+      <Modal
+        visible={showGenElectionModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowGenElectionModal(false);
+          setSelectedGenElection(null);
+        }}
+      >
+        {selectedGenElection && (
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text variant="h3">Election Details</Text>
+              <TouchableOpacity onPress={() => {
+                setShowGenElectionModal(false);
+                setSelectedGenElection(null);
+              }}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalContent}>
+              <Text variant="h2" style={styles.modalTitle}>{selectedGenElection.title}</Text>
+              <Text variant="caption" style={styles.modalPosition}>
+                {getPositionLabel(selectedGenElection.position)} | {selectedGenElection.electionYear}
+              </Text>
+              <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(selectedGenElection.status)}20`, alignSelf: 'flex-start', marginTop: 8, marginBottom: 16 }]}>
+                <Ionicons name={getStatusIcon(selectedGenElection.status)} size={12} color={getStatusColor(selectedGenElection.status)} />
+                <Text variant="caption" style={[styles.statusText, { color: getStatusColor(selectedGenElection.status) }]}>
+                  {getStatusText(selectedGenElection.status)}
+                </Text>
+              </View>
+              {selectedGenElection.electionDate && (
+                <View style={[styles.infoRow, { marginBottom: 16 }]}>
+                  <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                  <Text variant="caption" style={styles.infoText}>
+                    {new Date(selectedGenElection.electionDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                </View>
+              )}
+              <Text variant="h3" style={{ marginBottom: 12 }}>Candidates</Text>
+              {(genElectionDetails?.candidates || selectedGenElection.candidates || []).length > 0 ? (
+                (genElectionDetails?.candidates || selectedGenElection.candidates || []).map((c) => (
+                  <View key={c.id} style={styles.genCandidateCard}>
+                    <View style={[styles.candidateAvatar, { backgroundColor: c.party?.color || '#00A86B' }]}>
+                      <Text variant="h3" style={styles.avatarText}>{c.party?.abbreviation || '?'}</Text>
+                    </View>
+                    <View style={styles.candidateInfo}>
+                      <Text variant="body" style={styles.candidateName}>{c.name}</Text>
+                      <Text variant="caption" style={styles.candidateManifesto}>{c.party?.name || 'Independent'}</Text>
+                      {c.runningMate && (
+                        <Text variant="caption" style={{ color: '#6B7280', fontSize: 11 }}>Running Mate: {c.runningMate}</Text>
+                      )}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text variant="caption" style={{ color: '#6B7280' }}>No candidates registered yet</Text>
+              )}
+            </ScrollView>
+          </View>
+        )}
+      </Modal>
     </View>
   );
 }
@@ -448,6 +631,38 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#6B7280',
     marginTop: 4,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: '#00A86B',
+  },
+  tabText: {
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  genCandidateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    marginBottom: 8,
+    gap: 12,
   },
   electionCard: {
     marginBottom: 16,
