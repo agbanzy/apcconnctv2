@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { pollingUnits, wards, lgas, states } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import * as fs from "fs";
 
 function parseCSVLine(line: string): string[] {
@@ -20,7 +20,14 @@ function normalize(str: string): string {
   return str.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-async function main() {
+export async function seedPollingUnits(options?: { clearExisting?: boolean }): Promise<{
+  totalRecords: number;
+  matched: number;
+  skipped: number;
+  newLgas: number;
+  newWards: number;
+  totalPollingUnits: number;
+}> {
   console.log("Loading existing administrative data...");
   const allStates = await db.select().from(states);
   const allLgas = await db.select().from(lgas);
@@ -109,8 +116,12 @@ async function main() {
     if ((i / WARD_BATCH) % 10 === 0) console.log(`  Wards: ${Math.min(i + WARD_BATCH, wardsToCreate.length)}/${wardsToCreate.length}`);
   }
 
-  console.log("Phase 2: Clearing existing polling units...");
-  await db.delete(pollingUnits);
+  if (options?.clearExisting) {
+    console.log("Phase 2: Clearing existing polling units...");
+    await db.delete(pollingUnits);
+  } else {
+    console.log("Phase 2: Skipping clear (additive mode)...");
+  }
 
   console.log("Phase 3: Inserting polling units...");
   let matched = 0;
@@ -151,7 +162,7 @@ async function main() {
     matched++;
 
     if (batch.length >= PU_BATCH) {
-      await db.insert(pollingUnits).values(batch);
+      await db.insert(pollingUnits).values(batch).onConflictDoNothing();
       batch = [];
       if (matched % 25000 === 0) {
         console.log(`  Progress: ${matched}/${lines.length} (${Math.round((matched / lines.length) * 100)}%)`);
@@ -160,8 +171,11 @@ async function main() {
   }
 
   if (batch.length > 0) {
-    await db.insert(pollingUnits).values(batch);
+    await db.insert(pollingUnits).values(batch).onConflictDoNothing();
   }
+
+  const count = await db.select({ count: sql<number>`count(*)` }).from(pollingUnits);
+  const totalPollingUnits = Number(count[0].count);
 
   console.log("\n=== SEEDING COMPLETE ===");
   console.log(`Total records: ${lines.length}`);
@@ -169,14 +183,22 @@ async function main() {
   console.log(`Skipped: ${skipped}`);
   console.log(`New LGAs created: ${lgasToCreate.length}`);
   console.log(`New wards created: ${wardsToCreate.length}`);
+  console.log(`Total polling units in DB: ${totalPollingUnits}`);
 
-  const count = await db.select({ count: sql<number>`count(*)` }).from(pollingUnits);
-  console.log(`Total polling units in DB: ${count[0].count}`);
-
-  process.exit(0);
+  return {
+    totalRecords: lines.length,
+    matched,
+    skipped,
+    newLgas: lgasToCreate.length,
+    newWards: wardsToCreate.length,
+    totalPollingUnits,
+  };
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1]?.includes("seed-polling-units");
+if (isDirectRun) {
+  seedPollingUnits({ clearExisting: true }).then(() => process.exit(0)).catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}

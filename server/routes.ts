@@ -27,6 +27,7 @@ import { quizAntiCheat, taskAntiCheat, voteAntiCheat, eventAntiCheat } from "./m
 import { antiCheatService } from "./security/anti-cheat";
 import { generateQuizToken, verifyQuizToken } from "./security/crypto-tokens";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
+import { seedPollingUnits } from "./seed-polling-units";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { storage } from "./storage";
 import { FilterDTO } from "@shared/admin-types";
@@ -3215,6 +3216,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         error: "Failed to seed administrative boundaries",
         details: error.message 
+      });
+    }
+  });
+
+  app.post("/api/admin/seed-polling-units", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      console.log("\n🗳️ Admin triggered polling units seeding");
+      const clearExisting = req.body.clearExisting === true;
+      const stats = await seedPollingUnits({ clearExisting });
+
+      if (req.user) {
+        await logAudit({
+          userId: req.user.id,
+          action: AuditActions.ADMIN_SEED_BOUNDARIES,
+          resourceType: "admin",
+          resourceId: "polling-units-seed",
+          details: stats,
+          status: "success",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Polling units seeded successfully",
+        data: stats,
+      });
+    } catch (error: any) {
+      console.error("Seed polling units error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to seed polling units",
+        details: error.message
       });
     }
   });
