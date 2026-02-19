@@ -26,7 +26,7 @@ const PARTIES = [
   { name: "Nigeria Democratic Congress", abbreviation: "NDC", color: "#CD853F", founded: 2026 },
 ];
 
-async function seedParties() {
+export async function seedParties(): Promise<{ created: number; skipped: number }> {
   console.log("Seeding 21 INEC-registered political parties...");
   let created = 0;
   let skipped = 0;
@@ -51,12 +51,16 @@ async function seedParties() {
     created++;
   }
 
-  console.log(`Done: ${created} created, ${skipped} already existed.`);
+  console.log(`Parties: ${created} created, ${skipped} already existed.`);
+  return { created, skipped };
 }
 
-seedParties()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("Seed error:", err);
-    process.exit(1);
-  });
+const isDirectRun = process.argv[1]?.includes("seed-parties");
+if (isDirectRun) {
+  seedParties()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("Seed error:", err);
+      process.exit(1);
+    });
+}

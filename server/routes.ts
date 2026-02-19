@@ -28,6 +28,8 @@ import { antiCheatService } from "./security/anti-cheat";
 import { generateQuizToken, verifyQuizToken } from "./security/crypto-tokens";
 import { seedAdminBoundaries } from "./seed-admin-boundaries";
 import { seedPollingUnits } from "./seed-polling-units";
+import { seedParties } from "./seed-parties";
+import { seedDemoElections } from "./seed-demo-elections";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { storage } from "./storage";
 import { FilterDTO } from "@shared/admin-types";
@@ -3248,6 +3250,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: "Failed to seed polling units",
         details: error.message
+      });
+    }
+  });
+
+  app.post("/api/admin/seed-all-reference-data", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      console.log("\n🌍 Admin triggered comprehensive reference data seeding");
+      const results: Record<string, any> = {};
+
+      console.log("\n--- Step 1: Seeding political parties ---");
+      results.parties = await seedParties();
+
+      console.log("\n--- Step 2: Seeding elections & candidates ---");
+      results.elections = await seedDemoElections();
+
+      console.log("\n--- Step 3: Seeding polling units (this may take a few minutes) ---");
+      results.pollingUnits = await seedPollingUnits({ clearExisting: false });
+
+      if (req.user) {
+        await logAudit({
+          userId: req.user.id,
+          action: AuditActions.ADMIN_SEED_BOUNDARIES,
+          resourceType: "admin",
+          resourceId: "all-reference-data-seed",
+          details: results,
+          status: "success",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "All reference data seeded successfully",
+        data: results,
+      });
+    } catch (error: any) {
+      console.error("Seed all reference data error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to seed reference data",
+        details: error.message,
       });
     }
   });

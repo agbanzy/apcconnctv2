@@ -1,12 +1,13 @@
 import { db } from "./db";
-import { generalElections, generalElectionCandidates, parties, states } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { generalElections, generalElectionCandidates, parties, states, lgas } from "@shared/schema";
+import { eq, sql, and } from "drizzle-orm";
 
-async function seedDemoElections() {
+export async function seedDemoElections(): Promise<{ electionsCreated: number; candidatesCreated: number }> {
   console.log("Seeding demo election data...");
 
   const allParties = await db.query.parties.findMany();
   const allStates = await db.query.states.findMany();
+  const allLgas = await db.query.lgas.findMany();
 
   const apc = allParties.find(p => p.abbreviation === "APC");
   const pdp = allParties.find(p => p.abbreviation === "PDP");
@@ -20,22 +21,21 @@ async function seedDemoElections() {
   const aac = allParties.find(p => p.abbreviation === "AAC");
 
   if (!apc || !pdp || !lp || !nnpp) {
-    console.error("Required parties not found");
-    return;
+    throw new Error("Required parties (APC, PDP, LP, NNPP) not found. Seed parties first.");
   }
 
-  const lagos = allStates.find(s => s.name === "Lagos");
-  const kano = allStates.find(s => s.name === "Kano");
-  const rivers = allStates.find(s => s.name === "Rivers");
-  const kaduna = allStates.find(s => s.name === "Kaduna");
-  const oyo = allStates.find(s => s.name === "Oyo");
-  const anambra = allStates.find(s => s.name === "Anambra");
-  const enugu = allStates.find(s => s.name === "Enugu");
-  const delta = allStates.find(s => s.name === "Delta");
-  const imo = allStates.find(s => s.name === "Imo");
-  const abia = allStates.find(s => s.name === "Abia");
-  const borno = allStates.find(s => s.name === "Borno");
-  const sokoto = allStates.find(s => s.name === "Sokoto");
+  const findState = (name: string) => allStates.find(s => s.name.toUpperCase().includes(name.toUpperCase()));
+  const lagos = findState("Lagos");
+  const kano = findState("Kano");
+  const rivers = findState("Rivers");
+  const kaduna = findState("Kaduna");
+  const oyo = findState("Oyo");
+  const anambra = findState("Anambra");
+
+  const fct = allStates.find(s => s.name.toUpperCase().includes("FCT") || s.name.toUpperCase().includes("FEDERAL CAPITAL"));
+
+  const fctLgas = fct ? allLgas.filter(l => l.stateId === fct.id) : [];
+  const findFctLga = (name: string) => fctLgas.find(l => l.name.toUpperCase().includes(name.toUpperCase()));
 
   const demoElections = [
     {
@@ -46,6 +46,7 @@ async function seedDemoElections() {
       position: "presidential" as const,
       status: "upcoming" as const,
       stateId: null,
+      lgaId: null,
       candidates: [
         { name: "Bola Ahmed Tinubu", partyId: apc.id, runningMate: "Kashim Shettima", votes: 8794726 },
         { name: "Atiku Abubakar", partyId: pdp.id, runningMate: "Ifeanyi Okowa", votes: 6984520 },
@@ -61,6 +62,7 @@ async function seedDemoElections() {
       position: "presidential" as const,
       status: "completed" as const,
       stateId: null,
+      lgaId: null,
       candidates: [
         { name: "Ahmed Bola Tinubu", partyId: apc.id, runningMate: "Kashim Shettima", votes: 9245810 },
         { name: "Atiku Abubakar", partyId: pdp.id, runningMate: "Peter Obi", votes: 7380331 },
@@ -120,30 +122,62 @@ async function seedDemoElections() {
     ]},
   ];
 
-  let createdCount = 0;
+  const fctLgaElections = [
+    { lga: findFctLga("AMAC") || findFctLga("MUNICIPAL"), title: "2026 AMAC Chairmanship", year: 2026, status: "ongoing" as const },
+    { lga: findFctLga("Bwari"), title: "2026 Bwari Area Council Chairmanship", year: 2026, status: "ongoing" as const },
+    { lga: findFctLga("Gwagwalada"), title: "2026 Gwagwalada Area Council Chairmanship", year: 2026, status: "ongoing" as const },
+    { lga: findFctLga("Kuje"), title: "2026 Kuje Area Council Chairmanship", year: 2026, status: "ongoing" as const },
+    { lga: findFctLga("Kwali"), title: "2026 Kwali Area Council Chairmanship", year: 2026, status: "ongoing" as const },
+    { lga: findFctLga("Abaji"), title: "2026 Abaji Area Council Chairmanship", year: 2026, status: "ongoing" as const },
+  ];
 
-  for (const el of demoElections) {
+  let electionsCreated = 0;
+  let candidatesCreated = 0;
+
+  const majorParties = [apc, pdp, lp, nnpp].filter(Boolean);
+  const lgaCandidateNames = [
+    "Mohammed Ibrahim", "Chibueze Okonkwo", "Adebayo Ogunleye", "Ibrahim Danladi",
+    "Aisha Yusuf", "Folashade Adeyemi", "Ngozi Eze", "Usman Bello",
+    "Obinna Nwosu", "Halima Bello", "Kehinde Adeyemo", "Fatima Sani",
+  ];
+
+  async function createElection(config: {
+    title: string;
+    description?: string;
+    electionYear: number;
+    electionDate: Date;
+    position: "presidential" | "governorship" | "senatorial" | "house_of_reps" | "state_assembly" | "lga_chairman" | "councillorship";
+    status: "upcoming" | "ongoing" | "completed" | "cancelled";
+    stateId?: string | null;
+    lgaId?: string | null;
+    constituency?: string;
+    candidates: { name: string; partyId: string; runningMate?: string | null; votes: number }[];
+  }) {
     const existing = await db.query.generalElections.findFirst({
-      where: eq(generalElections.title, el.title),
+      where: eq(generalElections.title, config.title),
     });
     if (existing) {
-      console.log(`  Skipping existing: ${el.title}`);
-      continue;
+      console.log(`  Skipping existing: ${config.title}`);
+      return;
     }
 
+    const totalVotes = config.candidates.reduce((sum, c) => sum + c.votes, 0);
     const [election] = await db.insert(generalElections).values({
-      title: el.title,
-      description: el.description,
-      electionYear: el.electionYear,
-      electionDate: el.electionDate,
-      position: el.position,
-      status: el.status,
-      totalVotesCast: el.candidates.reduce((sum, c) => sum + c.votes, 0),
-      totalRegisteredVoters: Math.floor(el.candidates.reduce((sum, c) => sum + c.votes, 0) * 1.4),
-      totalAccreditedVoters: Math.floor(el.candidates.reduce((sum, c) => sum + c.votes, 0) * 1.1),
+      title: config.title,
+      description: config.description || `${config.title}`,
+      electionYear: config.electionYear,
+      electionDate: config.electionDate,
+      position: config.position,
+      status: config.status,
+      stateId: config.stateId || null,
+      lgaId: config.lgaId || null,
+      constituency: config.constituency || null,
+      totalVotesCast: totalVotes,
+      totalRegisteredVoters: totalVotes > 0 ? Math.floor(totalVotes * 1.4) : 0,
+      totalAccreditedVoters: totalVotes > 0 ? Math.floor(totalVotes * 1.1) : 0,
     }).returning();
 
-    for (const cand of el.candidates) {
+    for (const cand of config.candidates) {
       await db.insert(generalElectionCandidates).values({
         electionId: election.id,
         partyId: cand.partyId,
@@ -151,59 +185,36 @@ async function seedDemoElections() {
         runningMate: cand.runningMate || null,
         totalVotes: cand.votes,
       });
+      candidatesCreated++;
     }
-    createdCount++;
-    console.log(`  Created: ${el.title} with ${el.candidates.length} candidates`);
+    electionsCreated++;
+    console.log(`  Created: ${config.title} with ${config.candidates.length} candidates`);
+  }
+
+  for (const el of demoElections) {
+    await createElection({
+      ...el,
+      position: el.position,
+      status: el.status,
+    });
   }
 
   for (const el of governorshipElections) {
     if (!el.state) continue;
-    const existing = await db.query.generalElections.findFirst({
-      where: eq(generalElections.title, el.title),
-    });
-    if (existing) {
-      console.log(`  Skipping existing: ${el.title}`);
-      continue;
-    }
-
-    const totalVotes = el.candidates.reduce((sum, c) => sum + c.votes, 0);
-    const [election] = await db.insert(generalElections).values({
+    await createElection({
       title: el.title,
       electionYear: el.year,
       electionDate: new Date(`${el.year}-03-11`),
       position: "governorship",
       status: el.status,
       stateId: el.state.id,
-      totalVotesCast: totalVotes,
-      totalRegisteredVoters: totalVotes > 0 ? Math.floor(totalVotes * 1.4) : 0,
-      totalAccreditedVoters: totalVotes > 0 ? Math.floor(totalVotes * 1.1) : 0,
-    }).returning();
-
-    for (const cand of el.candidates) {
-      await db.insert(generalElectionCandidates).values({
-        electionId: election.id,
-        partyId: cand.partyId,
-        name: cand.name,
-        runningMate: (cand as any).runningMate || null,
-        totalVotes: cand.votes,
-      });
-    }
-    createdCount++;
-    console.log(`  Created: ${el.title} with ${el.candidates.length} candidates`);
+      candidates: el.candidates.map(c => ({ ...c, runningMate: (c as any).runningMate || null })),
+    });
   }
 
   for (const el of senatorialElections) {
     if (!el.stateId) continue;
-    const existing = await db.query.generalElections.findFirst({
-      where: eq(generalElections.title, el.title),
-    });
-    if (existing) {
-      console.log(`  Skipping existing: ${el.title}`);
-      continue;
-    }
-
-    const totalVotes = el.candidates.reduce((sum, c) => sum + c.votes, 0);
-    const [election] = await db.insert(generalElections).values({
+    await createElection({
       title: el.title,
       electionYear: el.year,
       electionDate: new Date(`${el.year}-02-25`),
@@ -211,77 +222,51 @@ async function seedDemoElections() {
       status: el.status,
       stateId: el.stateId,
       constituency: el.constituency,
-      totalVotesCast: totalVotes,
-      totalRegisteredVoters: Math.floor(totalVotes * 1.35),
-      totalAccreditedVoters: Math.floor(totalVotes * 1.05),
-    }).returning();
-
-    for (const cand of el.candidates) {
-      await db.insert(generalElectionCandidates).values({
-        electionId: election.id,
-        partyId: cand.partyId,
-        name: cand.name,
-        totalVotes: cand.votes,
-      });
-    }
-    createdCount++;
-    console.log(`  Created: ${el.title} with ${el.candidates.length} candidates`);
+      candidates: el.candidates.map(c => ({ ...c, runningMate: null })),
+    });
   }
 
-  for (const existingEl of await db.query.generalElections.findMany({
-    where: eq(generalElections.position, "lga_chairman"),
-    with: { candidates: true },
-  })) {
-    if (existingEl.candidates && existingEl.candidates.length > 0) continue;
-    
-    const majorParties = [apc, pdp, lp, nnpp].filter(Boolean);
-    const candidateNames = [
-      ["Mohammed Ibrahim", "Usman Bello"],
-      ["Chibueze Okonkwo", "Ngozi Eze"],
-      ["Adebayo Ogunleye", "Folashade Adeyemi"],
-      ["Ibrahim Danladi", "Aisha Yusuf"],
-    ];
+  for (const el of fctLgaElections) {
+    if (!el.lga || !fct) continue;
+    const candidatesForLga = majorParties.map((party, i) => ({
+      name: lgaCandidateNames[i % lgaCandidateNames.length],
+      partyId: party!.id,
+      runningMate: null,
+      votes: 0,
+    }));
 
-    for (let i = 0; i < majorParties.length; i++) {
-      const party = majorParties[i]!;
-      const names = candidateNames[i] || candidateNames[0];
-      const votes = existingEl.status === "completed" ? Math.floor(Math.random() * 50000) + 5000 : 0;
-      await db.insert(generalElectionCandidates).values({
-        electionId: existingEl.id,
-        partyId: party.id,
-        name: names[0],
-        totalVotes: votes,
+    const minorParties = allParties.filter(p => !majorParties.find(mp => mp?.id === p.id)).slice(0, 8);
+    for (let i = 0; i < minorParties.length; i++) {
+      candidatesForLga.push({
+        name: lgaCandidateNames[(i + majorParties.length) % lgaCandidateNames.length],
+        partyId: minorParties[i].id,
+        runningMate: null,
+        votes: 0,
       });
     }
-    
-    const totalVotes = existingEl.status === "completed" 
-      ? (await db.query.generalElectionCandidates.findMany({ where: eq(generalElectionCandidates.electionId, existingEl.id) }))
-          .reduce((sum, c) => sum + (c.totalVotes || 0), 0)
-      : 0;
-    
-    if (totalVotes > 0) {
-      await db.update(generalElections)
-        .set({ 
-          totalVotesCast: totalVotes,
-          totalRegisteredVoters: Math.floor(totalVotes * 1.4),
-          totalAccreditedVoters: Math.floor(totalVotes * 1.1),
-        })
-        .where(eq(generalElections.id, existingEl.id));
-    }
-    
-    console.log(`  Added candidates to existing: ${existingEl.title}`);
+
+    await createElection({
+      title: el.title,
+      electionYear: el.year,
+      electionDate: new Date(`${el.year}-06-15`),
+      position: "lga_chairman",
+      status: el.status,
+      stateId: fct.id,
+      lgaId: el.lga.id,
+      candidates: candidatesForLga,
+    });
   }
 
-  console.log(`\nDone! Created ${createdCount} new elections.`);
-
-  const totalElections = await db.query.generalElections.findMany();
-  const totalCandidates = await db.query.generalElectionCandidates.findMany();
-  console.log(`Total elections: ${totalElections.length}, Total candidates: ${totalCandidates.length}`);
+  console.log(`\nElections seeding done! Created ${electionsCreated} elections, ${candidatesCreated} candidates.`);
+  return { electionsCreated, candidatesCreated };
 }
 
-seedDemoElections()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("Seed error:", err);
-    process.exit(1);
-  });
+const isDirectRun = process.argv[1]?.includes("seed-demo-elections");
+if (isDirectRun) {
+  seedDemoElections()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("Seed error:", err);
+      process.exit(1);
+    });
+}
