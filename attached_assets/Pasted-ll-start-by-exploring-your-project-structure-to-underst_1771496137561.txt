@@ -1,0 +1,29 @@
+ll start by exploring your project structure to understand what we're working with.Ran 2 commandsRan 2 commandsList workspace folder contentsScriptList all files in the projectScriptThis is a large project. Let me get more structured information about the project - the source code files, the server, client, mobile directories, and key config files.DoneLet me dig deeper into the actual source code structure.Ran 2 commands, read 2 filesRan 2 commands, read 2 filesList all source code files excluding node_modulesScriptList all mobile app filesScriptRead package.jsonRead PRODUCTION_STATUS.mdNow I have a good overview. Let me now deep-dive into the actual source code files to understand the architecture. I need to read the key files across multiple areas simultaneously.DoneNow let me deep-dive into the actual codebase structure across all layers.Ran 3 agents, updated todo list, read a fileRan 3 agents, updated todo list, read a fileUpdate todo listResultRead toolu_01B9GLvJZKUzQqmkHPueNuvU.txtAudit server-side code deeplyAudit client-side code deeplyAudit mobile app code deeplyAll three audits are complete. Now let me update the todo list and compile the comprehensive audit report.DoneAll three deep audits are complete. Let me now compile the final report.Updated todo list, read a fileUpdated todo list, read a fileUpdate todo listResultRead SKILL.mdNow let me create the comprehensive audit report as a Word document.DoneNow let me build the comprehensive audit report document.Ran 4 commands, created a file, updated todo listRan 4 commands, created a file, updated todo listCheck if docx is availableScriptInstall docx locallyScriptCreated generate-audit.mjsgenerate-audit.mjsGenerate the audit report DOCXScriptVerify file sizeScriptUpdate todo listResultDoneHere's the complete picture, Guru.
+
+APC Connect — Where We Stand
+Your platform is a substantial, feature-rich codebase covering 22+ modules across three layers: Express server (11,400+ line monolithic routes file), React web client (44 pages), and Expo mobile app (29 screens). The architecture is solid — Drizzle ORM, React Query, Passport.js + JWT dual auth — but there are issues to address before production.
+Overall Scores:
+
+Server/API: 6.5/10 — good foundations, critical security gaps
+Web Client: 7.0/10 — feature-complete, needs performance + accessibility work
+Mobile App: 6.7/10 — strong skeleton, incomplete payments/push/offline
+Mobile Responsiveness (web): 7.5/10 — good Tailwind patterns, tablet gaps
+
+8 Critical Issues (must fix before launch):
+
+Hardcoded session secret fallback in routes.ts
+Socket.IO CORS set to * (any origin)
+No input validation on PATCH endpoints (mass assignment risk)
+JWT secret falls back to random generation per restart
+Android keystore passwords committed to repo (credentials.json)
+API URL hardcoded to localhost in mobile app.json
+Digital ID token exposed in URL parameter
+No SSL certificate pinning on mobile
+
+Biggest wins for effort:
+
+Week 1: Fix the 8 critical security issues
+Week 2: Add error boundaries + code splitting to web, wire Paystack into mobile
+Week 3-4: Push notifications, offline support, split routes.ts into modules
+
+Mobile app gaps vs web: Payments not wired, push notifications not activated, no offline support, no dark mode, no biometric auth. Estimated 4-6 weeks to full parity.

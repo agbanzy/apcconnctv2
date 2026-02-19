@@ -1,0 +1,254 @@
+Let me pull the full details of every change in that commit, then revert it.Ran 3 commandsRan 3 commandsList all files with change typebashcd /Users/godwinagbane/Downloads/APCConnect && git diff --name-status HEAD~1..HEADOutputM	.gitignore
+A	APC_Connect_Full_Code_Audit_Feb2026.docx
+A	CHANGELOG_2026-02-18.md
+A	apclogo.png
+M	client/src/App.tsx
+M	client/src/components/admin-sidebar.tsx
+A	client/src/components/error-boundary.tsx
+A	client/src/pages/admin/agent-management.tsx
+M	client/src/pages/admin/elections.tsx
+M	client/src/pages/admin/incidents.tsx
+M	mobile/.gitignore
+M	mobile/app.json
+M	mobile/app/(tabs)/profile.tsx
+M	mobile/app/_layout.tsx
+M	mobile/app/digital-id.tsx
+M	mobile/app/donations.tsx
+M	mobile/app/dues.tsx
+M	mobile/app/election-day.tsx
+M	mobile/app/notification-settings.tsx
+A	mobile/components/OfflineBanner.tsx
+A	mobile/components/PaystackPayment.tsx
+M	mobile/eas.json
+M	mobile/lib/api.ts
+M	mobile/lib/push-notifications.ts
+M	mobile/lib/queryClient.ts
+M	mobile/package.json
+M	server/jwt-utils.ts
+M	server/routes.ts
+A	server/routes/admin.ts
+A	server/routes/auth.ts
+A	server/routes/elections.ts
+A	server/routes/events.ts
+A	server/routes/knowledge.ts
+A	server/routes/members.ts
+A	server/routes/news.ts
+M	server/storage.tsFull commit detailsbashgit log -1 --format="%H%n%ai%n%B" HEADOutput8ca463fc7fcf08fc572627865f47805ae084b67d
+2026-02-18 12:10:20 +0000
+feat: batch agent management, mobile incident upgrades & full data audit fixes
+
+- Add batch polling agent generation with State→LGA→Ward filtering (POST/GET/POST import/export)
+- Add admin agent management page with cascading dropdowns, stats, CSV import/export
+- Add party PATCH/DELETE and candidate PATCH/DELETE admin endpoints
+- Add mobile incident image upload (up to 5 images) with FormData multipart
+- Add GPS location tagging via expo-location for mobile incident reporting
+- Fix elections admin page mapping (reverted from generalElections to elections/party primaries table)
+- Fix incidents schema: remove non-existent title/type/resolution fields from POST/PATCH
+- Fix admin incidents interface to match actual DB schema (pollingUnitId, reporterId, coordinates, media)
+- Fix batch agent SQL missing ward_id in SELECT
+- Fix Paystack empty email in donations.tsx and dues.tsx
+- Fix profile mutations swallowing API errors (added response.success checks)
+- Fix storage.listIncidents() missing media relation for photo display
+- Add expo-location, expo-notifications, expo-device, netinfo mobile dependencies
+- Add .github_token to .gitignore for security
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>Preview server/routes.ts changesbashgit diff HEAD~1..HEAD -- server/routes.ts | head -200Outputdiff --git a/server/routes.ts b/server/routes.ts
+index 279b230..00fd617 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -35,6 +35,13 @@ import userTasksRouter from "./routes/user-tasks";
+ import socialSharesRouter from "./routes/social-shares";
+ import referralsRouter from "./routes/referrals";
+ import leaderboardsRouter from "./routes/leaderboards";
++import authRouter from "./routes/auth";
++import membersRouter from "./routes/members";
++import electionsRouter from "./routes/elections";
++import eventsRouter from "./routes/events";
++import knowledgeRouter from "./routes/knowledge";
++import newsRouter from "./routes/news";
++import adminRouter from "./routes/admin";
+ import { PointLedgerService } from "./services/point-ledger";
+ import * as memberAccountService from "./services/member-account";
+ 
+@@ -84,41 +91,34 @@ declare global {
+ 
+ export async function registerRoutes(app: Express): Promise<Server> {
+   const httpServer = createServer(app);
++  // Socket.IO CORS - restrict to allowed origins
++  const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
++    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
++    : ["http://localhost:5000", "http://localhost:3000"];
++
+   const io = new SocketIOServer(httpServer, {
+-    cors: { origin: "*" }
++    cors: {
++      origin: ALLOWED_ORIGINS,
++      credentials: true,
++    }
+   });
+ 
+   // ============================================================================
+   // SESSION SECRET VALIDATION
+   // ============================================================================
+   // In production, SESSION_SECRET must be set and cannot use the default value
+-  const SESSION_SECRET = process.env.SESSION_SECRET || "apc-connect-secret-key-2024";
+-  const isProduction = process.env.NODE_ENV === "production";
+-  const isDefaultSecret = SESSION_SECRET === "apc-connect-secret-key-2024";
+-
+-  if (isProduction) {
+-    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+-      console.error("\n" + "=".repeat(80));
+-      console.error("CRITICAL SECURITY ERROR: SESSION_SECRET Not Configured");
+-      console.error("=".repeat(80));
+-      console.error("Production environment detected but SESSION_SECRET is not set or using default value.");
+-      console.error("This is a critical security vulnerability that could compromise user sessions.");
+-      console.error("");
+-      console.error("To fix this:");
+-      console.error("1. Generate a strong random secret:");
+-      console.error("   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+-      console.error("2. Set the SESSION_SECRET environment variable to this value");
+-      console.error("3. Restart the application");
+-      console.error("=".repeat(80) + "\n");
+-      throw new Error("SESSION_SECRET must be set in production environment");
+-    }
+-  } else {
+-    // Development mode warning
+-    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+-      console.warn("\n⚠️  WARNING: Using default SESSION_SECRET in development mode");
+-      console.warn("   For production, set a secure SESSION_SECRET environment variable\n");
+-    }
++  // ============================================================================
++  // SESSION SECRET - REQUIRED in all environments
++  // ============================================================================
++  if (!process.env.SESSION_SECRET) {
++    console.error("\n" + "=".repeat(80));
++    console.error("CRITICAL: SESSION_SECRET environment variable is not set.");
++    console.error("=".repeat(80));
++    console.error("Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
++    console.error("Then set SESSION_SECRET in your .env file or environment.\n");
++    throw new Error("SESSION_SECRET environment variable is required. Cannot start without it.");
+   }
++  const SESSION_SECRET = process.env.SESSION_SECRET;
+   // ============================================================================
+ 
+   app.use(
+@@ -1648,8 +1648,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
+     }
+   });
+ 
++  const updateMemberSchema = z.object({
++    firstName: z.string().optional(),
++    lastName: z.string().optional(),
++    phone: z.string().optional(),
++    wardId: z.string().optional(),
++    status: z.string().optional(),
++    role: z.string().optional(),
++    nin: z.string().optional()
++  });
++
+   app.patch("/api/members/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+     try {
++      const validatedData = updateMemberSchema.parse(req.body);
++
+       const member = await db.query.members.findFirst({
+         where: eq(schema.members.id, req.params.id)
+       });
+@@ -1663,12 +1675,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
+       }
+ 
+       const [updated] = await db.update(schema.members)
+-        .set(req.body)
++        .set(validatedData)
+         .where(eq(schema.members.id, req.params.id))
+         .returning();
+ 
+       res.json({ success: true, data: updated });
+-    } catch (error) {
++    } catch (error: any) {
++      if (error instanceof z.ZodError) {
++        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
++      }
+       res.status(500).json({ success: false, error: "Failed to update member" });
+     }
+   });
+@@ -3280,10 +3295,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
+     }
+   });
+ 
++  const updateEventSchema = z.object({
++    title: z.string().optional(),
++    description: z.string().optional(),
++    date: z.string().optional(),
++    location: z.string().optional(),
++    type: z.string().optional(),
++    capacity: z.number().optional(),
++    imageUrl: z.string().optional(),
++    status: z.string().optional()
++  });
++
+   app.patch("/api/events/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+     try {
++      const validatedData = updateEventSchema.parse(req.body);
++
+       const [event] = await db.update(schema.events)
+-        .set(req.body)
++        .set(validatedData)
+         .where(eq(schema.events.id, req.params.id))
+         .returning();
+ 
+@@ -3298,7 +3326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
+       // Uncomment the following code when ready to send push notifications:
+       /*
+       import { pushService, NotificationTemplates } from "./push-service";
+-      
++
+       // Get all members who RSVPed to this event
+       const rsvps = await db.query.eventRsvps.findMany({
+         where: and(
+@@ -3307,17 +3335,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
+         ),
+         with: { member: true }
+       });
+-      
++
+       // Send notification to each RSVP'd member about the event update
+       const userIds = rsvps.map(rsvp => rsvp.member.userId);
+-      
++
+       const eventDate = new Date(event.date).toLocaleDateString('en-NG', {
+         month: 'long',
+         day: 'numeric',
+         hour: '2-digit',
+         minute: '2-digit'
+       });
+-      
++
+       await pushService.sendToMultiple(
+         userIds,
+         NotificationTemplates.eventReminder(
+@@ -3326,12 +3354,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
+           event.id
+         )
+       );
+-      
++
+       console.log(`Push notification sent to ${userIds.length} members about event update`);
+       */
+ 
+       res.json({ success: true, data: event });
+-    } catch (error) {
++    } catch (error: any) {
++      if (error instanceof z.ZodError) {
++        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
++      }
+       res.status(500).json({ success: false, error: "Failed to update event" });
+     }
+   });
+@@ -3773,15 +3804,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
+     }
+   });
+ 
++  const updateElectionSchema = z.object({
++    title: z.string().optional(),
++    description: z.string().optional(),
++    startDate: z.string().optional(),

@@ -10593,6 +10593,461 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
+  // ============================================================================
+  // BATCH AGENT GENERATION
+  // ============================================================================
+  app.post("/api/admin/polling-agents/batch", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { stateId, lgaId, wardId, batchPassword } = req.body;
+
+      if (!stateId) {
+        return res.status(400).json({ success: false, error: "State is required" });
+      }
+
+      const pin = batchPassword || Math.floor(1000 + Math.random() * 9000).toString();
+
+      let puQuery = `
+        SELECT pu.id, pu.name, pu.unit_code, pu.ward_id,
+               w.name as ward_name, w.id as w_id,
+               l.name as lga_name, l.id as lga_id,
+               s.name as state_name
+        FROM polling_units pu
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE s.id = $1
+      `;
+      const params: any[] = [stateId];
+
+      if (wardId) {
+        puQuery += ` AND pu.ward_id = $2`;
+        params.push(wardId);
+      } else if (lgaId) {
+        puQuery += ` AND l.id = $2`;
+        params.push(lgaId);
+      }
+
+      puQuery += ` ORDER BY l.name, w.name, pu.name`;
+
+      const result = await pool.query(puQuery, params);
+      const units = result.rows;
+
+      if (units.length === 0) {
+        return res.status(404).json({ success: false, error: "No polling units found for the selected area" });
+      }
+
+      const existingAgentPUs = await db.query.pollingAgents.findMany({
+        where: inArray(schema.pollingAgents.pollingUnitId, units.map((u: any) => u.id)),
+        columns: { pollingUnitId: true }
+      });
+      const existingPUIds = new Set(existingAgentPUs.map(a => a.pollingUnitId));
+
+      const unitsToAssign = units.filter((u: any) => !existingPUIds.has(u.id));
+
+      if (unitsToAssign.length === 0) {
+        return res.json({
+          success: true,
+          data: { created: 0, skipped: units.length, total: units.length, agents: [] },
+          message: "All polling units already have agents assigned"
+        });
+      }
+
+      const createdAgents: any[] = [];
+      let skipped = 0;
+
+      for (const unit of unitsToAssign) {
+        try {
+          const agentCode = `AGT-${unit.unit_code}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+          const email = `agent.${unit.unit_code.toLowerCase().replace(/[^a-z0-9]/g, '')}@apc-agents.ng`;
+
+          const [newUser] = await db.insert(schema.users).values({
+            email,
+            password: await bcrypt.hash(pin, 10),
+            firstName: "Agent",
+            lastName: unit.unit_code,
+            role: "member",
+          }).returning();
+
+          const memberCode = `MBR-${unit.unit_code}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+          const [newMember] = await db.insert(schema.members).values({
+            userId: newUser.id,
+            memberId: memberCode,
+            wardId: unit.ward_id,
+            status: "active",
+            joinDate: new Date(),
+          }).returning();
+
+          const [agent] = await db.insert(schema.pollingAgents).values({
+            memberId: newMember.id,
+            pollingUnitId: unit.id,
+            agentCode,
+            agentPin: pin,
+            assignedBy: req.user!.id,
+            status: "assigned",
+          }).returning();
+
+          createdAgents.push({
+            ...agent,
+            agentCode,
+            agentPin: pin,
+            pollingUnitName: unit.name,
+            unitCode: unit.unit_code,
+            wardName: unit.ward_name,
+            lgaName: unit.lga_name,
+            stateName: unit.state_name,
+          });
+        } catch (err: any) {
+          skipped++;
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          created: createdAgents.length,
+          skipped: skipped + existingPUIds.size,
+          total: units.length,
+          agents: createdAgents,
+        }
+      });
+    } catch (error: any) {
+      console.error("Batch agent generation error:", error);
+      res.status(500).json({ success: false, error: "Failed to generate batch agents" });
+    }
+  });
+
+  // ============================================================================
+  // AGENT EXPORT (CSV)
+  // ============================================================================
+  app.get("/api/admin/polling-agents/export", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { stateId, lgaId, wardId, status } = req.query;
+
+      let query = `
+        SELECT pa.agent_code, pa.agent_pin, pa.status,
+               pu.name as polling_unit_name, pu.unit_code,
+               w.name as ward_name,
+               l.name as lga_name,
+               s.name as state_name,
+               u.first_name, u.last_name, u.email,
+               pa.assigned_at, pa.checked_in_at
+        FROM polling_agents pa
+        JOIN members m ON pa.member_id = m.id
+        JOIN users u ON m.user_id = u.id
+        JOIN polling_units pu ON pa.polling_unit_id = pu.id
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+      let paramIdx = 1;
+
+      if (stateId) { query += ` AND s.id = $${paramIdx++}`; params.push(stateId); }
+      if (lgaId) { query += ` AND l.id = $${paramIdx++}`; params.push(lgaId); }
+      if (wardId) { query += ` AND w.id = $${paramIdx++}`; params.push(wardId); }
+      if (status) { query += ` AND pa.status = $${paramIdx++}`; params.push(status); }
+
+      query += ` ORDER BY s.name, l.name, w.name, pu.name`;
+
+      const result = await pool.query(query, params);
+
+      const csvHeader = "Agent Code,Agent PIN,Status,Polling Unit,Unit Code,Ward,LGA,State,Agent Name,Email,Assigned At,Checked In At\n";
+      const csvRows = result.rows.map((r: any) =>
+        `"${r.agent_code}","${r.agent_pin}","${r.status}","${r.polling_unit_name}","${r.unit_code}","${r.ward_name}","${r.lga_name}","${r.state_name}","${r.first_name} ${r.last_name}","${r.email}","${r.assigned_at || ''}","${r.checked_in_at || ''}"`
+      ).join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="polling_agents_${Date.now()}.csv"`);
+      res.send(csvHeader + csvRows);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to export agents" });
+    }
+  });
+
+  // ============================================================================
+  // AGENT IMPORT (CSV)
+  // ============================================================================
+  app.post("/api/admin/polling-agents/import", requireAuth, requireRole("admin"), upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: "CSV file is required" });
+      }
+
+      const csvContent = file.buffer.toString("utf-8");
+      const lines = csvContent.split("\n").filter(l => l.trim());
+
+      if (lines.length < 2) {
+        return res.status(400).json({ success: false, error: "CSV file must have a header and at least one data row" });
+      }
+
+      const header = lines[0].toLowerCase();
+      if (!header.includes("unit_code") && !header.includes("unit code") && !header.includes("polling_unit_id")) {
+        return res.status(400).json({ success: false, error: "CSV must contain 'unit_code' or 'polling_unit_id' column" });
+      }
+
+      const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, "").toLowerCase().replace(/\s+/g, "_"));
+      const unitCodeIdx = headers.indexOf("unit_code");
+      const pinIdx = headers.indexOf("agent_pin");
+
+      if (unitCodeIdx === -1) {
+        return res.status(400).json({ success: false, error: "CSV must contain 'unit_code' column" });
+      }
+
+      let created = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
+        const unitCode = values[unitCodeIdx];
+        const customPin = pinIdx !== -1 ? values[pinIdx] : null;
+
+        if (!unitCode) { skipped++; continue; }
+
+        try {
+          const unit = await db.query.pollingUnits.findFirst({
+            where: eq(schema.pollingUnits.unitCode, unitCode)
+          });
+          if (!unit) { errors.push(`Row ${i + 1}: Unit code '${unitCode}' not found`); skipped++; continue; }
+
+          const existingAgent = await db.query.pollingAgents.findFirst({
+            where: eq(schema.pollingAgents.pollingUnitId, unit.id)
+          });
+          if (existingAgent) { skipped++; continue; }
+
+          const agentCode = `AGT-${unitCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+          const pin = customPin || Math.floor(1000 + Math.random() * 9000).toString();
+          const email = `agent.${unitCode.toLowerCase().replace(/[^a-z0-9]/g, '')}@apc-agents.ng`;
+
+          const [newUser] = await db.insert(schema.users).values({
+            email,
+            password: await bcrypt.hash(pin, 10),
+            firstName: "Agent",
+            lastName: unitCode,
+            role: "member",
+          }).returning();
+
+          const memberCode = `MBR-${unitCode}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+          const [newMember] = await db.insert(schema.members).values({
+            userId: newUser.id,
+            memberId: memberCode,
+            wardId: unit.wardId,
+            status: "active",
+            joinDate: new Date(),
+          }).returning();
+
+          await db.insert(schema.pollingAgents).values({
+            memberId: newMember.id,
+            pollingUnitId: unit.id,
+            agentCode,
+            agentPin: pin,
+            assignedBy: req.user!.id,
+            status: "assigned",
+          });
+
+          created++;
+        } catch (err: any) {
+          errors.push(`Row ${i + 1}: ${err.message}`);
+          skipped++;
+        }
+      }
+
+      res.json({
+        success: true,
+        data: { created, skipped, total: lines.length - 1, errors: errors.slice(0, 20) }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to import agents" });
+    }
+  });
+
+  // ============================================================================
+  // AGENT STATS
+  // ============================================================================
+  app.get("/api/admin/polling-agents/stats", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { stateId, lgaId, wardId } = req.query;
+
+      let baseFilter = "";
+      const params: any[] = [];
+      let paramIdx = 1;
+
+      if (stateId) { baseFilter += ` AND s.id = $${paramIdx++}`; params.push(stateId); }
+      if (lgaId) { baseFilter += ` AND l.id = $${paramIdx++}`; params.push(lgaId); }
+      if (wardId) { baseFilter += ` AND w.id = $${paramIdx++}`; params.push(wardId); }
+
+      const statsQuery = `
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE pa.status = 'assigned') as assigned,
+          COUNT(*) FILTER (WHERE pa.status = 'active') as active,
+          COUNT(*) FILTER (WHERE pa.status = 'checked_in') as checked_in,
+          COUNT(*) FILTER (WHERE pa.status = 'completed') as completed,
+          COUNT(*) FILTER (WHERE pa.status = 'revoked') as revoked
+        FROM polling_agents pa
+        JOIN polling_units pu ON pa.polling_unit_id = pu.id
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE 1=1 ${baseFilter}
+      `;
+
+      const puCountQuery = `
+        SELECT COUNT(*) as total_pus
+        FROM polling_units pu
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE 1=1 ${baseFilter}
+      `;
+
+      const [statsResult, puResult] = await Promise.all([
+        pool.query(statsQuery, params),
+        pool.query(puCountQuery, params),
+      ]);
+
+      const stats = statsResult.rows[0];
+      const totalPUs = parseInt(puResult.rows[0].total_pus);
+
+      res.json({
+        success: true,
+        data: {
+          totalAgents: parseInt(stats.total),
+          assigned: parseInt(stats.assigned),
+          active: parseInt(stats.active),
+          checkedIn: parseInt(stats.checked_in),
+          completed: parseInt(stats.completed),
+          revoked: parseInt(stats.revoked),
+          totalPollingUnits: totalPUs,
+          coverage: totalPUs > 0 ? Math.round((parseInt(stats.total) / totalPUs) * 100) : 0,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch agent stats" });
+    }
+  });
+
+  // ============================================================================
+  // PARTY PATCH/DELETE
+  // ============================================================================
+  app.patch("/api/parties/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const updateSchema = z.object({
+        name: z.string().optional(),
+        abbreviation: z.string().optional(),
+        logoUrl: z.string().optional(),
+        color: z.string().optional(),
+        chairman: z.string().optional(),
+        founded: z.number().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validatedData = updateSchema.parse(req.body);
+
+      const [party] = await db.update(schema.parties)
+        .set(validatedData)
+        .where(eq(schema.parties.id, req.params.id))
+        .returning();
+
+      if (!party) {
+        return res.status(404).json({ success: false, error: "Party not found" });
+      }
+
+      res.json({ success: true, data: party });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
+      }
+      res.status(500).json({ success: false, error: "Failed to update party" });
+    }
+  });
+
+  app.delete("/api/parties/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const candidates = await db.query.generalElectionCandidates.findMany({
+        where: eq(schema.generalElectionCandidates.partyId, req.params.id),
+        limit: 1,
+      });
+      if (candidates.length > 0) {
+        return res.status(409).json({ success: false, error: "Cannot delete party with existing candidates. Remove candidates first." });
+      }
+
+      const [deleted] = await db.delete(schema.parties)
+        .where(eq(schema.parties.id, req.params.id))
+        .returning();
+
+      if (!deleted) {
+        return res.status(404).json({ success: false, error: "Party not found" });
+      }
+
+      res.json({ success: true, data: deleted });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete party" });
+    }
+  });
+
+  // ============================================================================
+  // CANDIDATE PATCH/DELETE
+  // ============================================================================
+  app.patch("/api/general-elections/:electionId/candidates/:candidateId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const updateSchema = z.object({
+        name: z.string().optional(),
+        runningMate: z.string().optional(),
+        imageUrl: z.string().optional(),
+        partyId: z.string().optional(),
+      });
+      const validatedData = updateSchema.parse(req.body);
+
+      const [candidate] = await db.update(schema.generalElectionCandidates)
+        .set(validatedData)
+        .where(and(
+          eq(schema.generalElectionCandidates.id, req.params.candidateId),
+          eq(schema.generalElectionCandidates.electionId, req.params.electionId)
+        ))
+        .returning();
+
+      if (!candidate) {
+        return res.status(404).json({ success: false, error: "Candidate not found" });
+      }
+
+      res.json({ success: true, data: candidate });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
+      }
+      res.status(500).json({ success: false, error: "Failed to update candidate" });
+    }
+  });
+
+  app.delete("/api/general-elections/:electionId/candidates/:candidateId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const results = await db.query.pollingUnitResults.findMany({
+        where: eq(schema.pollingUnitResults.candidateId, req.params.candidateId),
+        limit: 1,
+      });
+      if (results.length > 0) {
+        return res.status(409).json({ success: false, error: "Cannot delete candidate with existing vote results" });
+      }
+
+      const [deleted] = await db.delete(schema.generalElectionCandidates)
+        .where(and(
+          eq(schema.generalElectionCandidates.id, req.params.candidateId),
+          eq(schema.generalElectionCandidates.electionId, req.params.electionId)
+        ))
+        .returning();
+
+      if (!deleted) {
+        return res.status(404).json({ success: false, error: "Candidate not found" });
+      }
+
+      res.json({ success: true, data: deleted });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to delete candidate" });
+    }
+  });
+
   app.post("/api/agent/login", apiLimiter, async (req: Request, res: Response) => {
     try {
       const { agentCode, agentPin } = req.body;
@@ -11376,7 +11831,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.post("/api/agent/report-incident", apiLimiter, async (req: Request, res: Response) => {
+  app.post("/api/agent/report-incident", apiLimiter, upload.array("images", 5), async (req: Request, res: Response) => {
     try {
       const { agentCode, agentPin, severity, description, location, latitude, longitude } = req.body;
 
@@ -11405,9 +11860,26 @@ Be friendly, informative, and politically neutral when discussing governance. En
         status: "reported",
       }).returning();
 
-      io.emit("incident:new", incident);
+      const mediaRecords: any[] = [];
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const base64Data = file.buffer.toString("base64");
+          const mediaUrl = `data:${file.mimetype};base64,${base64Data}`;
+          const mediaType = file.mimetype.startsWith("video/") ? "video" : "image";
 
-      res.json({ success: true, data: incident });
+          const [media] = await db.insert(schema.incidentMedia).values({
+            incidentId: incident.id,
+            mediaUrl,
+            mediaType,
+          }).returning();
+          mediaRecords.push(media);
+        }
+      }
+
+      io.emit("incident:new", { ...incident, media: mediaRecords });
+
+      res.json({ success: true, data: { ...incident, media: mediaRecords } });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to report incident" });
     }
@@ -11434,6 +11906,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       const incidents = await db.query.incidents.findMany({
         where: eq(schema.incidents.reporterId, agent.memberId),
+        with: { media: true },
         orderBy: desc(schema.incidents.createdAt),
       });
 

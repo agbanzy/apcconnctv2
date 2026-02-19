@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,62 +12,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ResourceToolbar } from "@/components/admin/ResourceToolbar";
 import { ResourceTable, Column } from "@/components/admin/ResourceTable";
-import { ResourceDrawer } from "@/components/admin/ResourceDrawer";
 import { useResourceController } from "@/hooks/use-resource-controller";
 import { useResourceList } from "@/hooks/use-resource-list";
 import { useResourceMutations } from "@/hooks/use-resource-mutations";
 import { ExportButton } from "@/components/admin/ExportButton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  MapPin,
+  Image,
+  Eye,
+  CheckCircle,
+  Clock,
+  Search,
+} from "lucide-react";
 import { format } from "date-fns";
+import { apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+
+interface IncidentMedia {
+  id: string;
+  mediaUrl: string;
+  mediaType: string;
+  uploadedAt: string;
+}
 
 interface Incident {
   id: string;
-  title: string;
-  description: string;
+  pollingUnitId: string | null;
+  reporterId: string | null;
   severity: "low" | "medium" | "high";
-  location: string;
-  stateId: string | null;
-  status: "pending" | "investigating" | "resolved" | "closed";
-  assignedTo: string | null;
-  resolution: string | null;
-  reporter?: { firstName: string; lastName: string };
+  description: string;
+  location: string | null;
+  coordinates: { lat: number; lng: number } | null;
+  status: string;
   createdAt: string;
+  reporter?: {
+    id: string;
+    user: { firstName: string; lastName: string; email: string };
+  } | null;
+  pollingUnit?: { name: string; unitCode: string } | null;
+  media?: IncidentMedia[];
 }
-
-const incidentSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().min(20, "Description must be at least 20 characters"),
-  severity: z.enum(["low", "medium", "high"]),
-  location: z.string().min(3, "Location is required"),
-  stateId: z.string().optional(),
-  status: z.enum(["pending", "investigating", "resolved", "closed"]),
-  assignedTo: z.string().optional(),
-  resolution: z.string().optional(),
-});
-
-type IncidentFormData = z.infer<typeof incidentSchema>;
 
 export default function AdminIncidents() {
   const { toast } = useToast();
@@ -79,35 +70,37 @@ export default function AdminIncidents() {
     sortOrder: "desc",
   });
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
-  const [deleteIncidentId, setDeleteIncidentId] = useState<string | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const { data, isLoading } = useResourceList<Incident>("/api/admin/incidents", filters);
-  const { create, update, remove } = useResourceMutations<Incident>("/api/admin/incidents");
+  const { update } = useResourceMutations<Incident>("/api/admin/incidents");
 
-  const form = useForm<IncidentFormData>({
-    resolver: zodResolver(incidentSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      severity: "medium",
-      location: "",
-      stateId: "",
-      status: "pending",
-      assignedTo: "",
-      resolution: "",
-    },
-  });
+  const handleStatusChange = async (incidentId: string, newStatus: string) => {
+    try {
+      await update.mutateAsync({ id: incidentId, data: { status: newStatus } });
+      toast({ title: "Success", description: `Incident status updated to ${newStatus}` });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update incident status",
+        variant: "destructive",
+      });
+    }
+  };
 
   const columns: Column<Incident>[] = [
     {
-      key: "title",
-      header: "Title",
+      key: "description",
+      header: "Description",
       render: (incident) => (
-        <div className="max-w-md" data-testid={`text-title-${incident.id}`}>
-          <p className="font-medium">{incident.title}</p>
-          <p className="text-xs text-muted-foreground mt-1">{incident.location}</p>
+        <div className="max-w-md" data-testid={`text-description-${incident.id}`}>
+          <p className="font-medium line-clamp-2">{incident.description}</p>
+          {incident.pollingUnit && (
+            <p className="text-xs text-muted-foreground mt-1">
+              PU: {incident.pollingUnit.name} ({incident.pollingUnit.unitCode})
+            </p>
+          )}
         </div>
       ),
     },
@@ -135,10 +128,41 @@ export default function AdminIncidents() {
       header: "Reporter",
       render: (incident) => (
         <span className="text-sm" data-testid={`text-reporter-${incident.id}`}>
-          {incident.reporter
-            ? `${incident.reporter.firstName} ${incident.reporter.lastName}`
-            : "Anonymous"}
+          {incident.reporter?.user
+            ? `${incident.reporter.user.firstName} ${incident.reporter.user.lastName}`
+            : "Unknown"}
         </span>
+      ),
+    },
+    {
+      key: "location",
+      header: "Location",
+      render: (incident) => (
+        <div className="text-sm" data-testid={`text-location-${incident.id}`}>
+          {incident.location || "N/A"}
+          {incident.coordinates && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" />
+              {incident.coordinates.lat.toFixed(4)}, {incident.coordinates.lng.toFixed(4)}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "media",
+      header: "Media",
+      render: (incident) => (
+        <div className="flex items-center gap-1" data-testid={`text-media-${incident.id}`}>
+          {incident.media && incident.media.length > 0 ? (
+            <Badge variant="outline">
+              <Image className="h-3 w-3 mr-1" />
+              {incident.media.length}
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">None</span>
+          )}
+        </div>
       ),
     },
     {
@@ -146,18 +170,19 @@ export default function AdminIncidents() {
       header: "Status",
       sortable: true,
       render: (incident) => (
-        <Badge
-          variant={
-            incident.status === "resolved"
-              ? "default"
-              : incident.status === "investigating"
-              ? "outline"
-              : "destructive"
-          }
-          data-testid={`badge-status-${incident.id}`}
+        <Select
+          value={incident.status}
+          onValueChange={(value) => handleStatusChange(incident.id, value)}
         >
-          {incident.status}
-        </Badge>
+          <SelectTrigger className="w-[140px]" data-testid={`select-status-${incident.id}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="reported">Reported</SelectItem>
+            <SelectItem value="investigating">Investigating</SelectItem>
+            <SelectItem value="resolved">Resolved</SelectItem>
+          </SelectContent>
+        </Select>
       ),
     },
     {
@@ -174,89 +199,20 @@ export default function AdminIncidents() {
       key: "actions",
       header: "Actions",
       render: (incident) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setEditingIncident(incident);
-              form.reset({
-                title: incident.title,
-                description: incident.description,
-                severity: incident.severity,
-                location: incident.location,
-                stateId: incident.stateId || "",
-                status: incident.status,
-                assignedTo: incident.assignedTo || "",
-                resolution: incident.resolution || "",
-              });
-              setDrawerOpen(true);
-            }}
-            data-testid={`button-edit-${incident.id}`}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setDeleteIncidentId(incident.id)}
-            data-testid={`button-delete-${incident.id}`}
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            setSelectedIncident(incident);
+            setDetailOpen(true);
+          }}
+          data-testid={`button-view-${incident.id}`}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
       ),
     },
   ];
-
-  const onSubmit = async (data: IncidentFormData) => {
-    try {
-      const incidentData = {
-        title: data.title,
-        description: data.description,
-        severity: data.severity,
-        location: data.location,
-        stateId: data.stateId || null,
-        status: data.status,
-        assignedTo: data.assignedTo || null,
-        resolution: data.resolution || null,
-      };
-
-      if (editingIncident) {
-        await update.mutateAsync({ id: editingIncident.id, data: incidentData });
-        toast({ title: "Success", description: "Incident updated successfully" });
-      } else {
-        await create.mutateAsync(incidentData);
-        toast({ title: "Success", description: "Incident created successfully" });
-      }
-
-      setDrawerOpen(false);
-      setEditingIncident(null);
-      form.reset();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save incident",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteIncidentId) return;
-
-    try {
-      await remove.mutateAsync(deleteIncidentId);
-      toast({ title: "Success", description: "Incident deleted successfully" });
-      setDeleteIncidentId(null);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete incident",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleSort = (column: string) => {
     const newSortOrder =
@@ -273,26 +229,15 @@ export default function AdminIncidents() {
         ]}
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="font-display text-3xl font-bold" data-testid="text-page-title">
             Incident Management
           </h1>
           <p className="text-muted-foreground mt-1">
-            Track and manage reported incidents
+            Monitor and manage reported incidents from polling unit agents
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingIncident(null);
-            form.reset();
-            setDrawerOpen(true);
-          }}
-          data-testid="button-create-incident"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create Incident
-        </Button>
       </div>
 
       <Card className="p-6">
@@ -300,7 +245,7 @@ export default function AdminIncidents() {
           searchValue={filters.search || ""}
           onSearchChange={(value) => updateFilter("search", value)}
           filterSlot={
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Select
                 value={filters.severity || "all"}
                 onValueChange={(value) =>
@@ -329,10 +274,9 @@ export default function AdminIncidents() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="reported">Reported</SelectItem>
                   <SelectItem value="investigating">Investigating</SelectItem>
                   <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -363,226 +307,145 @@ export default function AdminIncidents() {
         </div>
       </Card>
 
-      <ResourceDrawer
-        open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setEditingIncident(null);
-          form.reset();
-        }}
-        title={editingIncident ? "Edit Incident" : "Create Incident"}
-        description={editingIncident ? "Update incident details" : "Add a new incident"}
-      >
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Incident title"
-                      {...field}
-                      data-testid="input-title"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Incident Details
+            </DialogTitle>
+          </DialogHeader>
+          {selectedIncident && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Severity</p>
+                  <Badge
+                    variant={
+                      selectedIncident.severity === "high"
+                        ? "destructive"
+                        : selectedIncident.severity === "medium"
+                        ? "outline"
+                        : "default"
+                    }
+                    data-testid="badge-detail-severity"
+                  >
+                    {selectedIncident.severity}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant="outline" data-testid="badge-detail-status">
+                    {selectedIncident.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Reporter</p>
+                  <p className="text-sm" data-testid="text-detail-reporter">
+                    {selectedIncident.reporter?.user
+                      ? `${selectedIncident.reporter.user.firstName} ${selectedIncident.reporter.user.lastName}`
+                      : "Unknown"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Reported At</p>
+                  <p className="text-sm" data-testid="text-detail-date">
+                    {format(new Date(selectedIncident.createdAt), "PPpp")}
+                  </p>
+                </div>
+              </div>
+
+              {selectedIncident.pollingUnit && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Polling Unit</p>
+                  <p className="text-sm" data-testid="text-detail-polling-unit">
+                    {selectedIncident.pollingUnit.name} ({selectedIncident.pollingUnit.unitCode})
+                  </p>
+                </div>
               )}
-            />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Detailed description..."
-                      rows={6}
-                      {...field}
-                      data-testid="input-description"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              {selectedIncident.location && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Location</p>
+                  <p className="text-sm flex items-center gap-1" data-testid="text-detail-location">
+                    <MapPin className="h-4 w-4" />
+                    {selectedIncident.location}
+                    {selectedIncident.coordinates && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({selectedIncident.coordinates.lat.toFixed(4)}, {selectedIncident.coordinates.lng.toFixed(4)})
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
-            />
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="severity"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Severity</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-severity">
-                          <SelectValue placeholder="Select severity" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div>
+                <p className="text-sm text-muted-foreground">Description</p>
+                <p className="text-sm whitespace-pre-wrap" data-testid="text-detail-description">
+                  {selectedIncident.description}
+                </p>
+              </div>
 
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-status">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="investigating">Investigating</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {selectedIncident.media && selectedIncident.media.length > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Attached Media ({selectedIncident.media.length})
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {selectedIncident.media.map((m) => (
+                      <div
+                        key={m.id}
+                        className="rounded-md overflow-hidden border"
+                        data-testid={`media-item-${m.id}`}
+                      >
+                        {m.mediaType === "image" ? (
+                          <img
+                            src={m.mediaUrl}
+                            alt="Incident evidence"
+                            className="w-full h-32 object-cover"
+                          />
+                        ) : (
+                          <video
+                            src={m.mediaUrl}
+                            controls
+                            className="w-full h-32 object-cover"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleStatusChange(selectedIncident.id, "investigating");
+                    setDetailOpen(false);
+                  }}
+                  disabled={selectedIncident.status === "investigating"}
+                  data-testid="button-mark-investigating"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Investigating
+                </Button>
+                <Button
+                  onClick={() => {
+                    handleStatusChange(selectedIncident.id, "resolved");
+                    setDetailOpen(false);
+                  }}
+                  disabled={selectedIncident.status === "resolved"}
+                  data-testid="button-mark-resolved"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Resolve
+                </Button>
+              </div>
             </div>
-
-            <FormField
-              control={form.control}
-              name="location"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Location</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Incident location"
-                      {...field}
-                      data-testid="input-location"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="stateId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>State (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="State ID"
-                      {...field}
-                      data-testid="input-state-id"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="assignedTo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assigned To (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="User ID or email"
-                      {...field}
-                      data-testid="input-assigned-to"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="resolution"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Resolution (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Resolution details..."
-                      rows={3}
-                      {...field}
-                      data-testid="input-resolution"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex gap-3 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setDrawerOpen(false);
-                  setEditingIncident(null);
-                  form.reset();
-                }}
-                data-testid="button-cancel"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={create.isPending || update.isPending}
-                data-testid="button-save"
-              >
-                {create.isPending || update.isPending
-                  ? "Saving..."
-                  : editingIncident
-                  ? "Update Incident"
-                  : "Create Incident"}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </ResourceDrawer>
-
-      <AlertDialog open={!!deleteIncidentId} onOpenChange={() => setDeleteIncidentId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Incident</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this incident? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              data-testid="button-confirm-delete"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

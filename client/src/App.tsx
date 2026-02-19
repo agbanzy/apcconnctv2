@@ -67,6 +67,7 @@ import AdminDues from "@/pages/admin/dues";
 import AdminRewardsSettings from "@/pages/admin/rewards-settings";
 import AdminAuditLogs from "@/pages/admin/audit-logs";
 import AdminQuizzes from "@/pages/admin/quizzes";
+import AdminAgentManagement from "@/pages/admin/agent-management";
 import Rewards from "@/pages/rewards";
 import NotificationSettings from "@/pages/notification-settings";
 import IdCardVerify from "@/pages/id-card-verify";
@@ -174,6 +175,7 @@ function AppContent() {
                 <Route path="/admin/quizzes" component={() => <AdminRoute component={AdminQuizzes} />} />
                 <Route path="/admin/audit-logs" component={() => <AdminRoute component={AdminAuditLogs} />} />
                 <Route path="/admin/rewards-settings" component={() => <AdminRoute component={AdminRewardsSettings} />} />
+                <Route path="/admin/agent-management" component={() => <AdminRoute component={AdminAgentManagement} />} />
                 <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
                 <Route path="/admin" component={() => <Redirect to="/admin/dashboard" />} />
                 <Route component={NotFound} />

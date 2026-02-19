@@ -558,7 +558,8 @@ class DbStorage implements IStorage {
               name: true,
               unitCode: true,
             }
-          }
+          },
+          media: true,
         }
       }),
       this.db.select({ count: sql<number>`count(*)` })
