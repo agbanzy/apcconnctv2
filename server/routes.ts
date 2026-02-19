@@ -12437,8 +12437,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  // Overall analytics dashboard summary
-  app.get("/api/analytics/dashboard", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+  // Overall election analytics dashboard summary
+  app.get("/api/analytics/election-dashboard", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
       // Active elections
       const activeElections = await db.execute(sql`

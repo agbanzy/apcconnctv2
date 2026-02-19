@@ -405,7 +405,7 @@ export default function ElectionAnalytics() {
   const [liveEvents, setLiveEvents] = useState<Array<{ type: string; time: Date; data?: any }>>([]);
 
   const { data: dashboardData, isLoading: dashLoading } = useQuery<any>({
-    queryKey: ["/api/analytics/dashboard"],
+    queryKey: ["/api/analytics/election-dashboard"],
   });
 
   const { data: electionsData } = useQuery<any>({
@@ -464,7 +464,7 @@ export default function ElectionAnalytics() {
         data,
       }, ...prev].slice(0, 20));
 
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/election-dashboard"] });
       if (selectedElection && selectedElection !== "__all__") {
         queryClient.invalidateQueries({ queryKey: ["/api/analytics/elections", selectedElection] });
         queryClient.invalidateQueries({ queryKey: ["/api/analytics/elections", selectedElection, "by-state"] });
@@ -478,7 +478,7 @@ export default function ElectionAnalytics() {
         data,
       }, ...prev].slice(0, 20));
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/agent-activity"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/election-dashboard"] });
     };
 
     const handleSheetUpload = (data: any) => {
@@ -488,7 +488,7 @@ export default function ElectionAnalytics() {
         data,
       }, ...prev].slice(0, 20));
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/result-sheets"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/election-dashboard"] });
     };
 
     socket.on("general-election:result-updated", handleResultUpdate);
@@ -504,7 +504,10 @@ export default function ElectionAnalytics() {
   }, [selectedElection]);
 
   const refreshAll = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/analytics/election-dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/analytics/elections"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/analytics/agent-activity"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/analytics/result-sheets"] });
     queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
   };
 

@@ -93,3 +93,14 @@ Preferred communication style: Simple, everyday language.
 - **Geolocation**: Mapbox (planned) for event navigation and ward assignment.
 - **Blockchain**: For election vote audit trails (planned).
 - **Google Fonts**: Inter, Plus Jakarta Sans, JetBrains Mono (via CDN).
+
+## Important API Routing Notes
+- The member analytics dashboard endpoint is at `/api/analytics/dashboard` (line ~5311 in routes.ts)
+- The **election** analytics dashboard endpoint is at `/api/analytics/election-dashboard` (to avoid route conflict with the member one)
+- Election analytics endpoints: `/api/analytics/election-dashboard`, `/api/analytics/elections/:id`, `/api/analytics/elections/:id/by-state`, `/api/analytics/agent-activity`, `/api/analytics/result-sheets`
+- The by-state endpoint returns enriched data with per-state candidate breakdowns and leading party info for the interactive map
+- Socket.IO events for live updates: `general-election:result-updated`, `agent-activity:updated`, `result-sheet:uploaded`
+
+## Mobile App Build Guide
+- Comprehensive build and deploy instructions in `mobile/BUILD_AND_DEPLOY.md`
+- Covers local development, EAS cloud builds, app store submission, OTA updates, agent functions, and troubleshooting
