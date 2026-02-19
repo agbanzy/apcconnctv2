@@ -90,10 +90,13 @@ export default function AdminMembers() {
     },
   });
 
+  const [roleDialogMember, setRoleDialogMember] = useState<any>(null);
+  const [selectedRole, setSelectedRole] = useState<string>("member");
+
   const handleMemberAction = (action: string, member: any) => {
     if (action === "change-role") {
-      const newRole = member.user?.role === "admin" ? "member" : "admin";
-      changeRoleMutation.mutate({ userId: member.user?.id, role: newRole });
+      setRoleDialogMember(member);
+      setSelectedRole(member.user?.role || "member");
     } else if (action === "view-details" || action === "view-history" || action === "view-notes") {
       dialogs.openDialog("view-details", member);
     } else {
@@ -313,6 +316,56 @@ export default function AdminMembers() {
         activeDialog={dialogs.activeDialog}
         onClose={dialogs.closeDialog}
       />
+
+      <Dialog open={!!roleDialogMember} onOpenChange={(open) => !open && setRoleDialogMember(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Member Role</DialogTitle>
+            <DialogDescription>
+              Update the role for {roleDialogMember?.user?.firstName} {roleDialogMember?.user?.lastName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Current Role</label>
+              <Badge variant="outline">{roleDialogMember?.user?.role || "member"}</Badge>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">New Role</label>
+              <Select value={selectedRole} onValueChange={setSelectedRole}>
+                <SelectTrigger data-testid="select-new-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="coordinator">Coordinator</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {selectedRole === "admin" && "Full access to all admin features and settings"}
+                {selectedRole === "coordinator" && "Can manage agents, elections, and events in assigned areas"}
+                {selectedRole === "member" && "Standard member access to the platform"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleDialogMember(null)} data-testid="button-cancel-role">Cancel</Button>
+            <Button
+              onClick={() => {
+                if (roleDialogMember?.user?.id) {
+                  changeRoleMutation.mutate({ userId: roleDialogMember.user.id, role: selectedRole });
+                  setRoleDialogMember(null);
+                }
+              }}
+              disabled={selectedRole === roleDialogMember?.user?.role || changeRoleMutation.isPending}
+              data-testid="button-confirm-role"
+            >
+              {changeRoleMutation.isPending ? "Updating..." : "Update Role"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -35,6 +35,7 @@ import {
   Hash,
   Eye,
   EyeOff,
+  Search,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -76,6 +77,7 @@ export default function AdminAgentManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [showPins, setShowPins] = useState<Set<string>>(new Set());
 
   const { data: statesResponse } = useQuery<any>({
@@ -129,7 +131,22 @@ export default function AdminAgentManagement() {
     },
   });
 
-  const agents = agentsRaw || [];
+  const allAgents = agentsRaw || [];
+  const agents = allAgents.filter((agent: any) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const agentCode = (agent.agentCode || "").toLowerCase();
+      const firstName = (agent.member?.user?.firstName || agent.user?.firstName || "").toLowerCase();
+      const lastName = (agent.member?.user?.lastName || agent.user?.lastName || "").toLowerCase();
+      const puName = (agent.pollingUnit?.name || "").toLowerCase();
+      const puCode = (agent.pollingUnit?.unitCode || "").toLowerCase();
+      if (!agentCode.includes(q) && !firstName.includes(q) && !lastName.includes(q) && !puName.includes(q) && !puCode.includes(q)) {
+        return false;
+      }
+    }
+    if (filterStatus && agent.status !== filterStatus) return false;
+    return true;
+  });
 
   const batchMutation = useMutation({
     mutationFn: async (payload: { stateId: string; lgaId?: string; wardId?: string; batchPassword?: string }) => {
@@ -414,22 +431,34 @@ export default function AdminAgentManagement() {
       <Card className="p-6">
         <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
           <h2 className="text-lg font-semibold">Agent List</h2>
-          <Select
-            value={filterStatus || "all"}
-            onValueChange={(val) => setFilterStatus(val === "all" ? "" : val)}
-          >
-            <SelectTrigger className="w-[160px]" data-testid="select-filter-status">
-              <SelectValue placeholder="Filter status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="assigned">Assigned</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="checked_in">Checked In</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="revoked">Revoked</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, code, or unit..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-[250px]"
+                data-testid="input-search-agents"
+              />
+            </div>
+            <Select
+              value={filterStatus || "all"}
+              onValueChange={(val) => setFilterStatus(val === "all" ? "" : val)}
+            >
+              <SelectTrigger className="w-[160px]" data-testid="select-filter-status">
+                <SelectValue placeholder="Filter status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="checked_in">Checked In</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="revoked">Revoked</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {agentsLoading ? (

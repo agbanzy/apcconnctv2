@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { Shield } from "lucide-react";
 import logoUrl from "@assets/logo_1760719840683.png";
 
 export default function Login() {
@@ -87,6 +88,14 @@ export default function Login() {
             <span className="text-muted-foreground">Don't have an account? </span>
             <Link href="/register" className="text-primary hover:underline" data-testid="link-register">
               Register here
+            </Link>
+          </div>
+          <div className="mt-3 pt-3 border-t">
+            <Link href="/agent-login" data-testid="link-agent-login">
+              <Button variant="outline" className="w-full gap-2">
+                <Shield className="w-4 h-4" />
+                Polling Agent Login
+              </Button>
             </Link>
           </div>
         </CardContent>

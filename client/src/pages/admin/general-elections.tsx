@@ -128,8 +128,8 @@ export default function AdminGeneralElections() {
   });
   const elections = electionsRaw?.data || [];
 
-  const { data: statesRaw } = useQuery<any[]>({ queryKey: ["/api/states"] });
-  const states = statesRaw || [];
+  const { data: statesRaw } = useQuery<any>({ queryKey: ["/api/states"] });
+  const states = Array.isArray(statesRaw) ? statesRaw : (statesRaw?.data || []);
 
   const { data: partiesRaw } = useQuery<{ success: boolean; data: any[] }>({
     queryKey: ["/api/parties"],
