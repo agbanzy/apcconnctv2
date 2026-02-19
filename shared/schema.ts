@@ -761,6 +761,25 @@ export const resultSheets = pgTable("result_sheets", {
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
+// Agent Activity Logs (tracks agent logins, result submissions, uploads)
+export const agentActivityLogs = pgTable("agent_activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => pollingAgents.id),
+  memberId: varchar("member_id").notNull().references(() => members.id),
+  pollingUnitId: varchar("polling_unit_id").notNull().references(() => pollingUnits.id),
+  electionId: varchar("election_id").references(() => generalElections.id),
+  action: text("action").notNull(), // login, check_in, submit_results, upload_result_sheet, submit_results_batch
+  metadata: jsonb("metadata").$type<{
+    resultsCount?: number;
+    electionsSubmitted?: number;
+    fileName?: string;
+    fileSize?: number;
+    deviceInfo?: any;
+    ip?: string;
+  }>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // App Settings (key-value store for global config)
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
@@ -1503,6 +1522,25 @@ export const resultSheetsRelations = relations(resultSheets, ({ one }) => ({
   }),
 }));
 
+export const agentActivityLogsRelations = relations(agentActivityLogs, ({ one }) => ({
+  agent: one(pollingAgents, {
+    fields: [agentActivityLogs.agentId],
+    references: [pollingAgents.id],
+  }),
+  member: one(members, {
+    fields: [agentActivityLogs.memberId],
+    references: [members.id],
+  }),
+  pollingUnit: one(pollingUnits, {
+    fields: [agentActivityLogs.pollingUnitId],
+    references: [pollingUnits.id],
+  }),
+  election: one(generalElections, {
+    fields: [agentActivityLogs.electionId],
+    references: [generalElections.id],
+  }),
+}));
+
 export const postEngagementRelations = relations(postEngagement, ({ one }) => ({
   post: one(newsPosts, {
     fields: [postEngagement.postId],
@@ -1787,6 +1825,7 @@ export const insertGeneralElectionCandidateSchema = createInsertSchema(generalEl
 export const insertPollingUnitResultSchema = createInsertSchema(pollingUnitResults).omit({ id: true, reportedAt: true, updatedAt: true });
 export const insertPollingAgentSchema = createInsertSchema(pollingAgents).omit({ id: true, assignedAt: true });
 export const insertResultSheetSchema = createInsertSchema(resultSheets).omit({ id: true, uploadedAt: true });
+export const insertAgentActivityLogSchema = createInsertSchema(agentActivityLogs).omit({ id: true, createdAt: true });
 
 // Types
 export type InsertState = z.infer<typeof insertStateSchema>;
@@ -1913,3 +1952,5 @@ export type InsertPollingAgent = z.infer<typeof insertPollingAgentSchema>;
 export type PollingAgent = typeof pollingAgents.$inferSelect;
 export type InsertResultSheet = z.infer<typeof insertResultSheetSchema>;
 export type ResultSheet = typeof resultSheets.$inferSelect;
+export type InsertAgentActivityLog = z.infer<typeof insertAgentActivityLogSchema>;
+export type AgentActivityLog = typeof agentActivityLogs.$inferSelect;

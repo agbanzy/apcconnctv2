@@ -34,6 +34,7 @@ import {
   Copy,
   Trash2,
   Loader2,
+  BarChart3,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -490,13 +491,23 @@ export default function SituationRoom() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-bold mb-2" data-testid="text-page-title">
-          Situation Room
-        </h1>
-        <p className="text-muted-foreground">
-          Real-time election monitoring and incident reporting
-        </p>
+      <div className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-bold mb-2" data-testid="text-page-title">
+            Situation Room
+          </h1>
+          <p className="text-muted-foreground">
+            Real-time election monitoring and incident reporting
+          </p>
+        </div>
+        {isAdmin && (
+          <a href="/admin/election-analytics">
+            <Button variant="outline" data-testid="button-election-analytics">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Election Analytics
+            </Button>
+          </a>
+        )}
       </div>
 
       {isAdmin && (

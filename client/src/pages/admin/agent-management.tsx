@@ -78,9 +78,10 @@ export default function AdminAgentManagement() {
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [showPins, setShowPins] = useState<Set<string>>(new Set());
 
-  const { data: states } = useQuery<any[]>({
+  const { data: statesResponse } = useQuery<any>({
     queryKey: ["/api/states"],
   });
+  const states = statesResponse?.data || statesResponse || [];
 
   const { data: lgas } = useQuery<any[]>({
     queryKey: ["/api/lgas", selectedState],
@@ -232,7 +233,8 @@ export default function AdminAgentManagement() {
     });
   };
 
-  const stateName = states?.find((s: any) => s.id === selectedState)?.name || "";
+  const statesList = Array.isArray(states) ? states : [];
+  const stateName = statesList.find((s: any) => s.id === selectedState)?.name || "";
 
   return (
     <div className="space-y-6">
@@ -304,7 +306,7 @@ export default function AdminAgentManagement() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__clear__">All States</SelectItem>
-              {states?.map((s: any) => (
+              {statesList.map((s: any) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.name}
                 </SelectItem>
@@ -560,7 +562,7 @@ export default function AdminAgentManagement() {
                   <SelectValue placeholder="Select state" />
                 </SelectTrigger>
                 <SelectContent>
-                  {states?.map((s: any) => (
+                  {statesList.map((s: any) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>

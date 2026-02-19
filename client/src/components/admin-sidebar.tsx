@@ -19,6 +19,7 @@ import {
   FileSearch,
   HelpCircle,
   UserPlus,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,6 +61,11 @@ const adminMenuItems = [
     title: "General Elections",
     url: "/admin/general-elections",
     icon: Vote,
+  },
+  {
+    title: "Election Analytics",
+    url: "/admin/election-analytics",
+    icon: BarChart3,
   },
   {
     title: "Agent Management",

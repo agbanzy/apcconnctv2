@@ -11373,6 +11373,21 @@ Be friendly, informative, and politically neutral when discussing governance. En
           .where(eq(schema.pollingAgents.id, agent.id));
       }
 
+      const loginAction = agent.status === "assigned" ? "check_in" : "login";
+      await db.insert(schema.agentActivityLogs).values({
+        agentId: agent.id,
+        memberId: agent.memberId,
+        pollingUnitId: agent.pollingUnitId,
+        electionId: agent.electionId || null,
+        action: loginAction,
+        metadata: {
+          deviceInfo: { userAgent: req.headers["user-agent"] || "", ip: req.ip || "" },
+          ip: req.ip || "",
+        },
+      }).catch((err) => console.error("Agent activity log error:", err.message));
+
+      io.emit("agent-activity:updated", { agentId: agent.id, action: loginAction });
+
       const ward = await db.query.wards.findFirst({
         where: eq(schema.wards.id, agent.pollingUnit.wardId)
       });
@@ -11560,7 +11575,20 @@ Be friendly, informative, and politically neutral when discussing governance. En
         .set({ status: "active" })
         .where(eq(schema.pollingAgents.id, agent.id));
 
+      await db.insert(schema.agentActivityLogs).values({
+        agentId: agent.id,
+        memberId: agent.memberId,
+        pollingUnitId,
+        electionId,
+        action: "submit_results",
+        metadata: {
+          resultsCount: submittedResults.length,
+          deviceInfo: deviceInfo,
+        },
+      }).catch((err) => console.error("Agent activity log error:", err.message));
+
       io.emit("general-election:result-updated", { electionId, pollingUnitId });
+      io.emit("agent-activity:updated", { agentId: agent.id, action: "submit_results", electionId });
 
       res.json({
         success: true,
@@ -11665,6 +11693,20 @@ Be friendly, informative, and politically neutral when discussing governance. En
         .set({ status: "active" })
         .where(eq(schema.pollingAgents.id, agent.id));
 
+      await db.insert(schema.agentActivityLogs).values({
+        agentId: agent.id,
+        memberId: agent.memberId,
+        pollingUnitId,
+        action: "submit_results_batch",
+        metadata: {
+          electionsSubmitted: batchSummary.length,
+          resultsCount: batchSummary.reduce((sum, s) => sum + s.submitted, 0),
+          deviceInfo,
+        },
+      }).catch((err) => console.error("Agent activity log error:", err.message));
+
+      io.emit("agent-activity:updated", { agentId: agent.id, action: "submit_results_batch" });
+
       res.json({
         success: true,
         data: {
@@ -11726,7 +11768,21 @@ Be friendly, informative, and politically neutral when discussing governance. En
         fileSize: req.file.size,
       }).returning();
 
+      await db.insert(schema.agentActivityLogs).values({
+        agentId: agent.id,
+        memberId: agent.memberId,
+        pollingUnitId,
+        electionId,
+        action: "upload_result_sheet",
+        metadata: {
+          fileName: req.file.originalname,
+          fileSize: req.file.size,
+          deviceInfo: { userAgent: req.headers["user-agent"] || "", ip: req.ip || "" },
+        },
+      }).catch((err) => console.error("Agent activity log error:", err.message));
+
       io.emit("result-sheet:uploaded", { electionId, pollingUnitId, sheetId: sheet.id });
+      io.emit("agent-activity:updated", { agentId: agent.id, action: "upload_result_sheet", electionId });
 
       res.json({
         success: true,
@@ -11822,6 +11878,354 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: result });
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to verify result" });
+    }
+  });
+
+  // ============================================================
+  // Election Analytics Endpoints
+  // ============================================================
+
+  // Per-election analytics summary
+  app.get("/api/analytics/elections/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const electionId = req.params.id;
+
+      const election = await db.query.generalElections.findFirst({
+        where: eq(schema.generalElections.id, electionId),
+      });
+      if (!election) {
+        return res.status(404).json({ success: false, error: "Election not found" });
+      }
+
+      // Total PUs in scope
+      const totalPUsResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT pu.id)::int as total
+        FROM polling_units pu
+        JOIN wards w ON pu.ward_id = w.id
+        JOIN lgas l ON w.lga_id = l.id
+        JOIN states s ON l.state_id = s.id
+        WHERE (${election.scope} = 'national')
+           OR (${election.scope} = 'state' AND s.id = ${election.stateId || ''})
+           OR (${election.scope} = 'lga' AND l.id = ${election.lgaId || ''})
+           OR (${election.scope} = 'constituency' AND w.lga_id = ${election.lgaId || ''})
+      `);
+      const totalPUs = totalPUsResult.rows?.[0]?.total || 0;
+
+      // PUs that reported results
+      const reportedPUsResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT polling_unit_id)::int as reported
+        FROM polling_unit_results
+        WHERE election_id = ${electionId}
+      `);
+      const reportedPUs = reportedPUsResult.rows?.[0]?.reported || 0;
+
+      // Vote totals per candidate
+      const candidateResults = await db.execute(sql`
+        SELECT 
+          gec.id as candidate_id,
+          gec.candidate_name,
+          p.name as party_name,
+          p.abbreviation as party_abbreviation,
+          p.color as party_color,
+          COALESCE(SUM(pur.votes), 0)::int as total_votes,
+          COUNT(DISTINCT pur.polling_unit_id)::int as pus_reported
+        FROM general_election_candidates gec
+        LEFT JOIN political_parties p ON gec.party_id = p.id
+        LEFT JOIN polling_unit_results pur ON pur.candidate_id = gec.id AND pur.election_id = ${electionId}
+        WHERE gec.election_id = ${electionId}
+        GROUP BY gec.id, gec.candidate_name, p.name, p.abbreviation, p.color
+        ORDER BY total_votes DESC
+      `);
+
+      // Total votes cast
+      const totalVotesResult = await db.execute(sql`
+        SELECT 
+          COALESCE(SUM(votes), 0)::int as total_votes,
+          COALESCE(SUM(registered_voters), 0)::int as total_registered,
+          COALESCE(SUM(accredited_voters), 0)::int as total_accredited
+        FROM polling_unit_results
+        WHERE election_id = ${electionId}
+      `);
+
+      // Agent activity for this election
+      const agentStats = await db.execute(sql`
+        SELECT 
+          COUNT(DISTINCT agent_id)::int as active_agents,
+          COUNT(*)::int as total_activities,
+          COUNT(CASE WHEN action = 'submit_results' THEN 1 END)::int as result_submissions,
+          COUNT(CASE WHEN action = 'upload_result_sheet' THEN 1 END)::int as sheet_uploads,
+          COUNT(CASE WHEN action = 'check_in' OR action = 'login' THEN 1 END)::int as logins
+        FROM agent_activity_logs
+        WHERE election_id = ${electionId}
+      `);
+
+      // Result sheets stats
+      const sheetStats = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total_sheets,
+          COUNT(CASE WHEN verification_status = 'verified' THEN 1 END)::int as verified_sheets,
+          COUNT(CASE WHEN verification_status = 'pending' THEN 1 END)::int as pending_sheets,
+          COUNT(CASE WHEN verification_status = 'rejected' THEN 1 END)::int as rejected_sheets
+        FROM result_sheets
+        WHERE election_id = ${electionId}
+      `);
+
+      // Verified vs unverified results
+      const verificationStats = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total_results,
+          COUNT(CASE WHEN is_verified = true THEN 1 END)::int as verified_results,
+          COUNT(CASE WHEN is_verified = false OR is_verified IS NULL THEN 1 END)::int as unverified_results
+        FROM polling_unit_results
+        WHERE election_id = ${electionId}
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          election,
+          reporting: {
+            totalPollingUnits: totalPUs,
+            reportedPollingUnits: reportedPUs,
+            reportingRate: totalPUs > 0 ? Math.round((reportedPUs / totalPUs) * 100 * 100) / 100 : 0,
+          },
+          votes: {
+            totalVotesCast: totalVotesResult.rows?.[0]?.total_votes || 0,
+            totalRegisteredVoters: totalVotesResult.rows?.[0]?.total_registered || 0,
+            totalAccreditedVoters: totalVotesResult.rows?.[0]?.total_accredited || 0,
+            turnoutRate: (totalVotesResult.rows?.[0]?.total_registered || 0) > 0
+              ? Math.round(((totalVotesResult.rows?.[0]?.total_votes || 0) / (totalVotesResult.rows?.[0]?.total_registered || 1)) * 100 * 100) / 100
+              : 0,
+          },
+          candidates: candidateResults.rows || [],
+          agents: agentStats.rows?.[0] || {},
+          resultSheets: sheetStats.rows?.[0] || {},
+          verification: verificationStats.rows?.[0] || {},
+        }
+      });
+    } catch (error: any) {
+      console.error("Election analytics error:", error);
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch analytics" });
+    }
+  });
+
+  // State-level breakdown for a specific election
+  app.get("/api/analytics/elections/:id/by-state", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const electionId = req.params.id;
+
+      const stateBreakdown = await db.execute(sql`
+        SELECT 
+          s.id as state_id,
+          s.name as state_name,
+          COUNT(DISTINCT pu.id)::int as total_pus,
+          COUNT(DISTINCT pur.polling_unit_id)::int as reported_pus,
+          COALESCE(SUM(pur.votes), 0)::int as total_votes,
+          COALESCE(SUM(pur.registered_voters), 0)::int as registered_voters,
+          COALESCE(SUM(pur.accredited_voters), 0)::int as accredited_voters
+        FROM states s
+        JOIN lgas l ON l.state_id = s.id
+        JOIN wards w ON w.lga_id = l.id
+        JOIN polling_units pu ON pu.ward_id = w.id
+        LEFT JOIN polling_unit_results pur ON pur.polling_unit_id = pu.id AND pur.election_id = ${electionId}
+        GROUP BY s.id, s.name
+        HAVING COUNT(DISTINCT pur.polling_unit_id) > 0
+        ORDER BY total_votes DESC
+      `);
+
+      res.json({ success: true, data: stateBreakdown.rows || [] });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch state breakdown" });
+    }
+  });
+
+  // Agent activity feed (paginated)
+  app.get("/api/analytics/agent-activity", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { electionId, action, page = "1", limit = "50" } = req.query;
+      const pageNum = parseInt(page as string);
+      const limitNum = Math.min(parseInt(limit as string), 100);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereClause = sql`1=1`;
+      if (electionId) {
+        whereClause = sql`${whereClause} AND aal.election_id = ${electionId}`;
+      }
+      if (action) {
+        whereClause = sql`${whereClause} AND aal.action = ${action}`;
+      }
+
+      const logs = await db.execute(sql`
+        SELECT 
+          aal.*,
+          m.full_name as agent_name,
+          m.phone as agent_phone,
+          pu.name as polling_unit_name,
+          pu.code as polling_unit_code,
+          ge.title as election_title,
+          ge.position_type as election_position
+        FROM agent_activity_logs aal
+        LEFT JOIN members m ON aal.member_id = m.id
+        LEFT JOIN polling_units pu ON aal.polling_unit_id = pu.id
+        LEFT JOIN general_elections ge ON aal.election_id = ge.id
+        WHERE ${whereClause}
+        ORDER BY aal.created_at DESC
+        LIMIT ${limitNum} OFFSET ${offset}
+      `);
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int as total
+        FROM agent_activity_logs aal
+        WHERE ${whereClause}
+      `);
+
+      res.json({
+        success: true,
+        data: logs.rows || [],
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: countResult.rows?.[0]?.total || 0,
+          totalPages: Math.ceil((countResult.rows?.[0]?.total || 0) / limitNum),
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch agent activity" });
+    }
+  });
+
+  // Result sheets feed with filtering
+  app.get("/api/analytics/result-sheets", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { electionId, verificationStatus, page = "1", limit = "50" } = req.query;
+      const pageNum = parseInt(page as string);
+      const limitNum = Math.min(parseInt(limit as string), 100);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereClause = sql`1=1`;
+      if (electionId) {
+        whereClause = sql`${whereClause} AND rs.election_id = ${electionId}`;
+      }
+      if (verificationStatus) {
+        whereClause = sql`${whereClause} AND rs.verification_status = ${verificationStatus}`;
+      }
+
+      const sheets = await db.execute(sql`
+        SELECT 
+          rs.*,
+          m.full_name as uploader_name,
+          pu.name as polling_unit_name,
+          pu.code as polling_unit_code,
+          ge.title as election_title
+        FROM result_sheets rs
+        LEFT JOIN members m ON rs.uploaded_by = m.id
+        LEFT JOIN polling_units pu ON rs.polling_unit_id = pu.id
+        LEFT JOIN general_elections ge ON rs.election_id = ge.id
+        WHERE ${whereClause}
+        ORDER BY rs.uploaded_at DESC
+        LIMIT ${limitNum} OFFSET ${offset}
+      `);
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int as total
+        FROM result_sheets rs
+        WHERE ${whereClause}
+      `);
+
+      res.json({
+        success: true,
+        data: sheets.rows || [],
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: countResult.rows?.[0]?.total || 0,
+          totalPages: Math.ceil((countResult.rows?.[0]?.total || 0) / limitNum),
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch result sheets" });
+    }
+  });
+
+  // Overall analytics dashboard summary
+  app.get("/api/analytics/dashboard", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
+    try {
+      // Active elections
+      const activeElections = await db.execute(sql`
+        SELECT COUNT(*)::int as total
+        FROM general_elections
+        WHERE status IN ('ongoing', 'scheduled')
+      `);
+
+      // Total agents
+      const totalAgents = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total,
+          COUNT(CASE WHEN status = 'checked_in' OR status = 'active' THEN 1 END)::int as active,
+          COUNT(CASE WHEN status = 'assigned' THEN 1 END)::int as assigned,
+          COUNT(CASE WHEN status = 'revoked' THEN 1 END)::int as revoked
+        FROM polling_agents
+      `);
+
+      // Recent activity count (last 24h)
+      const recentActivity = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total,
+          COUNT(CASE WHEN action = 'submit_results' OR action = 'submit_results_batch' THEN 1 END)::int as submissions,
+          COUNT(CASE WHEN action = 'upload_result_sheet' THEN 1 END)::int as uploads,
+          COUNT(CASE WHEN action = 'login' OR action = 'check_in' THEN 1 END)::int as logins
+        FROM agent_activity_logs
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `);
+
+      // Total results submitted
+      const totalResults = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total,
+          COUNT(CASE WHEN is_verified = true THEN 1 END)::int as verified
+        FROM polling_unit_results
+      `);
+
+      // Total result sheets
+      const totalSheets = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total,
+          COUNT(CASE WHEN verification_status = 'verified' THEN 1 END)::int as verified,
+          COUNT(CASE WHEN verification_status = 'pending' THEN 1 END)::int as pending
+        FROM result_sheets
+      `);
+
+      // Elections with most activity
+      const topElections = await db.execute(sql`
+        SELECT 
+          ge.id,
+          ge.title,
+          ge.position_type,
+          ge.election_year,
+          ge.status,
+          COUNT(DISTINCT pur.polling_unit_id)::int as reporting_pus,
+          COALESCE(SUM(pur.votes), 0)::int as total_votes
+        FROM general_elections ge
+        LEFT JOIN polling_unit_results pur ON pur.election_id = ge.id
+        WHERE ge.status IN ('ongoing', 'completed', 'scheduled')
+        GROUP BY ge.id, ge.title, ge.position_type, ge.election_year, ge.status
+        ORDER BY total_votes DESC
+        LIMIT 10
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          activeElections: activeElections.rows?.[0]?.total || 0,
+          agents: totalAgents.rows?.[0] || {},
+          recentActivity: recentActivity.rows?.[0] || {},
+          results: totalResults.rows?.[0] || {},
+          resultSheets: totalSheets.rows?.[0] || {},
+          topElections: topElections.rows || [],
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to fetch dashboard analytics" });
     }
   });
 
