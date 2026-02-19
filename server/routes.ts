@@ -10381,7 +10381,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const bySeverity = { low: 0, medium: 0, high: 0 };
       const byStatus = { reported: 0, investigating: 0, resolved: 0 };
       const byState: Record<string, { total: number; high: number; medium: number; low: number; resolved: number; stateName: string }> = {};
-      const byLga: Record<string, { total: number; lgaName: string; stateName: string; lgaId: string }> = {};
+      const byLga: Record<string, { total: number; lgaName: string; stateName: string }> = {};
       const recent24h = allIncidents.filter(i => {
         const created = new Date(i.createdAt!);
         return Date.now() - created.getTime() < 24 * 60 * 60 * 1000;
@@ -10415,7 +10415,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
           || (inc as any).pollingUnit?.ward?.lga?.id 
           || "unknown";
         if (!byLga[lgaId]) {
-          byLga[lgaId] = { total: 0, lgaName, stateName, lgaId };
+          byLga[lgaId] = { total: 0, lgaName, stateName };
         }
         byLga[lgaId].total++;
       }
@@ -12158,32 +12158,32 @@ Be friendly, informative, and politically neutral when discussing governance. En
       `);
       const reportedPUs = reportedPUsResult.rows?.[0]?.reported || 0;
 
-      // Vote totals per candidate
+      // Vote totals per candidate - use general_election_candidates.total_votes (actual data)
       const candidateResults = await db.execute(sql`
         SELECT 
           gec.id as candidate_id,
-          gec.candidate_name,
+          gec.name as candidate_name,
           p.name as party_name,
           p.abbreviation as party_abbreviation,
           p.color as party_color,
-          COALESCE(SUM(pur.votes), 0)::int as total_votes,
+          COALESCE(gec.total_votes, 0)::int as total_votes,
           COUNT(DISTINCT pur.polling_unit_id)::int as pus_reported
         FROM general_election_candidates gec
-        LEFT JOIN political_parties p ON gec.party_id = p.id
+        LEFT JOIN parties p ON gec.party_id = p.id
         LEFT JOIN polling_unit_results pur ON pur.candidate_id = gec.id AND pur.election_id = ${electionId}
         WHERE gec.election_id = ${electionId}
-        GROUP BY gec.id, gec.candidate_name, p.name, p.abbreviation, p.color
+        GROUP BY gec.id, gec.name, p.name, p.abbreviation, p.color, gec.total_votes
         ORDER BY total_votes DESC
       `);
 
-      // Total votes cast
+      // Total votes cast - use general_elections table (actual data)
       const totalVotesResult = await db.execute(sql`
         SELECT 
-          COALESCE(SUM(votes), 0)::int as total_votes,
-          COALESCE(SUM(registered_voters), 0)::int as total_registered,
-          COALESCE(SUM(accredited_voters), 0)::int as total_accredited
-        FROM polling_unit_results
-        WHERE election_id = ${electionId}
+          COALESCE(ge.total_votes_cast, 0)::int as total_votes,
+          COALESCE(ge.total_registered_voters, 0)::int as total_registered,
+          COALESCE(ge.total_accredited_voters, 0)::int as total_accredited
+        FROM general_elections ge
+        WHERE ge.id = ${electionId}
       `);
 
       // Agent activity for this election
@@ -12226,14 +12226,14 @@ Be friendly, informative, and politically neutral when discussing governance. En
           reporting: {
             totalPollingUnits: totalPUs,
             reportedPollingUnits: reportedPUs,
-            reportingRate: totalPUs > 0 ? Math.round((reportedPUs / totalPUs) * 100 * 100) / 100 : 0,
+            reportingRate: Number(totalPUs) > 0 ? Math.round((Number(reportedPUs) / Number(totalPUs)) * 100 * 100) / 100 : 0,
           },
           votes: {
-            totalVotesCast: totalVotesResult.rows?.[0]?.total_votes || 0,
-            totalRegisteredVoters: totalVotesResult.rows?.[0]?.total_registered || 0,
-            totalAccreditedVoters: totalVotesResult.rows?.[0]?.total_accredited || 0,
-            turnoutRate: (totalVotesResult.rows?.[0]?.total_registered || 0) > 0
-              ? Math.round(((totalVotesResult.rows?.[0]?.total_votes || 0) / (totalVotesResult.rows?.[0]?.total_registered || 1)) * 100 * 100) / 100
+            totalVotesCast: Number(totalVotesResult.rows?.[0]?.total_votes) || 0,
+            totalRegisteredVoters: Number(totalVotesResult.rows?.[0]?.total_registered) || 0,
+            totalAccreditedVoters: Number(totalVotesResult.rows?.[0]?.total_accredited) || 0,
+            turnoutRate: Number(totalVotesResult.rows?.[0]?.total_registered || 0) > 0
+              ? Math.round((Number(totalVotesResult.rows?.[0]?.total_votes || 0) / Number(totalVotesResult.rows?.[0]?.total_registered || 1)) * 100 * 100) / 100
               : 0,
           },
           candidates: candidateResults.rows || [],
@@ -12275,7 +12275,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
         SELECT 
           s.id as state_id,
           gec.id as candidate_id,
-          gec.candidate_name,
+          gec.name as candidate_name,
           p.name as party_name,
           p.abbreviation as party_abbreviation,
           p.color as party_color,
@@ -12286,8 +12286,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         JOIN polling_units pu ON pu.ward_id = w.id
         JOIN polling_unit_results pur ON pur.polling_unit_id = pu.id AND pur.election_id = ${electionId}
         JOIN general_election_candidates gec ON pur.candidate_id = gec.id AND gec.election_id = ${electionId}
-        LEFT JOIN political_parties p ON gec.party_id = p.id
-        GROUP BY s.id, gec.id, gec.candidate_name, p.name, p.abbreviation, p.color
+        LEFT JOIN parties p ON gec.party_id = p.id
+        GROUP BY s.id, gec.id, gec.name, p.name, p.abbreviation, p.color
         ORDER BY s.id, total_votes DESC
       `);
 
@@ -12370,8 +12370,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total: countResult.rows?.[0]?.total || 0,
-          totalPages: Math.ceil((countResult.rows?.[0]?.total || 0) / limitNum),
+          total: Number(countResult.rows?.[0]?.total) || 0,
+          totalPages: Math.ceil(Number(countResult.rows?.[0]?.total || 0) / limitNum),
         }
       });
     } catch (error: any) {
@@ -12428,8 +12428,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total: countResult.rows?.[0]?.total || 0,
-          totalPages: Math.ceil((countResult.rows?.[0]?.total || 0) / limitNum),
+          total: Number(countResult.rows?.[0]?.total) || 0,
+          totalPages: Math.ceil(Number(countResult.rows?.[0]?.total || 0) / limitNum),
         }
       });
     } catch (error: any) {
@@ -12485,7 +12485,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
         FROM result_sheets
       `);
 
-      // Elections with most activity
+      // Elections with most activity - use general_elections.total_votes_cast and polling_unit_results for reporting PUs
       const topElections = await db.execute(sql`
         SELECT 
           ge.id,
@@ -12493,12 +12493,17 @@ Be friendly, informative, and politically neutral when discussing governance. En
           ge.position as position_type,
           ge.election_year,
           ge.status,
+          COALESCE(ge.total_votes_cast, 0)::int as total_votes,
+          COALESCE(ge.total_registered_voters, 0)::int as registered_voters,
+          COALESCE(ge.total_accredited_voters, 0)::int as accredited_voters,
           COUNT(DISTINCT pur.polling_unit_id)::int as reporting_pus,
-          COALESCE(SUM(pur.votes), 0)::int as total_votes
+          (SELECT COUNT(*) FROM general_election_candidates c WHERE c.election_id = ge.id)::int as candidates_count,
+          s.name as state_name
         FROM general_elections ge
         LEFT JOIN polling_unit_results pur ON pur.election_id = ge.id
+        LEFT JOIN states s ON ge.state_id = s.id
         WHERE ge.status IN ('ongoing', 'completed', 'upcoming')
-        GROUP BY ge.id, ge.title, ge.position, ge.election_year, ge.status
+        GROUP BY ge.id, ge.title, ge.position, ge.election_year, ge.status, ge.total_votes_cast, ge.total_registered_voters, ge.total_accredited_voters, s.name
         ORDER BY total_votes DESC
         LIMIT 10
       `);

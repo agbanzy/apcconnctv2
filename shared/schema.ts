@@ -690,6 +690,9 @@ export const generalElections = pgTable("general_elections", {
   totalVotesCast: integer("total_votes_cast").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  lgaId: varchar("lga_id").references(() => lgas.id),
+  wardId: varchar("ward_id").references(() => wards.id),
+  federalConstituencyId: varchar("federal_constituency_id"),
 });
 
 export const generalElectionCandidates = pgTable("general_election_candidates", {

@@ -655,14 +655,24 @@ export default function ElectionAnalytics() {
                   {dashboard.topElections.map((el: any) => (
                     <Card key={el.id} className="hover-elevate cursor-pointer" onClick={() => setSelectedElection(el.id)} data-testid={`card-election-${el.id}`}>
                       <CardContent className="p-4 flex flex-row flex-wrap items-center justify-between gap-3">
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-medium">{el.title}</p>
-                          <p className="text-sm text-muted-foreground">{el.position_type} &middot; {el.election_year}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {el.position_type} &middot; {el.election_year}
+                            {el.state_name && ` &middot; ${el.state_name}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {el.candidates_count || 0} candidates
+                            {el.registered_voters > 0 && ` &middot; ${Number(el.registered_voters).toLocaleString()} registered voters`}
+                          </p>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <p className="text-lg font-bold">{(el.total_votes || 0).toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground">{el.reporting_pus} PUs reporting</p>
+                            <p className="text-lg font-bold">{Number(el.total_votes || 0).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {el.total_votes > 0 ? "total votes" : "no votes yet"}
+                              {el.reporting_pus > 0 && ` &middot; ${el.reporting_pus} PUs`}
+                            </p>
                           </div>
                           <Badge variant={el.status === "ongoing" ? "default" : el.status === "completed" ? "secondary" : "outline"}>
                             {el.status}
