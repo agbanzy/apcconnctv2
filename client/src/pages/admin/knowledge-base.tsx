@@ -50,15 +50,12 @@ interface KnowledgeBase {
   id: string;
   title: string;
   content: string;
-  category: { name: string; slug: string } | null;
-  categoryId?: string;
+  category: string;
   type: "article" | "faq";
   tags: string[];
   published: boolean;
-  viewsCount: number;
-  helpfulCount?: number;
+  views: number;
   createdAt: string;
-  author?: { firstName: string; lastName: string; email: string } | null;
 }
 
 const knowledgeBaseSchema = z.object({
@@ -106,7 +103,7 @@ export default function AdminKnowledgeBase() {
       render: (kb) => (
         <div className="max-w-md" data-testid={`text-title-${kb.id}`}>
           <p className="font-medium">{kb.title}</p>
-          <p className="text-xs text-muted-foreground mt-1">{kb.category?.name || "Uncategorized"}</p>
+          <p className="text-xs text-muted-foreground mt-1">{kb.category}</p>
         </div>
       ),
     },
@@ -143,7 +140,7 @@ export default function AdminKnowledgeBase() {
       render: (kb) => (
         <div className="flex items-center gap-2" data-testid={`text-views-${kb.id}`}>
           <Eye className="h-3 w-3 text-muted-foreground" />
-          <span className="text-sm font-mono">{kb.viewsCount || 0}</span>
+          <span className="text-sm font-mono">{kb.views || 0}</span>
         </div>
       ),
     },
@@ -170,7 +167,7 @@ export default function AdminKnowledgeBase() {
               form.reset({
                 title: kb.title,
                 content: kb.content,
-                category: kb.categoryId || kb.category?.slug || "",
+                category: kb.category,
                 type: kb.type,
                 tags: kb.tags?.join(", ") || "",
                 published: kb.published,

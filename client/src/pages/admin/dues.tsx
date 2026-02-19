@@ -424,7 +424,7 @@ export default function Admin() {
                               {member.memberId}
                             </TableCell>
                             <TableCell data-testid={`text-member-name-${member.id}`}>
-                              {member.user?.firstName || "Unknown"} {member.user?.lastName || ""}
+                              {member.user.firstName} {member.user.lastName}
                             </TableCell>
                             <TableCell data-testid={`text-member-ward-${member.id}`}>
                               {member.ward.name}

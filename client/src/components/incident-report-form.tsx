@@ -15,11 +15,11 @@ import { Camera, Upload, MapPin, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 const incidentSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters").max(200, "Title must be less than 200 characters"),
-  pollingUnit: z.string().min(1, "Polling unit is required"),
-  severity: z.enum(["low", "medium", "high"], { required_error: "Please select a severity level" }),
-  description: z.string().min(20, "Description must be at least 20 characters").max(2000, "Description must be less than 2000 characters"),
-  location: z.string().min(3, "Location is required").max(500, "Location must be less than 500 characters"),
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  pollingUnit: z.string().min(3, "Polling unit is required"),
+  severity: z.enum(["low", "medium", "high"], { required_error: "Severity is required" }),
+  description: z.string().min(20, "Description must be at least 20 characters"),
+  location: z.string().min(3, "Location is required"),
   coordinates: z.object({
     lat: z.number(),
     lng: z.number(),
@@ -63,16 +63,11 @@ export function IncidentReportForm() {
         formData.append("files", file);
       });
 
-      const res = await fetch("/api/incidents", {
+      return apiRequest("/api/incidents", {
         method: "POST",
         body: formData,
-        credentials: "include",
+        headers: {},
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        throw new Error(errData?.error || "Failed to submit incident report");
-      }
-      return res.json();
     },
     onSuccess: () => {
       toast({

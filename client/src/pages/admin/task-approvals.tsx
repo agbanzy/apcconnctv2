@@ -136,7 +136,7 @@ export default function TaskApprovals() {
                         {completion.task.title}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Submitted by: {completion.member?.user?.firstName || "Unknown"} {completion.member?.user?.lastName || ""}
+                        Submitted by: {completion.member.user.firstName} {completion.member.user.lastName}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(completion.completedAt).toLocaleString()}
@@ -206,7 +206,7 @@ export default function TaskApprovals() {
               <div>
                 <span className="text-muted-foreground">Submitted by:</span>
                 <p className="font-medium">
-                  {selectedCompletion?.member?.user?.firstName || "Unknown"} {selectedCompletion?.member?.user?.lastName || ""}
+                  {selectedCompletion?.member.user.firstName} {selectedCompletion?.member.user.lastName}
                 </p>
               </div>
               <div>

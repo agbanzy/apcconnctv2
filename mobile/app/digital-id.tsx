@@ -105,9 +105,7 @@ export default function DigitalIdScreen() {
   const handleShare = async () => {
     if (!cardData) return;
     try {
-      // Share only the public verification URL without the token.
-      // The verifier will be prompted to enter the member ID on the verification page.
-      const verifyUrl = `https://apcconnect.ng/id-card/verify/${memberId}`;
+      const verifyUrl = `https://apcconnect.ng/id-card/verify/${memberId}?token=${cardData.token}`;
       await Share.share({
         title: 'APC Digital ID Card',
         message: `Verify my APC membership ID card: ${verifyUrl}`,
@@ -137,9 +135,7 @@ export default function DigitalIdScreen() {
   const lga = ward?.lga;
   const state = lga?.state;
   const maskedNin = member?.nin ? `****${member.nin.slice(-4)}` : 'Not provided';
-  // Public verification URL - token is NOT included to prevent leakage via QR scans.
-  // The verification page will handle auth server-side.
-  const verifyUrl = `https://apcconnect.ng/id-card/verify/${memberId}`;
+  const verifyUrl = `https://apcconnect.ng/id-card/verify/${memberId}?token=${token}`;
 
   const getStatusColor = (status: string) => {
     switch (status) {

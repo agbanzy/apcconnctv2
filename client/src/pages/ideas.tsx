@@ -364,12 +364,12 @@ export default function Ideas() {
                     <div className="flex items-center gap-2 mb-2">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback>
-                          {(idea.member?.user?.firstName || "?")[0]}{(idea.member?.user?.lastName || "?")[0]}
+                          {idea.member.user.firstName[0]}{idea.member.user.lastName[0]}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="text-sm font-medium">
-                          {idea.member?.user?.firstName || "Unknown"} {idea.member?.user?.lastName || ""}
+                          {idea.member.user.firstName} {idea.member.user.lastName}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {format(new Date(idea.createdAt), "MMM dd, yyyy")}
@@ -515,11 +515,11 @@ export default function Ideas() {
                                   <div className="flex items-center gap-2 mb-2">
                                     <Avatar className="h-6 w-6">
                                       <AvatarFallback className="text-xs">
-                                        {(comment.member?.user?.firstName || "?")[0]}{(comment.member?.user?.lastName || "?")[0]}
+                                        {comment.member.user.firstName[0]}{comment.member.user.lastName[0]}
                                       </AvatarFallback>
                                     </Avatar>
                                     <p className="text-sm font-medium">
-                                      {comment.member?.user?.firstName || "Unknown"} {comment.member?.user?.lastName || ""}
+                                      {comment.member.user.firstName} {comment.member.user.lastName}
                                     </p>
                                     <span className="text-xs text-muted-foreground">
                                       {format(new Date(comment.createdAt), "MMM dd, yyyy")}

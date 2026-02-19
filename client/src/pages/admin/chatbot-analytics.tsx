@@ -270,7 +270,7 @@ export default function AdminChatbotAnalytics() {
                             {conv.member ? (
                               <div>
                                 <div className="font-medium">
-                                  {conv.member?.user?.firstName || "Unknown"} {conv.member?.user?.lastName || ""}
+                                  {conv.member.user.firstName} {conv.member.user.lastName}
                                 </div>
                                 <Badge variant="secondary" className="mt-1">Member</Badge>
                               </div>
@@ -309,7 +309,7 @@ export default function AdminChatbotAnalytics() {
             <SheetDescription>
               {selectedConversation?.member ? (
                 <>
-                  {selectedConversation.member?.user?.firstName || "Unknown"} {selectedConversation.member?.user?.lastName || ""} •{" "}
+                  {selectedConversation.member.user.firstName} {selectedConversation.member.user.lastName} •{" "}
                   {format(new Date(selectedConversation.createdAt), "MMM d, yyyy 'at' h:mm a")}
                 </>
               ) : (
@@ -324,7 +324,7 @@ export default function AdminChatbotAnalytics() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Name:</span>
-                    <span>{selectedConversation.member?.user?.firstName || "Unknown"} {selectedConversation.member?.user?.lastName || ""}</span>
+                    <span>{selectedConversation.member.user.firstName} {selectedConversation.member.user.lastName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Member ID:</span>

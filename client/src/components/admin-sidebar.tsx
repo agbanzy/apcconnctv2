@@ -18,7 +18,6 @@ import {
   Coins,
   FileSearch,
   HelpCircle,
-  UserCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,13 +51,8 @@ const adminMenuItems = [
     icon: DollarSign,
   },
   {
-    title: "Party Elections",
+    title: "Elections",
     url: "/admin/elections",
-    icon: Vote,
-  },
-  {
-    title: "General Elections",
-    url: "/admin/general-elections",
     icon: Vote,
   },
   {
@@ -75,11 +69,6 @@ const adminMenuItems = [
     title: "Campaigns",
     url: "/admin/campaigns",
     icon: MessageSquare,
-  },
-  {
-    title: "Agent Management",
-    url: "/admin/agent-management",
-    icon: UserCheck,
   },
   {
     title: "Incidents",

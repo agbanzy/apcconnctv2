@@ -90,21 +90,11 @@ export default function GeneralElections() {
   const [selectedElection, setSelectedElection] = useState<string | null>(null);
   const [positionFilter, setPositionFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("results");
-  const [viewMode, setViewMode] = useState<"all" | "my">("my");
 
-  const { data: allElectionsData, isLoading: allLoading } = useQuery<{
+  const { data: electionsData, isLoading } = useQuery<{
     success: boolean;
     data: ElectionWithCandidates[];
-  }>({ queryKey: ["/api/general-elections"], enabled: viewMode === "all" });
-
-  const { data: myElectionsData, isLoading: myLoading } = useQuery<{
-    success: boolean;
-    data: ElectionWithCandidates[];
-    userLocation?: { state: string | null; lga: string | null; ward: string | null };
-  }>({ queryKey: ["/api/general-elections/my-elections"], enabled: viewMode === "my" });
-
-  const electionsData = viewMode === "my" ? myElectionsData : allElectionsData;
-  const isLoading = viewMode === "my" ? myLoading : allLoading;
+  }>({ queryKey: ["/api/general-elections"] });
 
   const { data: summaryData, isLoading: summaryLoading } = useQuery<{
     success: boolean;
@@ -141,11 +131,6 @@ export default function GeneralElections() {
     });
     socket.on("general-election:updated", () => {
       queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/general-elections/my-elections"] });
-    });
-    socket.on("general-elections:bulk-updated", () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/general-elections"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/general-elections/my-elections"] });
     });
     return () => { socket.disconnect(); };
   }, [selectedElection]);
@@ -194,33 +179,9 @@ export default function GeneralElections() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">General Elections</h1>
-          <p className="text-sm text-muted-foreground">
-            {viewMode === "my" && myElectionsData?.userLocation?.state
-              ? `Elections in your area: ${myElectionsData.userLocation.state}${myElectionsData.userLocation.lga ? ` / ${myElectionsData.userLocation.lga}` : ""}`
-              : "Live election results and updates across Nigeria"}
-          </p>
+          <p className="text-sm text-muted-foreground">Live election results and updates across Nigeria</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex border rounded-md overflow-visible">
-            <Button
-              variant={viewMode === "my" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => { setViewMode("my"); setSelectedElection(null); }}
-              className="rounded-none rounded-l-md"
-              data-testid="button-my-elections"
-            >
-              <MapPin className="w-4 h-4 mr-1" /> My Area
-            </Button>
-            <Button
-              variant={viewMode === "all" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => { setViewMode("all"); setSelectedElection(null); }}
-              className="rounded-none rounded-r-md"
-              data-testid="button-all-elections"
-            >
-              All Elections
-            </Button>
-          </div>
           <Select value={positionFilter} onValueChange={(v) => { setPositionFilter(v); setSelectedElection(null); }}>
             <SelectTrigger className="w-[200px]" data-testid="select-position-filter">
               <SelectValue placeholder="Filter by position" />

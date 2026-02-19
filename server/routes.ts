@@ -35,13 +35,6 @@ import userTasksRouter from "./routes/user-tasks";
 import socialSharesRouter from "./routes/social-shares";
 import referralsRouter from "./routes/referrals";
 import leaderboardsRouter from "./routes/leaderboards";
-import authRouter from "./routes/auth";
-import membersRouter from "./routes/members";
-import electionsRouter from "./routes/elections";
-import eventsRouter from "./routes/events";
-import knowledgeRouter from "./routes/knowledge";
-import newsRouter from "./routes/news";
-import adminRouter from "./routes/admin";
 import { PointLedgerService } from "./services/point-ledger";
 import * as memberAccountService from "./services/member-account";
 
@@ -91,34 +84,41 @@ declare global {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-  // Socket.IO CORS - restrict to allowed origins
-  const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
-    : ["http://localhost:5000", "http://localhost:3000"];
-
   const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: ALLOWED_ORIGINS,
-      credentials: true,
-    }
+    cors: { origin: "*" }
   });
 
   // ============================================================================
   // SESSION SECRET VALIDATION
   // ============================================================================
   // In production, SESSION_SECRET must be set and cannot use the default value
-  // ============================================================================
-  // SESSION SECRET - REQUIRED in all environments
-  // ============================================================================
-  if (!process.env.SESSION_SECRET) {
-    console.error("\n" + "=".repeat(80));
-    console.error("CRITICAL: SESSION_SECRET environment variable is not set.");
-    console.error("=".repeat(80));
-    console.error("Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
-    console.error("Then set SESSION_SECRET in your .env file or environment.\n");
-    throw new Error("SESSION_SECRET environment variable is required. Cannot start without it.");
+  const SESSION_SECRET = process.env.SESSION_SECRET || "apc-connect-secret-key-2024";
+  const isProduction = process.env.NODE_ENV === "production";
+  const isDefaultSecret = SESSION_SECRET === "apc-connect-secret-key-2024";
+
+  if (isProduction) {
+    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+      console.error("\n" + "=".repeat(80));
+      console.error("CRITICAL SECURITY ERROR: SESSION_SECRET Not Configured");
+      console.error("=".repeat(80));
+      console.error("Production environment detected but SESSION_SECRET is not set or using default value.");
+      console.error("This is a critical security vulnerability that could compromise user sessions.");
+      console.error("");
+      console.error("To fix this:");
+      console.error("1. Generate a strong random secret:");
+      console.error("   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+      console.error("2. Set the SESSION_SECRET environment variable to this value");
+      console.error("3. Restart the application");
+      console.error("=".repeat(80) + "\n");
+      throw new Error("SESSION_SECRET must be set in production environment");
+    }
+  } else {
+    // Development mode warning
+    if (!process.env.SESSION_SECRET || isDefaultSecret) {
+      console.warn("\n⚠️  WARNING: Using default SESSION_SECRET in development mode");
+      console.warn("   For production, set a secure SESSION_SECRET environment variable\n");
+    }
   }
-  const SESSION_SECRET = process.env.SESSION_SECRET;
   // ============================================================================
 
   app.use(
@@ -1648,20 +1648,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateMemberSchema = z.object({
-    firstName: z.string().optional(),
-    lastName: z.string().optional(),
-    phone: z.string().optional(),
-    wardId: z.string().optional(),
-    status: z.string().optional(),
-    role: z.string().optional(),
-    nin: z.string().optional()
-  });
-
   app.patch("/api/members/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateMemberSchema.parse(req.body);
-
       const member = await db.query.members.findFirst({
         where: eq(schema.members.id, req.params.id)
       });
@@ -1675,15 +1663,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const [updated] = await db.update(schema.members)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.members.id, req.params.id))
         .returning();
 
       res.json({ success: true, data: updated });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update member" });
     }
   });
@@ -3295,23 +3280,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateEventSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    date: z.string().optional(),
-    location: z.string().optional(),
-    type: z.string().optional(),
-    capacity: z.number().optional(),
-    imageUrl: z.string().optional(),
-    status: z.string().optional()
-  });
-
   app.patch("/api/events/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateEventSchema.parse(req.body);
-
       const [event] = await db.update(schema.events)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.events.id, req.params.id))
         .returning();
 
@@ -3326,7 +3298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Uncomment the following code when ready to send push notifications:
       /*
       import { pushService, NotificationTemplates } from "./push-service";
-
+      
       // Get all members who RSVPed to this event
       const rsvps = await db.query.eventRsvps.findMany({
         where: and(
@@ -3335,17 +3307,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ),
         with: { member: true }
       });
-
+      
       // Send notification to each RSVP'd member about the event update
       const userIds = rsvps.map(rsvp => rsvp.member.userId);
-
+      
       const eventDate = new Date(event.date).toLocaleDateString('en-NG', {
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
       });
-
+      
       await pushService.sendToMultiple(
         userIds,
         NotificationTemplates.eventReminder(
@@ -3354,15 +3326,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           event.id
         )
       );
-
+      
       console.log(`Push notification sent to ${userIds.length} members about event update`);
       */
 
       res.json({ success: true, data: event });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update event" });
     }
   });
@@ -3804,29 +3773,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateElectionSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    type: z.string().optional(),
-    status: z.string().optional()
-  });
-
   app.patch("/api/elections/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateElectionSchema.parse(req.body);
-
       const [election] = await db.update(schema.elections)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.elections.id, req.params.id))
         .returning();
 
       res.json({ success: true, data: election });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update election" });
     }
   });
@@ -4359,31 +4314,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateCampaignSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    targetAmount: z.number().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    status: z.string().optional(),
-    category: z.string().optional(),
-    imageUrl: z.string().optional()
-  });
-
   app.patch("/api/campaigns/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateCampaignSchema.parse(req.body);
-
       const [campaign] = await db.update(schema.issueCampaigns)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.issueCampaigns.id, req.params.id))
         .returning();
 
       res.json({ success: true, data: campaign });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update campaign" });
     }
   });
@@ -4727,19 +4666,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const incidentData = {
+      const incidentData = schema.insertIncidentSchema.parse({
+        title: req.body.title,
         description: req.body.description,
-        severity: req.body.severity as "low" | "medium" | "high",
-        location: req.body.location || null,
-        coordinates: coordinates || null,
-        pollingUnitId: req.body.pollingUnitId || null,
+        severity: req.body.severity,
+        location: req.body.location,
+        coordinates: coordinates ? JSON.stringify(coordinates) : null,
+        pollingUnit: req.body.pollingUnit,
         reporterId: member.id,
-        status: "reported",
-      };
-
-      if (!incidentData.description || !incidentData.severity) {
-        return res.status(400).json({ success: false, error: "Description and severity are required" });
-      }
+      });
 
       const [incident] = await db.insert(schema.incidents).values(incidentData).returning();
 
@@ -4767,29 +4702,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateIncidentSchema = z.object({
-    description: z.string().optional(),
-    severity: z.enum(["low", "medium", "high"]).optional(),
-    status: z.string().optional(),
-    location: z.string().optional(),
-  });
-
   app.patch("/api/incidents/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateIncidentSchema.parse(req.body);
-
       const [incident] = await db.update(schema.incidents)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.incidents.id, req.params.id))
         .returning();
 
       io.emit("incident:updated", incident);
 
       res.json({ success: true, data: incident });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update incident" });
     }
   });
@@ -4865,28 +4788,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updatePollingUnitSchema = z.object({
-    status: z.string().optional(),
-    results: z.string().optional(),
-    notes: z.string().optional()
-  });
-
   app.patch("/api/situation-room/polling-units/:id", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updatePollingUnitSchema.parse(req.body);
-
       const [unit] = await db.update(schema.pollingUnits)
-        .set({ ...validatedData, lastUpdate: new Date() })
+        .set({ ...req.body, lastUpdate: new Date() })
         .where(eq(schema.pollingUnits.id, req.params.id))
         .returning();
 
       io.emit("polling-unit:updated", unit);
 
       res.json({ success: true, data: unit });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update polling unit" });
     }
   });
@@ -5754,10 +5666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           COALESCE(pu_counts.polling_units, 0)::int AS "pollingUnitsCount",
           COALESCE(news_counts.news_count, 0)::int AS "newsCount",
           COALESCE(task_counts.task_count, 0)::int AS "tasksCount",
-          COALESCE(campaign_counts.campaign_count, 0)::int AS "activeCampaigns",
-          COALESCE(sd_counts.senatorial_districts, 0)::int AS "senatorialDistrictsCount",
-          COALESCE(fc_counts.federal_constituencies, 0)::int AS "federalConstituenciesCount",
-          COALESCE(ge_counts.general_elections, 0)::int AS "generalElectionsCount"
+          COALESCE(campaign_counts.campaign_count, 0)::int AS "activeCampaigns"
         FROM states s
         LEFT JOIN (
           SELECT state_id, COUNT(*)::int AS total_lgas FROM lgas GROUP BY state_id
@@ -5806,15 +5715,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           WHERE ic.status = 'active'
           GROUP BY l.state_id
         ) campaign_counts ON campaign_counts.state_id = s.id
-        LEFT JOIN (
-          SELECT state_id, COUNT(*)::int AS senatorial_districts FROM senatorial_districts GROUP BY state_id
-        ) sd_counts ON sd_counts.state_id = s.id
-        LEFT JOIN (
-          SELECT state_id, COUNT(*)::int AS federal_constituencies FROM federal_constituencies GROUP BY state_id
-        ) fc_counts ON fc_counts.state_id = s.id
-        LEFT JOIN (
-          SELECT state_id, COUNT(*)::int AS general_elections FROM general_elections WHERE status != 'cancelled' GROUP BY state_id
-        ) ge_counts ON ge_counts.state_id = s.id
         ORDER BY s.name
       `);
 
@@ -5822,37 +5722,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Map data error:", error);
       res.status(500).json({ success: false, error: "Failed to fetch map data" });
-    }
-  });
-
-  app.get("/api/analytics/state-electoral/:stateId", async (req: Request, res: Response) => {
-    try {
-      const { stateId } = req.params;
-      const districts = await db.query.senatorialDistricts.findMany({
-        where: eq(schema.senatorialDistricts.stateId, stateId),
-      });
-      const constituencies = await db.query.federalConstituencies.findMany({
-        where: eq(schema.federalConstituencies.stateId, stateId),
-      });
-      const elections = await db.execute(sql`
-        SELECT ge.id, ge.title, ge.position, ge.status, ge.election_date AS "electionDate",
-          ge.year, ge.state_id AS "stateId"
-        FROM general_elections ge
-        WHERE ge.state_id = ${stateId} AND ge.status != 'cancelled'
-        ORDER BY ge.election_date DESC NULLS LAST
-        LIMIT 20
-      `);
-      res.json({
-        success: true,
-        data: {
-          senatorialDistricts: districts,
-          federalConstituencies: constituencies,
-          elections: elections.rows,
-        },
-      });
-    } catch (error) {
-      console.error("State electoral data error:", error);
-      res.status(500).json({ success: false, error: "Failed to fetch state electoral data" });
     }
   });
 
@@ -6577,17 +6446,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateIdeaSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    category: z.string().optional(),
-    status: z.string().optional()
-  });
-
   app.patch("/api/ideas/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateIdeaSchema.parse(req.body);
-
       const idea = await db.query.ideas.findFirst({
         where: eq(schema.ideas.id, req.params.id),
         with: { member: { with: { user: true } } }
@@ -6608,15 +6468,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const [updated] = await db.update(schema.ideas)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.ideas.id, req.params.id))
         .returning();
 
       res.json({ success: true, data: updated });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update idea" });
     }
   });
@@ -6829,20 +6686,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateKnowledgeCategorySchema = z.object({
-    name: z.string().optional(),
-    description: z.string().optional(),
-    slug: z.string().optional(),
-    order: z.number().optional(),
-    parentId: z.string().optional()
-  });
-
   app.patch("/api/knowledge/categories/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateKnowledgeCategorySchema.parse(req.body);
-
       const [category] = await db.update(schema.knowledgeCategories)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.knowledgeCategories.id, req.params.id))
         .returning();
 
@@ -6851,10 +6698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, data: category });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update category" });
     }
   });
@@ -6940,23 +6784,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateKnowledgeArticleSchema = z.object({
-    title: z.string().optional(),
-    content: z.string().optional(),
-    summary: z.string().optional(),
-    slug: z.string().optional(),
-    categoryId: z.string().optional(),
-    status: z.string().optional(),
-    tags: z.string().optional(),
-    imageUrl: z.string().optional()
-  });
-
   app.patch("/api/knowledge/articles/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateKnowledgeArticleSchema.parse(req.body);
-
       const [article] = await db.update(schema.knowledgeArticles)
-        .set({ ...validatedData, updatedAt: new Date() })
+        .set({ ...req.body, updatedAt: new Date() })
         .where(eq(schema.knowledgeArticles.id, req.params.id))
         .returning();
 
@@ -6965,10 +6796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, data: article });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update article" });
     }
   });
@@ -7083,20 +6911,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const updateFaqSchema = z.object({
-    question: z.string().optional(),
-    answer: z.string().optional(),
-    categoryId: z.string().optional(),
-    order: z.number().optional(),
-    isPublished: z.boolean().optional()
-  });
-
   app.patch("/api/knowledge/faqs/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const validatedData = updateFaqSchema.parse(req.body);
-
       const [faq] = await db.update(schema.faqs)
-        .set(validatedData)
+        .set(req.body)
         .where(eq(schema.faqs.id, req.params.id))
         .returning();
 
@@ -7105,10 +6923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, data: faq });
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, error: "Validation failed", details: error.errors });
-      }
+    } catch (error) {
       res.status(500).json({ success: false, error: "Failed to update FAQ" });
     }
   });
@@ -8506,11 +8321,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
       const completions = await db.query.taskCompletions.findMany({
         where: eq(schema.taskCompletions.status, "pending"),
         with: {
-          member: {
-            with: {
-              user: true
-            }
-          },
+          member: true,
           task: true
         },
         orderBy: desc(schema.taskCompletions.completedAt)
@@ -10365,28 +10176,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  // Feature-based Route Modules
-  // Auth routes (register, login, token refresh, profile)
-  app.use(authRouter);
-
-  // Member routes (CRUD, profile, NIN verification)
-  app.use(membersRouter);
-
-  // Election routes (elections, voting, candidates)
-  app.use(electionsRouter);
-
-  // Event routes (CRUD, RSVP, check-in)
-  app.use(eventsRouter);
-
-  // Knowledge routes (articles, FAQs, facts, quotes)
-  app.use(knowledgeRouter);
-
-  // News routes (posts, comments, likes)
-  app.use(newsRouter);
-
-  // Admin routes (member management, conversion settings, audit logs, etc.)
-  app.use(adminRouter);
-
   // Point Ledger & Purchase Routes
   app.use("/api/points", pointsRouter);
 
@@ -10421,62 +10210,18 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.patch("/api/parties/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const { name, abbreviation, color, chairman, founded, logoUrl, isActive } = req.body;
-      const updateData: any = {};
-      if (name !== undefined) updateData.name = name;
-      if (abbreviation !== undefined) updateData.abbreviation = abbreviation;
-      if (color !== undefined) updateData.color = color;
-      if (chairman !== undefined) updateData.chairman = chairman;
-      if (founded !== undefined) updateData.founded = founded;
-      if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
-      if (isActive !== undefined) updateData.isActive = isActive;
-
-      const [party] = await db.update(schema.parties)
-        .set(updateData)
-        .where(eq(schema.parties.id, req.params.id))
-        .returning();
-
-      if (!party) return res.status(404).json({ success: false, error: "Party not found" });
-      res.json({ success: true, data: party });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to update party" });
-    }
-  });
-
-  app.delete("/api/parties/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const [deleted] = await db.delete(schema.parties)
-        .where(eq(schema.parties.id, req.params.id))
-        .returning();
-      if (!deleted) return res.status(404).json({ success: false, error: "Party not found" });
-      res.json({ success: true, data: deleted });
-    } catch (error: any) {
-      if (error.code === "23503") {
-        return res.status(409).json({ success: false, error: "Cannot delete party - it has associated candidates or results" });
-      }
-      res.status(500).json({ success: false, error: "Failed to delete party" });
-    }
-  });
-
   app.get("/api/general-elections", async (req: Request, res: Response) => {
     try {
-      const { status, position, year, stateId } = req.query;
+      const { status, position, year } = req.query;
       let conditions: any[] = [];
       if (status) conditions.push(eq(schema.generalElections.status, status as any));
       if (position) conditions.push(eq(schema.generalElections.position, position as any));
       if (year) conditions.push(eq(schema.generalElections.electionYear, parseInt(year as string)));
-      if (stateId) conditions.push(eq(schema.generalElections.stateId, stateId as string));
 
       const elections = await db.query.generalElections.findMany({
         where: conditions.length > 0 ? and(...conditions) : undefined,
         with: {
           state: true,
-          lga: true,
-          ward: true,
-          senatorialDistrict: true,
-          federalConstituency: true,
           candidates: {
             with: { party: true },
           },
@@ -10489,94 +10234,12 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.get("/api/general-elections/my-elections", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const user = req.user!;
-      const { includeCompleted } = req.query;
-      const member = await db.query.members.findFirst({
-        where: eq(schema.members.userId, user.id),
-      });
-
-      if (!member) {
-        return res.status(404).json({ success: false, error: "Member profile not found" });
-      }
-
-      const lga = member.lgaId ? await db.query.lgas.findFirst({ where: eq(schema.lgas.id, member.lgaId) }) : null;
-      const state = member.stateId ? await db.query.states.findFirst({ where: eq(schema.states.id, member.stateId) }) : null;
-      const ward = member.wardId ? await db.query.wards.findFirst({ where: eq(schema.wards.id, member.wardId) }) : null;
-
-      const statusFilter = includeCompleted === "true"
-        ? undefined
-        : drizzleOr(
-            eq(schema.generalElections.status, "ongoing"),
-            eq(schema.generalElections.status, "upcoming")
-          );
-
-      const allActiveElections = await db.query.generalElections.findMany({
-        where: statusFilter,
-        with: {
-          state: true,
-          lga: true,
-          ward: true,
-          senatorialDistrict: true,
-          federalConstituency: true,
-          candidates: {
-            with: { party: true },
-          },
-        },
-        orderBy: asc(schema.generalElections.position),
-      });
-
-      const myElections = allActiveElections.filter(election => {
-        switch (election.position) {
-          case "presidential":
-            return true;
-          case "governorship":
-          case "state_assembly":
-            return state && election.stateId === state.id;
-          case "senatorial":
-            if (election.senatorialDistrictId && lga?.senatorialDistrictId) {
-              return election.senatorialDistrictId === lga.senatorialDistrictId;
-            }
-            return state && election.stateId === state.id;
-          case "house_of_reps":
-            if (election.federalConstituencyId && lga?.federalConstituencyId) {
-              return election.federalConstituencyId === lga.federalConstituencyId;
-            }
-            return state && election.stateId === state.id;
-          case "lga_chairman":
-            return lga && election.lgaId === lga.id;
-          case "councillorship":
-            return ward && election.wardId === ward.id;
-          default:
-            return state && election.stateId === state.id;
-        }
-      });
-
-      res.json({
-        success: true,
-        data: myElections,
-        userLocation: {
-          state: state?.name || null,
-          lga: lga?.name || null,
-          ward: ward?.name || null,
-          senatorialDistrict: lga?.senatorialDistrictId || null,
-          federalConstituency: lga?.federalConstituencyId || null,
-        },
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch user elections" });
-    }
-  });
-
   app.get("/api/general-elections/:id", async (req: Request, res: Response) => {
     try {
       const election = await db.query.generalElections.findFirst({
         where: eq(schema.generalElections.id, req.params.id),
         with: {
           state: true,
-          lga: true,
-          ward: true,
           candidates: {
             with: { party: true },
           },
@@ -10589,37 +10252,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.get("/api/senatorial-districts", async (req: Request, res: Response) => {
-    try {
-      const { stateId } = req.query;
-      const conditions: any[] = [];
-      if (stateId) conditions.push(eq(schema.senatorialDistricts.stateId, stateId as string));
-      const districts = await db.query.senatorialDistricts.findMany({
-        where: conditions.length > 0 ? and(...conditions) : undefined,
-        orderBy: asc(schema.senatorialDistricts.districtName),
-      });
-      res.json({ success: true, data: districts });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch senatorial districts" });
-    }
-  });
-
-  app.get("/api/federal-constituencies", async (req: Request, res: Response) => {
-    try {
-      const { stateId, senatorialDistrictId } = req.query;
-      const conditions: any[] = [];
-      if (stateId) conditions.push(eq(schema.federalConstituencies.stateId, stateId as string));
-      if (senatorialDistrictId) conditions.push(eq(schema.federalConstituencies.senatorialDistrictId, senatorialDistrictId as string));
-      const constituencies = await db.query.federalConstituencies.findMany({
-        where: conditions.length > 0 ? and(...conditions) : undefined,
-        orderBy: asc(schema.federalConstituencies.name),
-      });
-      res.json({ success: true, data: constituencies });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to fetch federal constituencies" });
-    }
-  });
-
   app.post("/api/general-elections", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
       const electionData = schema.insertGeneralElectionSchema.parse(req.body);
@@ -10627,204 +10259,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: election });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to create election" });
-    }
-  });
-
-  app.post("/api/general-elections/bulk-create", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const bulkSchema = z.object({
-        electionYear: z.number(),
-        electionDate: z.string(),
-        positions: z.array(z.enum(["presidential", "governorship", "senatorial", "house_of_reps", "state_assembly", "lga_chairman", "councillorship"])),
-        stateIds: z.array(z.string()).optional(),
-        status: z.enum(["upcoming", "ongoing", "completed", "cancelled"]).default("upcoming"),
-      });
-
-      const parsed = bulkSchema.parse(req.body);
-      const created: any[] = [];
-      const errors: any[] = [];
-      const electionDate = new Date(parsed.electionDate);
-
-      for (const position of parsed.positions) {
-        if (position === "presidential") {
-          try {
-            const existing = await db.query.generalElections.findFirst({
-              where: and(
-                eq(schema.generalElections.position, "presidential"),
-                eq(schema.generalElections.electionYear, parsed.electionYear)
-              )
-            });
-            if (!existing) {
-              const [e] = await db.insert(schema.generalElections).values({
-                title: `${parsed.electionYear} Presidential Election`,
-                electionYear: parsed.electionYear,
-                electionDate,
-                position: "presidential",
-                status: parsed.status,
-              }).returning();
-              created.push(e);
-            }
-          } catch (err: any) { errors.push({ position, error: err.message }); }
-          continue;
-        }
-
-        const targetStates = parsed.stateIds?.length
-          ? await db.query.states.findMany({ where: sql`${schema.states.id} IN (${sql.join(parsed.stateIds.map(id => sql`${id}`), sql`, `)})` })
-          : await db.query.states.findMany({ orderBy: asc(schema.states.name) });
-
-        for (const state of targetStates) {
-          try {
-            if (position === "governorship") {
-              if (state.name === "Federal Capital Territory") continue;
-              const existing = await db.query.generalElections.findFirst({
-                where: and(
-                  eq(schema.generalElections.position, "governorship"),
-                  eq(schema.generalElections.electionYear, parsed.electionYear),
-                  eq(schema.generalElections.stateId, state.id)
-                )
-              });
-              if (!existing) {
-                const [e] = await db.insert(schema.generalElections).values({
-                  title: `${parsed.electionYear} ${state.name} Governorship Election`,
-                  electionYear: parsed.electionYear,
-                  electionDate,
-                  position: "governorship",
-                  stateId: state.id,
-                  status: parsed.status,
-                }).returning();
-                created.push(e);
-              }
-            } else if (position === "senatorial") {
-              const districts = await db.query.senatorialDistricts.findMany({
-                where: eq(schema.senatorialDistricts.stateId, state.id)
-              });
-              for (const district of districts) {
-                const existing = await db.query.generalElections.findFirst({
-                  where: and(
-                    eq(schema.generalElections.position, "senatorial"),
-                    eq(schema.generalElections.electionYear, parsed.electionYear),
-                    eq(schema.generalElections.senatorialDistrictId, district.id)
-                  )
-                });
-                if (!existing) {
-                  const [e] = await db.insert(schema.generalElections).values({
-                    title: `${parsed.electionYear} ${district.districtName} Senatorial Election`,
-                    electionYear: parsed.electionYear,
-                    electionDate,
-                    position: "senatorial",
-                    stateId: state.id,
-                    senatorialDistrictId: district.id,
-                    status: parsed.status,
-                  }).returning();
-                  created.push(e);
-                }
-              }
-            } else if (position === "house_of_reps") {
-              const constituencies = await db.query.federalConstituencies.findMany({
-                where: eq(schema.federalConstituencies.stateId, state.id)
-              });
-              for (const fc of constituencies) {
-                const existing = await db.query.generalElections.findFirst({
-                  where: and(
-                    eq(schema.generalElections.position, "house_of_reps"),
-                    eq(schema.generalElections.electionYear, parsed.electionYear),
-                    eq(schema.generalElections.federalConstituencyId, fc.id)
-                  )
-                });
-                if (!existing) {
-                  const [e] = await db.insert(schema.generalElections).values({
-                    title: `${parsed.electionYear} ${fc.name} Federal Constituency`,
-                    electionYear: parsed.electionYear,
-                    electionDate,
-                    position: "house_of_reps",
-                    stateId: state.id,
-                    federalConstituencyId: fc.id,
-                    senatorialDistrictId: fc.senatorialDistrictId,
-                    constituency: fc.name,
-                    status: parsed.status,
-                  }).returning();
-                  created.push(e);
-                }
-              }
-            } else if (position === "state_assembly") {
-              const existing = await db.query.generalElections.findFirst({
-                where: and(
-                  eq(schema.generalElections.position, "state_assembly"),
-                  eq(schema.generalElections.electionYear, parsed.electionYear),
-                  eq(schema.generalElections.stateId, state.id)
-                )
-              });
-              if (!existing) {
-                const [e] = await db.insert(schema.generalElections).values({
-                  title: `${parsed.electionYear} ${state.name} State House of Assembly`,
-                  electionYear: parsed.electionYear,
-                  electionDate,
-                  position: "state_assembly",
-                  stateId: state.id,
-                  status: parsed.status,
-                }).returning();
-                created.push(e);
-              }
-            } else if (position === "lga_chairman") {
-              const lgasInState = await db.query.lgas.findMany({
-                where: eq(schema.lgas.stateId, state.id)
-              });
-              for (const lga of lgasInState) {
-                const existing = await db.query.generalElections.findFirst({
-                  where: and(
-                    eq(schema.generalElections.position, "lga_chairman"),
-                    eq(schema.generalElections.electionYear, parsed.electionYear),
-                    eq(schema.generalElections.lgaId, lga.id)
-                  )
-                });
-                if (!existing) {
-                  const [e] = await db.insert(schema.generalElections).values({
-                    title: `${parsed.electionYear} ${lga.name} ${state.name === "Federal Capital Territory" ? "Area Council" : "LGA"} Chairmanship`,
-                    electionYear: parsed.electionYear,
-                    electionDate,
-                    position: "lga_chairman",
-                    stateId: state.id,
-                    lgaId: lga.id,
-                    status: parsed.status,
-                  }).returning();
-                  created.push(e);
-                }
-              }
-            }
-          } catch (err: any) {
-            errors.push({ position, state: state.name, error: err.message });
-          }
-        }
-      }
-
-      res.json({
-        success: true,
-        data: {
-          created: created.length,
-          errors: errors.length,
-          elections: created,
-          errorDetails: errors,
-        }
-      });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to bulk create elections" });
-    }
-  });
-
-  app.patch("/api/general-elections/bulk-status", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const { electionIds, status } = req.body;
-      if (!electionIds?.length || !status) {
-        return res.status(400).json({ success: false, error: "electionIds and status required" });
-      }
-      const updated = await db.update(schema.generalElections)
-        .set({ status, updatedAt: new Date() })
-        .where(sql`${schema.generalElections.id} IN (${sql.join(electionIds.map((id: string) => sql`${id}`), sql`, `)})`)
-        .returning();
-      io.emit("general-elections:bulk-updated", { status, count: updated.length });
-      res.json({ success: true, data: { updated: updated.length } });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message });
     }
   });
 
@@ -10841,18 +10275,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.delete("/api/general-elections/:id", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      await db.delete(schema.generalElectionCandidates).where(eq(schema.generalElectionCandidates.electionId, req.params.id));
-      await db.delete(schema.pollingUnitResults).where(eq(schema.pollingUnitResults.electionId, req.params.id));
-      const [deleted] = await db.delete(schema.generalElections).where(eq(schema.generalElections.id, req.params.id)).returning();
-      if (!deleted) return res.status(404).json({ success: false, error: "Election not found" });
-      res.json({ success: true, data: deleted });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message });
-    }
-  });
-
   app.post("/api/general-elections/:id/candidates", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
     try {
       const candidateData = schema.insertGeneralElectionCandidateSchema.parse({
@@ -10863,49 +10285,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
       res.json({ success: true, data: candidate });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to add candidate" });
-    }
-  });
-
-  app.patch("/api/general-elections/:id/candidates/:candidateId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const { name, runningMate, imageUrl, partyId } = req.body;
-      const updateData: any = {};
-      if (name !== undefined) updateData.name = name;
-      if (runningMate !== undefined) updateData.runningMate = runningMate;
-      if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
-      if (partyId !== undefined) updateData.partyId = partyId;
-
-      const [candidate] = await db.update(schema.generalElectionCandidates)
-        .set(updateData)
-        .where(and(
-          eq(schema.generalElectionCandidates.id, req.params.candidateId),
-          eq(schema.generalElectionCandidates.electionId, req.params.id)
-        ))
-        .returning();
-
-      if (!candidate) return res.status(404).json({ success: false, error: "Candidate not found" });
-      res.json({ success: true, data: candidate });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to update candidate" });
-    }
-  });
-
-  app.delete("/api/general-elections/:id/candidates/:candidateId", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response) => {
-    try {
-      const [deleted] = await db.delete(schema.generalElectionCandidates)
-        .where(and(
-          eq(schema.generalElectionCandidates.id, req.params.candidateId),
-          eq(schema.generalElectionCandidates.electionId, req.params.id)
-        ))
-        .returning();
-
-      if (!deleted) return res.status(404).json({ success: false, error: "Candidate not found" });
-      res.json({ success: true, data: deleted });
-    } catch (error: any) {
-      if (error.code === "23503") {
-        return res.status(409).json({ success: false, error: "Cannot delete candidate - results exist for this candidate" });
-      }
-      res.status(500).json({ success: false, error: "Failed to delete candidate" });
     }
   });
 
@@ -11214,356 +10593,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  // ============================================================
-  // BATCH AGENT GENERATION - Create agents for polling units in bulk
-  // ============================================================
-
-  app.post("/api/admin/polling-agents/batch", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
-    try {
-      const batchSchema = z.object({
-        stateId: z.string().optional(),
-        lgaId: z.string().optional(),
-        wardId: z.string().optional(),
-        electionId: z.string().optional(),
-        defaultPassword: z.string().min(6).default("APC2026!"),
-      });
-
-      const parsed = batchSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ success: false, error: "Invalid batch parameters", details: parsed.error.issues });
-      }
-
-      const { stateId, lgaId, wardId, electionId, defaultPassword } = parsed.data;
-
-      if (!stateId && !lgaId && !wardId) {
-        return res.status(400).json({ success: false, error: "At least one filter (stateId, lgaId, or wardId) is required" });
-      }
-
-      // Get polling units matching the filter
-      let pollingUnitQuery = sql`
-        SELECT pu.id, pu.name, pu.unit_code, pu.ward_id, w.name as ward_name, w.id as w_id, l.name as lga_name, s.name as state_name
-        FROM polling_units pu
-        JOIN wards w ON pu.ward_id = w.id
-        JOIN lgas l ON w.lga_id = l.id
-        JOIN states s ON l.state_id = s.id
-        WHERE pu.status = 'active'
-      `;
-
-      if (wardId) {
-        pollingUnitQuery = sql`${pollingUnitQuery} AND pu.ward_id = ${wardId}`;
-      } else if (lgaId) {
-        pollingUnitQuery = sql`${pollingUnitQuery} AND l.id = ${lgaId}`;
-      } else if (stateId) {
-        pollingUnitQuery = sql`${pollingUnitQuery} AND s.id = ${stateId}`;
-      }
-
-      pollingUnitQuery = sql`${pollingUnitQuery} ORDER BY s.name, l.name, w.name, pu.name`;
-
-      const unitsResult = await db.execute(pollingUnitQuery);
-      const units = unitsResult.rows as any[];
-
-      if (units.length === 0) {
-        return res.status(404).json({ success: false, error: "No polling units found matching the filter" });
-      }
-
-      const createdAgents: any[] = [];
-      const errors: any[] = [];
-
-      for (const unit of units) {
-        try {
-          // Check if agent already exists for this polling unit + election
-          const existingAgent = await db.query.pollingAgents.findFirst({
-            where: electionId
-              ? and(
-                  eq(schema.pollingAgents.pollingUnitId, unit.id),
-                  eq(schema.pollingAgents.electionId, electionId)
-                )
-              : eq(schema.pollingAgents.pollingUnitId, unit.id),
-          });
-
-          if (existingAgent) {
-            errors.push({ pollingUnitId: unit.id, unitCode: unit.unit_code, error: "Agent already assigned" });
-            continue;
-          }
-
-          // Generate user credentials
-          const emailSlug = `agent_${unit.unit_code.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-          const email = `${emailSlug}@apcconnect.agent`;
-          const agentCode = `AGT-${unit.unit_code}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-          const agentPin = Math.floor(1000 + Math.random() * 9000).toString();
-
-          // Check if user already exists
-          let existingUser = await db.query.users.findFirst({
-            where: eq(schema.users.email, email),
-          });
-
-          let userId: string;
-          if (existingUser) {
-            userId = existingUser.id;
-          } else {
-            // Create user
-            const bcrypt = await import("bcrypt");
-            const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-            const [newUser] = await db.insert(schema.users).values({
-              email,
-              password: hashedPassword,
-              firstName: `Agent`,
-              lastName: unit.unit_code,
-              phone: "",
-              role: "member",
-            }).returning();
-            userId = newUser.id;
-          }
-
-          // Check if member exists for this user
-          let existingMember = await db.query.members.findFirst({
-            where: eq(schema.members.userId, userId),
-          });
-
-          let memberId: string;
-          if (existingMember) {
-            memberId = existingMember.id;
-          } else {
-            // Create member
-            const memberCode = `APC-AGT-${unit.unit_code}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-            const [newMember] = await db.insert(schema.members).values({
-              userId,
-              memberId: memberCode,
-              wardId: unit.ward_id,
-              status: "active",
-              joinDate: new Date(),
-            }).returning();
-            memberId = newMember.id;
-          }
-
-          // Create polling agent
-          const [agent] = await db.insert(schema.pollingAgents).values({
-            memberId,
-            pollingUnitId: unit.id,
-            electionId: electionId || null,
-            agentCode,
-            agentPin,
-            assignedBy: req.user!.id,
-            status: "assigned",
-            notes: `Batch generated for ${unit.state_name} > ${unit.lga_name} > ${unit.ward_name}`,
-          }).returning();
-
-          createdAgents.push({
-            agentId: agent.id,
-            agentCode,
-            agentPin,
-            email,
-            password: defaultPassword,
-            pollingUnitId: unit.id,
-            pollingUnitCode: unit.unit_code,
-            pollingUnitName: unit.name,
-            wardName: unit.ward_name,
-            lgaName: unit.lga_name,
-            stateName: unit.state_name,
-          });
-        } catch (err: any) {
-          errors.push({ pollingUnitId: unit.id, unitCode: unit.unit_code, error: err.message });
-        }
-      }
-
-      res.json({
-        success: true,
-        data: {
-          totalPollingUnits: units.length,
-          agentsCreated: createdAgents.length,
-          errors: errors.length,
-          agents: createdAgents,
-          errorDetails: errors,
-        }
-      });
-    } catch (error: any) {
-      console.error("Batch agent creation error:", error);
-      res.status(500).json({ success: false, error: error.message || "Failed to batch create agents" });
-    }
-  });
-
-  // Export agents as CSV
-  app.get("/api/admin/polling-agents/export", requireAuth, requireRole("admin", "coordinator"), async (req: AuthRequest, res: Response) => {
-    try {
-      const { stateId, lgaId, wardId, electionId } = req.query;
-
-      const agents = await db.execute(sql`
-        SELECT
-          pa.agent_code,
-          pa.agent_pin,
-          pa.status,
-          pa.assigned_at,
-          pa.checked_in_at,
-          u.first_name || ' ' || u.last_name as agent_name,
-          u.email as agent_email,
-          u.phone as agent_phone,
-          m.member_id as member_code,
-          pu.name as polling_unit_name,
-          pu.unit_code as polling_unit_code,
-          w.name as ward_name,
-          l.name as lga_name,
-          s.name as state_name,
-          ge.title as election_title
-        FROM polling_agents pa
-        JOIN members m ON pa.member_id = m.id
-        JOIN users u ON m.user_id = u.id
-        JOIN polling_units pu ON pa.polling_unit_id = pu.id
-        JOIN wards w ON pu.ward_id = w.id
-        JOIN lgas l ON w.lga_id = l.id
-        JOIN states s ON l.state_id = s.id
-        LEFT JOIN general_elections ge ON pa.election_id = ge.id
-        WHERE pa.status != 'revoked'
-        ${stateId ? sql`AND s.id = ${stateId as string}` : sql``}
-        ${lgaId ? sql`AND l.id = ${lgaId as string}` : sql``}
-        ${wardId ? sql`AND w.id = ${wardId as string}` : sql``}
-        ${electionId ? sql`AND pa.election_id = ${electionId as string}` : sql``}
-        ORDER BY s.name, l.name, w.name, pu.name
-      `);
-
-      const rows = agents.rows as any[];
-
-      // Build CSV
-      const headers = [
-        "Agent Code", "Agent PIN", "Status", "Agent Name", "Email", "Phone",
-        "Member Code", "Polling Unit", "Unit Code", "Ward", "LGA", "State", "Election",
-        "Assigned At", "Checked In At"
-      ];
-      const csvRows = [headers.join(",")];
-
-      for (const row of rows) {
-        csvRows.push([
-          row.agent_code,
-          row.agent_pin,
-          row.status,
-          `"${row.agent_name || ''}"`,
-          row.agent_email || '',
-          row.agent_phone || '',
-          row.member_code || '',
-          `"${row.polling_unit_name || ''}"`,
-          row.polling_unit_code || '',
-          `"${row.ward_name || ''}"`,
-          `"${row.lga_name || ''}"`,
-          `"${row.state_name || ''}"`,
-          `"${row.election_title || ''}"`,
-          row.assigned_at || '',
-          row.checked_in_at || '',
-        ].join(","));
-      }
-
-      res.setHeader("Content-Type", "text/csv");
-      res.setHeader("Content-Disposition", `attachment; filename="polling-agents-${new Date().toISOString().split('T')[0]}.csv"`);
-      res.send(csvRows.join("\n"));
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: "Failed to export agents" });
-    }
-  });
-
-  // Import agents from CSV
-  app.post("/api/admin/polling-agents/import", requireAuth, requireRole("admin", "coordinator"), upload.single("file"), async (req: AuthRequest, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ success: false, error: "CSV file is required" });
-      }
-
-      const csvContent = req.file.buffer.toString("utf-8");
-      const lines = csvContent.split("\n").filter(l => l.trim());
-      if (lines.length < 2) {
-        return res.status(400).json({ success: false, error: "CSV file must have a header row and at least one data row" });
-      }
-
-      const header = lines[0].toLowerCase();
-      // Expected columns: polling_unit_code, member_id (optional), election_id (optional), first_name, last_name, phone
-      const rows = lines.slice(1);
-      const results: any[] = [];
-      const errors: any[] = [];
-      const defaultPassword = (req.body.defaultPassword as string) || "APC2026!";
-
-      for (let i = 0; i < rows.length; i++) {
-        try {
-          const cols = rows[i].split(",").map(c => c.replace(/^"|"$/g, "").trim());
-          const pollingUnitCode = cols[0];
-          const firstName = cols[1] || "Agent";
-          const lastName = cols[2] || pollingUnitCode;
-          const phone = cols[3] || "";
-          const electionId = cols[4] || null;
-
-          if (!pollingUnitCode) {
-            errors.push({ row: i + 2, error: "Missing polling unit code" });
-            continue;
-          }
-
-          // Find polling unit
-          const pu = await db.query.pollingUnits.findFirst({
-            where: eq(schema.pollingUnits.unitCode, pollingUnitCode),
-          });
-          if (!pu) {
-            errors.push({ row: i + 2, error: `Polling unit not found: ${pollingUnitCode}` });
-            continue;
-          }
-
-          // Generate credentials
-          const emailSlug = `agent_${pollingUnitCode.toLowerCase().replace(/[^a-z0-9]/g, '')}_${i}`;
-          const email = `${emailSlug}@apcconnect.agent`;
-          const agentCode = `AGT-${pollingUnitCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-          const agentPin = Math.floor(1000 + Math.random() * 9000).toString();
-
-          const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-
-          const [user] = await db.insert(schema.users).values({
-            email,
-            password: hashedPassword,
-            firstName,
-            lastName,
-            phone,
-            role: "member",
-          }).returning();
-
-          const memberCode = `APC-AGT-${pollingUnitCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-          const [member] = await db.insert(schema.members).values({
-            userId: user.id,
-            memberId: memberCode,
-            wardId: pu.wardId,
-            status: "active",
-            joinDate: new Date(),
-          }).returning();
-
-          const [agent] = await db.insert(schema.pollingAgents).values({
-            memberId: member.id,
-            pollingUnitId: pu.id,
-            electionId,
-            agentCode,
-            agentPin,
-            assignedBy: req.user!.id,
-            status: "assigned",
-            notes: `Imported from CSV`,
-          }).returning();
-
-          results.push({
-            row: i + 2,
-            agentCode,
-            agentPin,
-            email,
-            pollingUnitCode,
-          });
-        } catch (err: any) {
-          errors.push({ row: i + 2, error: err.message });
-        }
-      }
-
-      res.json({
-        success: true,
-        data: {
-          imported: results.length,
-          errors: errors.length,
-          agents: results,
-          errorDetails: errors,
-        }
-      });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message || "Failed to import agents" });
-    }
-  });
-
   app.post("/api/agent/login", apiLimiter, async (req: Request, res: Response) => {
     try {
       const { agentCode, agentPin } = req.body;
@@ -11612,34 +10641,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
         orderBy: asc(schema.generalElections.position),
       });
 
-      const applicableElections = allActiveElections.filter(election => {
-        switch (election.position) {
-          case "presidential":
-            return true;
-          case "governorship":
-          case "state_assembly":
-            return state && election.stateId === state.id;
-          case "senatorial":
-            if (election.senatorialDistrictId && lga?.senatorialDistrictId) {
-              return election.senatorialDistrictId === lga.senatorialDistrictId;
-            }
-            return state && election.stateId === state.id;
-          case "house_of_reps":
-            if (election.federalConstituencyId && lga?.federalConstituencyId) {
-              return election.federalConstituencyId === lga.federalConstituencyId;
-            }
-            return state && election.stateId === state.id;
-          case "lga_chairman":
-            return lga && election.lgaId === lga.id;
-          case "councillorship":
-            return ward && election.wardId === ward.id;
-          default:
-            return state && election.stateId === state.id;
-        }
-      });
-
       const electionsWithCandidates = await Promise.all(
-        applicableElections.map(async (election) => {
+        allActiveElections.map(async (election) => {
           const candidates = await db.query.generalElectionCandidates.findMany({
             where: eq(schema.generalElectionCandidates.electionId, election.id),
             with: { party: true }
@@ -11847,7 +10850,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
       if (!agent) {
         return res.status(401).json({ success: false, error: "Invalid agent credentials" });
       }
-
       if (agent.status === "revoked") {
         return res.status(403).json({ success: false, error: "Agent access has been revoked" });
       }
@@ -11952,7 +10954,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
       if (!agent) {
         return res.status(401).json({ success: false, error: "Invalid agent credentials" });
       }
-
       if (agent.status === "revoked") {
         return res.status(403).json({ success: false, error: "Agent access has been revoked" });
       }
@@ -11997,9 +10998,9 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.post("/api/agent/result-sheets", apiLimiter, async (req: Request, res: Response) => {
+  app.get("/api/agent/result-sheets", apiLimiter, async (req: Request, res: Response) => {
     try {
-      const { agentCode, agentPin } = req.body;
+      const { agentCode, agentPin } = req.query;
 
       if (!agentCode || !agentPin) {
         return res.status(400).json({ success: false, error: "Agent credentials required" });
@@ -12007,8 +11008,8 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       const agent = await db.query.pollingAgents.findFirst({
         where: and(
-          eq(schema.pollingAgents.agentCode, agentCode.toUpperCase()),
-          eq(schema.pollingAgents.agentPin, agentPin)
+          eq(schema.pollingAgents.agentCode, (agentCode as string).toUpperCase()),
+          eq(schema.pollingAgents.agentPin, agentPin as string)
         ),
       });
 
@@ -12182,7 +11183,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
           p.name as "partyName",
           p.abbreviation as "partyAbbreviation",
           p.color as "partyColor",
-          gec.name as "candidateName",
+          gec.candidate_name as "candidateName",
           ge.title as "electionTitle",
           CASE WHEN pur.reported_by IS NOT NULL THEN
             json_build_object(
@@ -12375,7 +11376,7 @@ Be friendly, informative, and politically neutral when discussing governance. En
     }
   });
 
-  app.post("/api/agent/report-incident", apiLimiter, upload.array("images", 5), async (req: Request, res: Response) => {
+  app.post("/api/agent/report-incident", apiLimiter, async (req: Request, res: Response) => {
     try {
       const { agentCode, agentPin, severity, description, location, latitude, longitude } = req.body;
 
@@ -12404,27 +11405,9 @@ Be friendly, informative, and politically neutral when discussing governance. En
         status: "reported",
       }).returning();
 
-      // Handle uploaded images
-      const files = req.files as Express.Multer.File[] | undefined;
-      const mediaRecords: any[] = [];
+      io.emit("incident:new", incident);
 
-      if (files && files.length > 0) {
-        for (const file of files) {
-          const base64Data = file.buffer.toString("base64");
-          const mediaUrl = `data:${file.mimetype};base64,${base64Data}`;
-
-          const [media] = await db.insert(schema.incidentMedia).values({
-            incidentId: incident.id,
-            mediaUrl,
-            mediaType: file.mimetype.startsWith("video") ? "video" : "image",
-          }).returning();
-          mediaRecords.push(media);
-        }
-      }
-
-      io.emit("incident:new", { ...incident, media: mediaRecords });
-
-      res.json({ success: true, data: { ...incident, media: mediaRecords } });
+      res.json({ success: true, data: incident });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || "Failed to report incident" });
     }
@@ -12451,7 +11434,6 @@ Be friendly, informative, and politically neutral when discussing governance. En
 
       const incidents = await db.query.incidents.findMany({
         where: eq(schema.incidents.reporterId, agent.memberId),
-        with: { media: true },
         orderBy: desc(schema.incidents.createdAt),
       });
 

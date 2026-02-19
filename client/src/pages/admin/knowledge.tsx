@@ -822,11 +822,10 @@ export default function AdminKnowledge() {
           </DialogHeader>
           <Form {...faqForm}>
             <form onSubmit={faqForm.handleSubmit((data) => {
-              const submitData = { ...data, categoryId: data.categoryId === "none" ? null : data.categoryId };
               if (editingItem) {
-                updateFaqMutation.mutate({ id: editingItem.id, ...submitData });
+                updateFaqMutation.mutate({ id: editingItem.id, ...data });
               } else {
-                createFaqMutation.mutate(submitData);
+                createFaqMutation.mutate(data);
               }
             })} className="space-y-4">
               <FormField
@@ -868,7 +867,7 @@ export default function AdminKnowledge() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="">None</SelectItem>
                         {categories.map((cat: any) => (
                           <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}

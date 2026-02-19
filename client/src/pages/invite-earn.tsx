@@ -276,7 +276,7 @@ export default function InviteEarn() {
                   >
                     <div className="flex-1">
                       <p className="font-medium">
-                        {referral.referred?.user?.firstName || "Unknown"} {referral.referred?.user?.lastName || ""}
+                        {referral.referred.user.firstName} {referral.referred.user.lastName}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {referral.referred.memberId}

@@ -52,8 +52,7 @@ interface Event {
   date: string;
   location: string;
   maxAttendees: number | null;
-  rsvpCount?: number;
-  attendedCount?: number;
+  attendeeCount?: number;
   points: number;
   coordinates?: { lat: number; lng: number } | null;
   createdAt: string;
@@ -138,7 +137,7 @@ export default function AdminEvents() {
       header: "Attendees",
       render: (event) => (
         <span className="text-sm font-mono" data-testid={`text-attendees-${event.id}`}>
-          {event.rsvpCount || 0}
+          {event.attendeeCount || 0}
           {event.maxAttendees ? ` / ${event.maxAttendees}` : ""}
         </span>
       ),

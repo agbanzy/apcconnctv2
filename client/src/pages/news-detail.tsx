@@ -163,7 +163,7 @@ export default function NewsDetail() {
   };
 
   const renderComment = (comment: CommentWithMember, isReply = false) => {
-    const initials = `${(comment.member?.user?.firstName || "?")[0]}${(comment.member?.user?.lastName || "?")[0]}`;
+    const initials = `${comment.member.user.firstName[0]}${comment.member.user.lastName[0]}`;
     const canDelete = member && (comment.memberId === member.id || user?.role === "admin");
 
     return (
@@ -176,7 +176,7 @@ export default function NewsDetail() {
             <div className="bg-muted p-3 rounded-lg">
               <div className="flex items-center justify-between mb-1">
                 <span className="font-medium text-sm" data-testid={`comment-author-${comment.id}`}>
-                  {comment.member?.user?.firstName || "Unknown"} {comment.member?.user?.lastName || ""}
+                  {comment.member.user.firstName} {comment.member.user.lastName}
                 </span>
                 <span className="text-xs text-muted-foreground" data-testid={`comment-time-${comment.id}`}>
                   {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}

@@ -1,16 +1,13 @@
+import Constants from 'expo-constants';
 import { storage } from './storage';
 
-// API URL resolution: EXPO_PUBLIC_API_URL is the canonical source.
-// localhost fallback is ONLY allowed in __DEV__ mode.
-const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL || '';
+const rawApiUrl =
+  process.env.EXPO_PUBLIC_API_URL ||
+  Constants.expoConfig?.extra?.apiUrl ||
+  process.env.API_URL ||
+  'http://localhost:5000';
 
-if (!rawApiUrl && typeof __DEV__ !== 'undefined' && !__DEV__) {
-  console.error(
-    'CRITICAL: EXPO_PUBLIC_API_URL is not set. The mobile app will not be able to connect to the server in production.'
-  );
-}
-
-const API_URL = (rawApiUrl || (typeof __DEV__ !== 'undefined' && __DEV__ ? 'http://localhost:5000' : '')).replace(/\/$/, '');
+const API_URL = rawApiUrl.replace(/\/$/, '');
 const DEFAULT_TIMEOUT_MS = 15000;
 
 export interface ApiResponse<T = any> {

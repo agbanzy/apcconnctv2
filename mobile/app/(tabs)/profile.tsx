@@ -114,7 +114,6 @@ export default function ProfileScreen() {
   const updateProfileMutation = useMutation({
     mutationFn: async (data: typeof editData) => {
       const response = await api.patch('/api/profile', data);
-      if (!response.success) throw new Error(response.error || 'Operation failed');
       return response.data;
     },
     onSuccess: async () => {
@@ -131,7 +130,6 @@ export default function ProfileScreen() {
   const verifyNinMutation = useMutation({
     mutationFn: async (data: typeof ninData) => {
       const response = await api.post('/api/profile/verify-nin', data);
-      if (!response.success) throw new Error(response.error || 'Operation failed');
       return response.data;
     },
     onSuccess: async () => {

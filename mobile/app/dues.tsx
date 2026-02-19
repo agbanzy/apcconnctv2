@@ -7,7 +7,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { PaystackPayment } from '@/components/PaystackPayment';
 import { api } from '@/lib/api';
 
 interface DuesRecord {
@@ -47,20 +46,6 @@ export default function DuesScreen() {
   const [recurringFrequency, setRecurringFrequency] = useState('monthly');
   const [showAmountPicker, setShowAmountPicker] = useState(false);
   const [showFreqPicker, setShowFreqPicker] = useState(false);
-  const [paystackVisible, setPaystackVisible] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentReference, setPaymentReference] = useState('');
-  const [currentDueId, setCurrentDueId] = useState<string | null>(null);
-  const paystackPublicKey = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
-
-  const { data: userProfile } = useQuery({
-    queryKey: ['/api/profile'],
-    queryFn: async () => {
-      const response = await api.get('/api/profile');
-      if (!response.success) throw new Error(response.error || 'Failed to load profile');
-      return response.data;
-    },
-  });
 
   const { data: duesData, isLoading, isError, error, refetch: refetchDues } = useQuery({
     queryKey: ['/api/dues'],
@@ -80,66 +65,32 @@ export default function DuesScreen() {
     },
   });
 
-  const initializeDuePaymentMutation = useMutation({
-    mutationFn: async (params: { amount: number; dueId?: string }) => {
-      const response = await api.post('/api/dues/pay/initialize', params);
-      if (!response.success) throw new Error(response.error || 'Failed to initialize payment');
+  const checkoutMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const response = await api.post('/api/dues/checkout', { amount });
+      if (!response.success) throw new Error(response.error || 'Checkout failed');
       return response.data;
     },
     onSuccess: (data: any) => {
-      if (data?.reference) {
-        setPaymentReference(data.reference);
-        setPaystackVisible(true);
-      } else {
-        Alert.alert('Error', 'Failed to get payment reference');
+      if (data?.authorization_url) {
+        Alert.alert('Payment', 'Payment link generated. Complete payment in your browser.');
       }
     },
     onError: (err: Error) => Alert.alert('Error', err.message),
   });
 
-  const verifyDuePaymentMutation = useMutation({
-    mutationFn: async (reference: string) => {
-      const response = await api.post('/api/dues/pay/verify', { reference });
-      if (!response.success) throw new Error(response.error || 'Failed to verify payment');
-      return response.data;
-    },
-    onSuccess: () => {
-      Alert.alert('Success', 'Payment confirmed!');
-      setPaymentAmount(0);
-      setCurrentDueId(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/dues'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dues/recurring'] });
-    },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
-
-  const initializeRecurringMutation = useMutation({
+  const setupRecurringMutation = useMutation({
     mutationFn: async (params: { amount: number; frequency: string }) => {
-      const response = await api.post('/api/dues/recurring/setup/initialize', params);
+      const response = await api.post('/api/dues/recurring/setup', params);
       if (!response.success) throw new Error(response.error || 'Setup failed');
       return response.data;
     },
     onSuccess: (data: any) => {
-      if (data?.reference) {
-        setPaymentReference(data.reference);
-        setPaymentAmount(data.amount || 0);
-        setPaystackVisible(true);
+      if (data?.authorization_url) {
+        Alert.alert('Setup', 'Complete recurring payment setup in your browser.');
       } else {
-        Alert.alert('Error', 'Failed to initialize recurring setup');
+        Alert.alert('Success', 'Recurring payment has been set up!');
       }
-    },
-    onError: (err: Error) => Alert.alert('Error', err.message),
-  });
-
-  const verifyRecurringMutation = useMutation({
-    mutationFn: async (reference: string) => {
-      const response = await api.post('/api/dues/recurring/setup/verify', { reference });
-      if (!response.success) throw new Error(response.error || 'Setup failed');
-      return response.data;
-    },
-    onSuccess: () => {
-      Alert.alert('Success', 'Recurring payment has been set up!');
-      setPaymentAmount(0);
       queryClient.invalidateQueries({ queryKey: ['/api/dues/recurring'] });
     },
     onError: (err: Error) => Alert.alert('Error', err.message),
@@ -298,9 +249,9 @@ export default function DuesScreen() {
           </TouchableOpacity>
 
           <Button
-            title={initializeRecurringMutation.isPending ? 'Setting up...' : 'Setup Recurring Payments'}
-            onPress={() => initializeRecurringMutation.mutate({ amount: recurringAmount, frequency: recurringFrequency })}
-            loading={initializeRecurringMutation.isPending}
+            title={setupRecurringMutation.isPending ? 'Setting up...' : 'Setup Recurring Payments'}
+            onPress={() => setupRecurringMutation.mutate({ amount: recurringAmount, frequency: recurringFrequency })}
+            loading={setupRecurringMutation.isPending}
             style={{ marginTop: 16 }}
           />
         </Card>
@@ -323,12 +274,8 @@ export default function DuesScreen() {
                 </View>
                 <Button
                   title="Pay"
-                  onPress={() => {
-                    setPaymentAmount(parseFloat(due.amount));
-                    setCurrentDueId(due.id);
-                    initializeDuePaymentMutation.mutate({ amount: parseFloat(due.amount), dueId: due.id });
-                  }}
-                  loading={initializeDuePaymentMutation.isPending}
+                  onPress={() => checkoutMutation.mutate(parseFloat(due.amount))}
+                  loading={checkoutMutation.isPending}
                   style={{ paddingHorizontal: 20 }}
                 />
               </View>
@@ -405,38 +352,6 @@ export default function DuesScreen() {
           </View>
         </View>
       )}
-
-      <PaystackPayment
-        visible={paystackVisible}
-        amount={paymentAmount}
-        email={userProfile?.user?.email || ''}
-        reference={paymentReference}
-        publicKey={paystackPublicKey}
-        metadata={{
-          dueId: currentDueId,
-          type: currentDueId ? 'due_payment' : 'recurring_setup',
-        }}
-        onSuccess={(response) => {
-          setPaystackVisible(false);
-          if (response.reference) {
-            if (currentDueId) {
-              verifyDuePaymentMutation.mutate(response.reference);
-            } else {
-              verifyRecurringMutation.mutate(response.reference);
-            }
-          }
-        }}
-        onCancel={() => {
-          setPaystackVisible(false);
-          setPaymentAmount(0);
-          setCurrentDueId(null);
-          Alert.alert('Cancelled', 'Payment was cancelled');
-        }}
-        onError={(error) => {
-          setPaystackVisible(false);
-          Alert.alert('Payment Error', error);
-        }}
-      />
     </ScrollView>
   );
 }

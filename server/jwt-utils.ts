@@ -2,15 +2,12 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+
 if (!process.env.JWT_SECRET) {
-  console.error("\n" + "=".repeat(80));
-  console.error("CRITICAL: JWT_SECRET environment variable is not set.");
-  console.error("=".repeat(80));
-  console.error("Generate one with: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"");
-  console.error("Then set JWT_SECRET in your .env file or environment.\n");
-  throw new Error("JWT_SECRET environment variable is required. Cannot start without it.");
+  console.warn("\n⚠️  WARNING: JWT_SECRET not set in environment. Using generated secret.");
+  console.warn("   Set JWT_SECRET in .env for production use.\n");
 }
-const JWT_SECRET = process.env.JWT_SECRET;
 
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";

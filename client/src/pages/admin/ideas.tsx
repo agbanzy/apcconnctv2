@@ -120,7 +120,7 @@ export default function AdminIdeas() {
       ...filteredIdeas.map((idea) => [
         idea.id,
         idea.title,
-        `${idea.member?.user?.firstName || "Unknown"} ${idea.member?.user?.lastName || ""}`,
+        `${idea.member.user.firstName} ${idea.member.user.lastName}`,
         idea.category,
         idea.status,
         idea.votesCount,
@@ -332,7 +332,7 @@ export default function AdminIdeas() {
                           </TableCell>
                           <TableCell className="font-medium">{idea.title}</TableCell>
                           <TableCell>
-                            {idea.member?.user?.firstName || "Unknown"} {idea.member?.user?.lastName || ""}
+                            {idea.member.user.firstName} {idea.member.user.lastName}
                           </TableCell>
                           <TableCell className="capitalize">{idea.category}</TableCell>
                           <TableCell>
@@ -377,7 +377,7 @@ export default function AdminIdeas() {
           <SheetHeader>
             <SheetTitle>{selectedIdeaDetails?.title}</SheetTitle>
             <SheetDescription>
-              By {selectedIdeaDetails?.member?.user?.firstName || "Unknown"} {selectedIdeaDetails?.member?.user?.lastName || ""} •{" "}
+              By {selectedIdeaDetails?.member.user.firstName} {selectedIdeaDetails?.member.user.lastName} •{" "}
               {selectedIdeaDetails && format(new Date(selectedIdeaDetails.createdAt), "MMM d, yyyy")}
             </SheetDescription>
           </SheetHeader>
@@ -437,7 +437,7 @@ export default function AdminIdeas() {
                 {selectedIdeaDetails?.comments?.map((comment, idx) => (
                   <div key={idx} className="border rounded-lg p-3">
                     <div className="text-sm font-medium">
-                      {comment.member?.user?.firstName || "Unknown"} {comment.member?.user?.lastName || ""}
+                      {comment.member.user.firstName} {comment.member.user.lastName}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{comment.content}</p>
                     <div className="text-xs text-muted-foreground mt-1">

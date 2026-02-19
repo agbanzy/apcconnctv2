@@ -7,4 +7,4 @@ vite.config.ts.*
 .local/
 .npm-cache/
 mobile/android/
-mobile/ios/.github_token
+mobile/ios/

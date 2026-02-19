@@ -56,7 +56,7 @@ interface Task {
   points: number;
   deadline: string | null;
   maxAssignees: number | null;
-  applicationsCount?: number;
+  assigneeCount?: number;
   createdAt: string;
   taskCategory?: string;
   taskScope?: string;
@@ -239,7 +239,7 @@ export default function AdminTasks() {
         <div className="flex items-center gap-2" data-testid={`text-assignees-${task.id}`}>
           <Users className="h-3 w-3 text-muted-foreground" />
           <span className="text-sm font-mono">
-            {task.applicationsCount || 0}
+            {task.assigneeCount || 0}
             {task.maxAssignees ? ` / ${task.maxAssignees}` : ""}
           </span>
         </div>
