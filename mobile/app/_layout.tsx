@@ -102,6 +102,116 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen
+              name="digital-id"
+              options={{
+                headerShown: true,
+                headerTitle: 'Digital ID Card',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="points"
+              options={{
+                headerShown: true,
+                headerTitle: 'Points',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="volunteer"
+              options={{
+                headerShown: true,
+                headerTitle: 'Volunteer',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="leaderboard"
+              options={{
+                headerShown: true,
+                headerTitle: 'Leaderboard',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="campaigns"
+              options={{
+                headerShown: true,
+                headerTitle: 'Campaigns',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="knowledge-base"
+              options={{
+                headerShown: true,
+                headerTitle: 'Knowledge Base',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="quizzes"
+              options={{
+                headerShown: true,
+                headerTitle: 'Quizzes',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="ideas"
+              options={{
+                headerShown: true,
+                headerTitle: 'Ideas Board',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="search"
+              options={{
+                headerShown: true,
+                headerTitle: 'Search',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="notification-settings"
+              options={{
+                headerShown: true,
+                headerTitle: 'Notification Settings',
+                headerStyle: { backgroundColor: '#00A86B' },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: { fontWeight: '600' },
+                animation: 'slide_from_right',
+              }}
+            />
           </Stack>
         </AuthGuard>
       </SafeAreaProvider>

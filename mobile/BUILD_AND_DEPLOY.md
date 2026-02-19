@@ -6,7 +6,6 @@ Before you begin, ensure you have the following installed on your local machine:
 
 - **Node.js** v18 or later: https://nodejs.org
 - **npm** v9 or later (comes with Node.js)
-- **Expo CLI**: `npm install -g expo-cli`
 - **EAS CLI**: `npm install -g eas-cli`
 - **Expo Go app** on your phone (for development testing):
   - Android: https://play.google.com/store/apps/details?id=host.exp.exponent
@@ -15,46 +14,40 @@ Before you begin, ensure you have the following installed on your local machine:
 
 ### Platform-Specific Requirements
 
-**For Android builds:**
-- No additional software needed (EAS builds in the cloud)
-- For local builds: Android Studio with Android SDK
+**For Android local builds:**
+- Java JDK 17 (required by Android Gradle)
+- Android Studio with Android SDK (API 34 recommended)
+- Android SDK Build-Tools, Platform-Tools
+- Set `ANDROID_HOME` environment variable
 
-**For iOS builds:**
+**For iOS local builds:**
+- macOS only
+- Xcode 15+ with command-line tools
+- CocoaPods: `sudo gem install cocoapods`
 - Apple Developer account ($99/year): https://developer.apple.com
-- For local builds: macOS with Xcode installed
 
 ---
 
 ## Quick Start (Development)
 
-### 1. Clone and Install
+### 1. Copy the mobile folder to your local machine
+
+```bash
+# From your local machine, copy the mobile/ directory from Replit
+# You can download it as a ZIP or use git clone
+```
+
+### 2. Install Dependencies
 
 ```bash
 cd mobile
 npm install
 ```
 
-### 2. Configure API URL
-
-Create a `.env` file in the `mobile/` directory:
-
-```bash
-# For local development (when backend runs on your machine)
-EXPO_PUBLIC_API_URL=http://localhost:5000
-
-# For development against deployed backend
-EXPO_PUBLIC_API_URL=https://your-app.replit.app
-```
-
-Alternatively, set it inline when starting:
-
-```bash
-EXPO_PUBLIC_API_URL=https://your-app.replit.app npx expo start
-```
-
 ### 3. Start Development Server
 
 ```bash
+# The API URL is already configured in app.json to point to production
 npx expo start
 ```
 
@@ -64,13 +57,6 @@ This opens the Expo Developer Tools. From here:
 - Press **`i`** to open in iOS simulator (macOS only)
 - Press **`w`** to open in web browser
 
-### 4. Development Tips
-
-- **Hot reload** is enabled by default - changes appear instantly
-- **Shake your device** to open the developer menu
-- **`r`** in terminal to reload the app
-- **`m`** in terminal to toggle the developer menu
-
 ---
 
 ## Project Structure
@@ -79,21 +65,100 @@ This opens the Expo Developer Tools. From here:
 mobile/
 ├── app/                    # Expo Router file-based routing
 │   ├── _layout.tsx         # Root layout (providers, auth guard)
+│   ├── onboarding.tsx      # First-time onboarding
 │   ├── (auth)/             # Auth screens (login, register)
-│   └── (tabs)/             # Main tab screens
-│       ├── index.tsx       # Dashboard
-│       ├── news.tsx        # News feed
-│       ├── events.tsx      # Events
-│       ├── elections.tsx   # Elections
-│       └── profile.tsx     # Profile
+│   ├── (tabs)/             # Main tab screens
+│   │   ├── index.tsx       # Dashboard
+│   │   ├── news.tsx        # News feed
+│   │   ├── events.tsx      # Events
+│   │   ├── elections.tsx   # Elections (primaries + general)
+│   │   └── profile.tsx     # Profile
+│   ├── digital-id.tsx      # Digital membership ID card
+│   ├── points.tsx          # Points overview
+│   ├── tasks.tsx           # Micro-tasks with image proof
+│   ├── volunteer.tsx       # Volunteer opportunities
+│   ├── rewards.tsx         # Points redemption (airtime, data, cash)
+│   ├── donations.tsx       # Make donations
+│   ├── referrals.tsx       # Referral program
+│   ├── dues.tsx            # Membership dues payment
+│   ├── election-day.tsx    # Election Day agent functions
+│   ├── manage-agents.tsx   # Admin: manage polling agents
+│   ├── leaderboard.tsx     # Global rankings
+│   ├── campaigns.tsx       # Issue campaigns
+│   ├── knowledge-base.tsx  # Articles and FAQs
+│   ├── quizzes.tsx         # Political literacy quizzes
+│   ├── ideas.tsx           # Ideas board
+│   ├── search.tsx          # Multi-category search
+│   └── notification-settings.tsx # Push/email/SMS preferences
 ├── components/             # Reusable components
+│   ├── AuthGuard.tsx       # Authentication wrapper
+│   ├── SideDrawer.tsx      # Left drawer navigation
+│   ├── NigeriaMap.tsx      # SVG map component
+│   └── ui/                 # Base UI components (Text, Button, Card, Input)
 ├── lib/                    # API client, auth, storage utilities
+│   ├── api.ts              # API client with JWT auto-refresh
+│   ├── auth.ts             # Login/logout/register functions
+│   ├── storage.ts          # Secure token storage
+│   ├── queryClient.ts      # TanStack Query setup
+│   └── push-notifications.ts # Push notification registration
 ├── types/                  # TypeScript type definitions
 ├── assets/                 # App icons, splash screen
 ├── app.json                # Expo configuration
 ├── eas.json                # EAS Build configuration
 └── package.json            # Dependencies
 ```
+
+---
+
+## API Configuration
+
+The app connects to the production backend at:
+
+```
+https://apc-connect.replit.app
+```
+
+This is configured in three places (already set):
+- `app.json` → `expo.extra.apiUrl` (fallback)
+- `eas.json` → build profiles → `env.EXPO_PUBLIC_API_URL` (used during EAS builds)
+- `lib/api.ts` → reads from `EXPO_PUBLIC_API_URL` first, then `expo.extra.apiUrl`
+
+### For local development
+
+Create a `.env` file in the `mobile/` directory:
+
+```bash
+EXPO_PUBLIC_API_URL=https://apc-connect.replit.app
+```
+
+Or set it inline:
+```bash
+EXPO_PUBLIC_API_URL=https://apc-connect.replit.app npx expo start
+```
+
+### Important: EAS Project ID
+
+Before any EAS build (cloud or local), you must set the project ID in `app.json`:
+
+```json
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "YOUR-ACTUAL-PROJECT-ID"
+      }
+    }
+  }
+}
+```
+
+Get your project ID by running:
+```bash
+cd mobile
+npx eas init
+```
+
+This will create a project on expo.dev and update `app.json` automatically.
 
 ---
 
@@ -107,88 +172,196 @@ The mobile app uses **JWT-based authentication** (different from the web app's s
 4. **Token storage** → `expo-secure-store` (encrypted device storage)
 5. **Logout** → Clear tokens from secure store
 
-The backend middleware (`requireAuth`) supports both auth methods simultaneously.
-
 ---
 
-## Building for Production
+## Building for Production (Local Builds)
 
-### Step 1: Configure EAS Project
+### Option A: Local Android APK Build (No EAS Cloud Needed)
+
+This builds the APK directly on your machine. No Expo account charges.
+
+#### Step 1: Install prerequisites
 
 ```bash
-# Login to your Expo account
+# Install EAS CLI globally
+npm install -g eas-cli
+
+# Login to Expo (free account is fine)
 npx eas login
 
-# Link to your EAS project (first time only)
+# Link project (first time only)
+cd mobile
 npx eas init
 ```
 
-Update `app.json` with your actual project ID:
+Update `app.json` with the project ID from `eas init`:
 ```json
 {
   "expo": {
     "extra": {
       "eas": {
-        "projectId": "your-actual-project-id"
+        "projectId": "YOUR-ACTUAL-PROJECT-ID"
       }
     }
   }
 }
 ```
 
-### Step 2: Set Environment Variables
-
-Set the production API URL in EAS:
+#### Step 2: Generate native Android project
 
 ```bash
-npx eas env:create EXPO_PUBLIC_API_URL --value "https://your-app.replit.app" --environment production
+npx expo prebuild --platform android
 ```
 
-Or add to `eas.json`:
-```json
-{
-  "build": {
-    "production": {
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-app.replit.app"
-      }
+This creates the `android/` folder with native code.
+
+#### Step 3: Build APK locally
+
+```bash
+# Build a release APK (distributable, unsigned for testing)
+cd android
+./gradlew assembleRelease
+
+# The APK will be at:
+# android/app/build/outputs/apk/release/app-release.apk
+```
+
+**Or build a signed AAB for Play Store:**
+
+```bash
+# First, create a keystore (one time only)
+keytool -genkeypair -v -storetype PKCS12 \
+  -keystore apc-connect.keystore \
+  -alias apc-connect \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then configure signing credentials securely:
+
+1. Add to `android/gradle.properties` (do NOT commit this file):
+```properties
+APC_RELEASE_STORE_FILE=../../apc-connect.keystore
+APC_RELEASE_STORE_PASSWORD=your_keystore_password
+APC_RELEASE_KEY_ALIAS=apc-connect
+APC_RELEASE_KEY_PASSWORD=your_key_password
+```
+
+2. Add to `android/app/build.gradle` under `android {}`:
+```gradle
+signingConfigs {
+    release {
+        storeFile file(findProperty('APC_RELEASE_STORE_FILE') ?: '../../apc-connect.keystore')
+        storePassword findProperty('APC_RELEASE_STORE_PASSWORD') ?: ''
+        keyAlias findProperty('APC_RELEASE_KEY_ALIAS') ?: 'apc-connect'
+        keyPassword findProperty('APC_RELEASE_KEY_PASSWORD') ?: ''
     }
-  }
+}
+buildTypes {
+    release {
+        signingConfig signingConfigs.release
+        minifyEnabled true
+        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    }
 }
 ```
 
-### Step 3: Build Android APK/AAB
+3. Add `gradle.properties` to `.gitignore` so credentials are never committed.
+
+4. Build the signed AAB:
+```bash
+cd android
+./gradlew bundleRelease
+
+# AAB will be at:
+# android/app/build/outputs/bundle/release/app-release.aab
+```
+
+#### Step 4: Install on device
 
 ```bash
-# Development build (with dev tools, internal distribution)
-npx eas build --platform android --profile development
+# Install APK on connected device via USB
+adb install android/app/build/outputs/apk/release/app-release.apk
 
-# Preview build (production-like, internal distribution)
+# Or share the APK file directly (WhatsApp, email, Google Drive, etc.)
+```
+
+---
+
+### Option B: Local iOS Build (macOS only)
+
+#### Step 1: Generate native iOS project
+
+```bash
+cd mobile
+npx expo prebuild --platform ios
+```
+
+#### Step 2: Install CocoaPods dependencies
+
+```bash
+cd ios
+pod install
+cd ..
+```
+
+#### Step 3: Build with Xcode
+
+```bash
+# Open in Xcode
+open ios/APCConnect.xcworkspace
+
+# In Xcode:
+# 1. Select your Team in Signing & Capabilities
+# 2. Select target device or "Any iOS Device"
+# 3. Product → Archive (for distribution)
+# 4. Or Product → Run (for testing on device)
+```
+
+**Command-line build (alternative):**
+```bash
+cd ios
+xcodebuild -workspace APCConnect.xcworkspace \
+  -scheme APCConnect \
+  -configuration Release \
+  -sdk iphoneos \
+  -archivePath build/APCConnect.xcarchive \
+  archive
+```
+
+---
+
+### Option C: EAS Cloud Build (Easiest, but uses EAS credits)
+
+```bash
+cd mobile
+
+# Android APK (internal testing)
 npx eas build --platform android --profile preview
 
-# Production build (for Google Play Store)
+# Android AAB (Play Store)
 npx eas build --platform android --profile production
-```
 
-After the build completes, EAS provides a download link for the APK/AAB.
-
-### Step 4: Build iOS IPA
-
-```bash
-# Development build (requires Apple Developer account)
-npx eas build --platform ios --profile development
-
-# Preview build (Ad Hoc distribution)
-npx eas build --platform ios --profile preview
-
-# Production build (for App Store)
+# iOS (App Store)
 npx eas build --platform ios --profile production
 ```
 
-You will need:
-- Apple Developer account credentials
-- An App Store Connect API key or manual certificate management
+After the build completes, EAS provides a download link.
+
+---
+
+### Option D: EAS Local Build (Uses your machine, no cloud credits)
+
+```bash
+# Android
+npx eas build --platform android --profile production --local
+
+# iOS (macOS only)
+npx eas build --platform ios --profile production --local
+```
+
+This runs the EAS build pipeline on your machine. Output:
+- Android: `.apk` or `.aab` file in current directory
+- iOS: `.ipa` file in current directory
 
 ---
 
@@ -196,154 +369,91 @@ You will need:
 
 ### Google Play Store
 
-1. **Build production AAB:**
-   ```bash
-   npx eas build --platform android --profile production
-   ```
+1. Build production AAB (use Option A, C, or D above)
 
-2. **Download the AAB** from the EAS dashboard
+2. Go to https://play.google.com/console
 
-3. **Upload to Google Play Console:**
-   - Go to https://play.google.com/console
-   - Create a new app or select existing
-   - Go to "Production" > "Create new release"
-   - Upload the AAB file
-   - Fill in release notes
-   - Submit for review
+3. Create a new app or select existing
 
-4. **Auto-submit (optional):**
-   ```bash
-   npx eas submit --platform android
-   ```
+4. Go to "Production" > "Create new release"
+
+5. Upload the AAB file
+
+6. Fill in:
+   - App title: **APC Connect**
+   - Short description: Political engagement platform for APC Nigeria
+   - Category: Social / News
+   - Content rating questionnaire
+   - Privacy policy URL
+
+7. Submit for review
 
 ### Apple App Store
 
-1. **Build production IPA:**
+1. Build production IPA (use Option B, C, or D above)
+
+2. Upload via:
    ```bash
-   npx eas build --platform ios --profile production
+   # Automated
+   npx eas submit --platform ios
+   
+   # Or use Transporter app on macOS
    ```
 
-2. **Submit to App Store Connect:**
-   ```bash
-   npx eas submit --platform ios
-   ```
-   
-   Or manually:
-   - Download the IPA from EAS dashboard
-   - Use Transporter app (macOS) to upload
-   - Go to App Store Connect to configure and submit for review
+3. Go to App Store Connect → configure metadata → submit for review
 
 ---
 
 ## Over-the-Air (OTA) Updates
 
-After initial app store deployment, push updates without a new build:
+After initial app store deployment, push JS/asset updates without a new build:
 
 ```bash
-# Push an update to production
 npx eas update --branch production --message "Bug fixes and improvements"
-
-# Push an update to preview
-npx eas update --branch preview --message "Testing new features"
 ```
 
 OTA updates work for JavaScript/asset changes only. Native changes (new permissions, new native modules) require a new build.
 
 ---
 
-## Environment Profiles
+## Key App Features
 
-| Profile | Use Case | Distribution |
-|---------|----------|-------------|
-| `development` | Dev testing with Expo Dev Client | Internal (team) |
-| `preview` | QA/UAT testing | Internal (team) |
-| `production` | App store release | Public (stores) |
-
----
-
-## Key Configuration Files
-
-### `app.json` - App identity and permissions
-
-- `expo.name` - Display name
-- `expo.slug` - URL-safe identifier
-- `expo.version` - Semantic version (update for store releases)
-- `expo.ios.bundleIdentifier` - iOS app identifier: `org.apcng.APCConnect`
-- `expo.android.package` - Android package name: `org.apcng.connect`
-- `expo.android.versionCode` - Android version code (auto-incremented by EAS)
-- `expo.ios.buildNumber` - iOS build number
-
-### `eas.json` - Build and submit configuration
-
-- Build profiles (development, preview, production)
-- Auto-increment settings
-- Distribution channels
+| Feature | Screen | Description |
+|---------|--------|-------------|
+| Dashboard | `(tabs)/index` | Stats, news/events previews, quick actions |
+| News | `(tabs)/news` | Category filtered news feed with like/share |
+| Events | `(tabs)/events` | RSVP, event details, online meeting support |
+| Elections | `(tabs)/elections` | Party primaries + general elections voting |
+| Profile | `(tabs)/profile` | Edit profile, NIN verification, badges |
+| Digital ID | `digital-id` | Membership card with QR code |
+| Points | `points` | Points balance and earning history |
+| Tasks | `tasks` | Micro-tasks with image proof upload |
+| Rewards | `rewards` | Redeem points for airtime, data, cash |
+| Donations | `donations` | Flutterwave-powered donations |
+| Dues | `dues` | Membership dues payment and history |
+| Election Day | `election-day` | Agent login, check-in, vote submission, incidents |
+| Manage Agents | `manage-agents` | Admin: assign/manage polling agents |
+| Leaderboard | `leaderboard` | Rankings with time/state filters |
+| Campaigns | `campaigns` | Issue campaigns with voting and comments |
+| Knowledge Base | `knowledge-base` | Articles and FAQs |
+| Quizzes | `quizzes` | Political literacy quizzes with scoring |
+| Ideas | `ideas` | Ideas board with upvoting and comments |
+| Search | `search` | Multi-category content search |
+| Notifications | `notification-settings` | Push/email/SMS channel preferences |
 
 ---
 
-## Agent Functions (Election Day)
+## Election Day Agent Functions
 
-The mobile app includes Election Day agent functionality:
+| Function | Endpoint | Description |
+|----------|----------|-------------|
+| Agent Login | `POST /api/election-day/agent-login` | Auth with agent code + PIN |
+| Check-in | `POST /api/election-day/agent-check-in` | GPS check-in at polling unit |
+| Submit Results | `POST /api/election-day/submit-results` | Vote counts per candidate |
+| Report Incident | `POST /api/election-day/report-incident` | Irregularity reports with photos |
+| Upload Sheet | `POST /api/election-day/upload-result-sheet` | Physical result sheet photos |
 
-### Agent Login
-- Agents authenticate with their agent code and PIN
-- Endpoint: `POST /api/election-day/agent-login`
-- Returns agent details and assigned polling unit
-
-### Agent Check-in
-- Agents check in at their polling unit with GPS coordinates
-- Endpoint: `POST /api/election-day/agent-check-in`
-
-### Vote Submission
-- Agents submit vote counts per candidate from their polling unit
-- Endpoint: `POST /api/election-day/submit-results`
-- Real-time Socket.IO event: `general-election:result-updated`
-
-### Incident Reporting
-- Agents report election irregularities with severity levels
-- Endpoint: `POST /api/election-day/report-incident`
-- Supports photo attachments
-
-### Result Sheet Upload
-- Agents photograph and upload physical result sheets
-- Endpoint: `POST /api/election-day/upload-result-sheet`
-- Real-time Socket.IO event: `result-sheet:uploaded`
-
-### Activity Tracking
-- All agent actions are logged in `agent_activity_logs` table
-- Real-time Socket.IO event: `agent-activity:updated`
-- Viewable in web admin Election Analytics dashboard
-
----
-
-## Socket.IO Real-Time Events
-
-The mobile app can connect to Socket.IO for live updates:
-
-```typescript
-import { io } from "socket.io-client";
-
-const socket = io(API_URL, { transports: ["websocket", "polling"] });
-
-// Listen for election result updates
-socket.on("general-election:result-updated", (data) => {
-  // { electionId, pollingUnitId }
-});
-
-// Listen for agent activity
-socket.on("agent-activity:updated", (data) => {
-  // { agentId, action, electionId }
-});
-
-// Listen for result sheet uploads
-socket.on("result-sheet:uploaded", (data) => {
-  // { electionId, pollingUnitId, sheetId }
-});
-
-// Listen for election day mode toggle
-socket.on("election-day-mode:activated", (value) => { });
-socket.on("election-day-mode:deactivated", () => { });
-```
+Real-time Socket.IO events: `general-election:result-updated`, `agent-activity:updated`, `result-sheet:uploaded`
 
 ---
 
@@ -352,29 +462,29 @@ socket.on("election-day-mode:deactivated", () => { });
 ### Common Issues
 
 **"Network request failed" errors:**
-- Verify `EXPO_PUBLIC_API_URL` is set correctly
+- Verify the backend at https://apc-connect.replit.app is running
 - On Android emulator, use `10.0.2.2` instead of `localhost`
-- On iOS simulator, `localhost` works
-- Ensure the backend server is running and accessible
+- Check your internet connection
 
 **"Unable to resolve module" errors:**
 ```bash
-npx expo start --clear    # Clear Metro bundler cache
-rm -rf node_modules && npm install    # Reinstall dependencies
+npx expo start --clear
+rm -rf node_modules && npm install
 ```
 
-**Build failures on EAS:**
-- Check EAS build logs: `npx eas build:list`
-- Ensure `app.json` has correct bundle identifiers
-- Verify all native dependencies are compatible with SDK 52
+**Android local build fails:**
+- Ensure Java 17 is installed: `java -version`
+- Ensure `ANDROID_HOME` is set: `echo $ANDROID_HOME`
+- Try: `cd android && ./gradlew clean && ./gradlew assembleRelease`
+
+**iOS build fails:**
+- Update CocoaPods: `cd ios && pod install --repo-update`
+- Ensure Xcode command-line tools: `xcode-select --install`
+- Clean build: Xcode → Product → Clean Build Folder
 
 **Token refresh loops:**
 - Clear secure storage: Uninstall and reinstall the app
 - Check that the backend refresh endpoint returns valid tokens
-
-**Maps not rendering:**
-- `react-native-svg` must be installed (already in dependencies)
-- Verify SVG path data is correctly formatted
 
 ### Useful Commands
 
@@ -385,13 +495,16 @@ npx expo doctor
 # Clear all caches and restart
 npx expo start --clear
 
+# Regenerate native projects (after adding native modules)
+npx expo prebuild --clean
+
 # View EAS build history
 npx eas build:list
 
-# Check EAS project config
+# Check project config
 npx eas project:info
 
-# Update Expo SDK
+# Fix Expo SDK compatibility
 npx expo install --fix
 ```
 
@@ -401,18 +514,18 @@ npx expo install --fix
 
 When releasing a new version:
 
-1. Update `version` in `app.json` (e.g., "1.0.0" → "1.1.0")
-2. EAS auto-increments `versionCode` (Android) and `buildNumber` (iOS) if configured
+1. Update `version` in `app.json` (e.g., "1.0.0" to "1.1.0")
+2. EAS auto-increments `versionCode` (Android) and `buildNumber` (iOS)
 3. Build with production profile
 4. Submit to stores or use OTA update
 
-For OTA-compatible changes (JS/asset only):
+For JS-only changes (no new native modules):
 ```bash
 npx eas update --branch production --message "v1.1.0 - Feature updates"
 ```
 
 For native changes (new permissions, SDK update):
 ```bash
-npx eas build --platform all --profile production
-npx eas submit --platform all
+npx expo prebuild --clean
+# Then rebuild using Option A, B, C, or D
 ```
