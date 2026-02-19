@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
-import ConnectPgSimple from "connect-pg-simple";
+import createMemoryStore from "memorystore";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
@@ -38,7 +38,7 @@ import leaderboardsRouter from "./routes/leaderboards";
 import { PointLedgerService } from "./services/point-ledger";
 import * as memberAccountService from "./services/member-account";
 
-const PgSession = ConnectPgSimple(session);
+const MemoryStore = createMemoryStore(session);
 
 // Flutterwave configuration
 const FLW_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY as string;
@@ -123,7 +123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use(
     session({
-      store: new PgSession({ pool, createTableIfMissing: true }),
+      store: new MemoryStore({ checkPeriod: 86400000 }),
       secret: SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
