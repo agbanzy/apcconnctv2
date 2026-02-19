@@ -59,7 +59,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:5000",
+      "apiUrl": "https://apc-connect.replit.app",
       "router": {
         "origin": false
       },

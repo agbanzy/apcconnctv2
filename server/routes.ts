@@ -2351,6 +2351,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/referrals/my-code", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      res.json({ success: true, data: { referralCode: member.referralCode, isNew: false } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch referral code" });
+    }
+  });
+
+  app.get("/api/referrals/stats", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const referrals = await db.query.referrals.findMany({
+        where: eq(schema.referrals.referrerId, member.id),
+        with: {
+          referred: true
+        }
+      });
+
+      const totalReferrals = referrals.length;
+      const activeReferrals = referrals.filter(r => r.referred?.status === 'active').length;
+      const pendingReferrals = referrals.filter(r => r.referred?.status === 'pending').length;
+      const totalPointsEarned = totalReferrals * 100;
+
+      res.json({
+        success: true,
+        data: { totalReferrals, activeReferrals, pendingReferrals, totalPointsEarned }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to fetch referral stats" });
+    }
+  });
+
+  app.get("/api/notifications/preferences", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const preferences = await db.query.notificationPreferences.findFirst({
+        where: eq(schema.notificationPreferences.memberId, member.id)
+      });
+
+      const mapToMobile = (prefs: any) => ({
+        emailNotifications: true,
+        pushNotifications: true,
+        smsNotifications: false,
+        electionReminders: prefs?.electionAnnouncements ?? true,
+        eventReminders: prefs?.eventReminders ?? true,
+        newsUpdates: prefs?.newsAlerts ?? true,
+        duesReminders: prefs?.duesReminders ?? true,
+        taskNotifications: prefs?.taskAssignments ?? true,
+        campaignUpdates: prefs?.campaignUpdates ?? true,
+      });
+
+      res.json({ success: true, data: mapToMobile(preferences) });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to get notification preferences" });
+    }
+  });
+
+  app.put("/api/notifications/preferences", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const member = await db.query.members.findFirst({
+        where: eq(schema.members.userId, req.user!.id)
+      });
+
+      if (!member) {
+        return res.status(404).json({ success: false, error: "Member not found" });
+      }
+
+      const body = req.body || {};
+      const updateData: Record<string, boolean> = {};
+      if (typeof body.electionReminders === 'boolean') updateData.electionAnnouncements = body.electionReminders;
+      if (typeof body.eventReminders === 'boolean') updateData.eventReminders = body.eventReminders;
+      if (typeof body.newsUpdates === 'boolean') updateData.newsAlerts = body.newsUpdates;
+      if (typeof body.taskNotifications === 'boolean') updateData.taskAssignments = body.taskNotifications;
+      if (typeof body.duesReminders === 'boolean') updateData.duesReminders = body.duesReminders;
+      if (typeof body.campaignUpdates === 'boolean') updateData.campaignUpdates = body.campaignUpdates;
+
+      const existing = await db.query.notificationPreferences.findFirst({
+        where: eq(schema.notificationPreferences.memberId, member.id)
+      });
+
+      if (existing) {
+        await db.update(schema.notificationPreferences)
+          .set(updateData)
+          .where(eq(schema.notificationPreferences.id, existing.id));
+      } else {
+        await db.insert(schema.notificationPreferences).values({
+          memberId: member.id,
+          electionAnnouncements: body.electionReminders ?? true,
+          eventReminders: body.eventReminders ?? true,
+          newsAlerts: body.newsUpdates ?? true,
+          taskAssignments: body.taskNotifications ?? true,
+          duesReminders: body.duesReminders ?? true,
+          campaignUpdates: body.campaignUpdates ?? true,
+        });
+      }
+
+      const updated = await db.query.notificationPreferences.findFirst({
+        where: eq(schema.notificationPreferences.memberId, member.id)
+      });
+
+      const mapToMobile = (prefs: any) => ({
+        emailNotifications: true,
+        pushNotifications: true,
+        smsNotifications: false,
+        electionReminders: prefs?.electionAnnouncements ?? true,
+        eventReminders: prefs?.eventReminders ?? true,
+        newsUpdates: prefs?.newsAlerts ?? true,
+        duesReminders: prefs?.duesReminders ?? true,
+        taskNotifications: prefs?.taskAssignments ?? true,
+        campaignUpdates: prefs?.campaignUpdates ?? true,
+      });
+
+      res.json({ success: true, data: mapToMobile(updated) });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to update notification preferences" });
+    }
+  });
+
   app.get("/api/dues", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const member = await db.query.members.findFirst({
@@ -11626,8 +11766,21 @@ Be friendly, informative, and politically neutral when discussing governance. En
         orderBy: asc(schema.generalElections.position),
       });
 
+      const agentStateId = state?.id;
+      const agentLgaId = lga?.id;
+      const NATIONAL_POSITIONS = ['presidential'];
+      const STATE_POSITIONS = ['governorship', 'senatorial', 'house_of_reps', 'state_assembly'];
+      const LGA_POSITIONS = ['lga_chairman', 'councillorship'];
+      const filteredElections = allActiveElections.filter(election => {
+        const pos = election.position || '';
+        if (NATIONAL_POSITIONS.includes(pos)) return true;
+        if (STATE_POSITIONS.includes(pos)) return election.stateId === agentStateId;
+        if (LGA_POSITIONS.includes(pos)) return election.lgaId === agentLgaId;
+        return false;
+      });
+
       const electionsWithCandidates = await Promise.all(
-        allActiveElections.map(async (election) => {
+        filteredElections.map(async (election) => {
           const candidates = await db.query.generalElectionCandidates.findMany({
             where: eq(schema.generalElectionCandidates.electionId, election.id),
             with: { party: true }
